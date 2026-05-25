@@ -1,0 +1,5 @@
+# Example file of all required environment variables etc.
+spring.application.name=scoreboards
+okta.oauth2.issuer:
+okta.oauth2.audience:
+spring.data.mongodb.uri:

@@ -1,0 +1,104 @@
+package com.mikko_huttunen.scoreboards.models;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import java.util.Date;
+
+/**
+ * Invitation entity representing an invitation document in MongoDB.
+ * Extends Auditable to include creation, modification, and soft deletion tracking.
+ */
+@Document("Invitation")
+public class Invitation extends Auditable {
+    
+    @Id
+    private String id;
+    
+    @Field("receiver")
+    @NotBlank(message = "Receiver cannot be blank")
+    private String receiver; // User ID of the receiver
+    
+    @Field("scoreboardId")
+    @NotBlank(message = "Scoreboard ID cannot be blank")
+    private String scoreboardId;
+    
+    @Field("scoreboardName")
+    @NotBlank(message = "Scoreboard name cannot be blank")
+    private String scoreboardName;
+    
+    @Field("isPending")
+    @NotNull(message = "IsPending cannot be null")
+    private Boolean isPending = true;
+    
+    @Field("acceptedDate")
+    private Date acceptedDate;
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getReceiver() {
+        return receiver;
+    }
+
+    public void setReceiver(String receiver) {
+        this.receiver = receiver;
+    }
+
+    public String getScoreboardId() {
+        return scoreboardId;
+    }
+
+    public void setScoreboardId(String scoreboardId) {
+        this.scoreboardId = scoreboardId;
+    }
+
+    public String getScoreboardName() {
+        return scoreboardName;
+    }
+
+    public void setScoreboardName(String scoreboardName) {
+        this.scoreboardName = scoreboardName;
+    }
+
+    public Boolean getIsPending() {
+        return isPending;
+    }
+
+    public void setIsPending(Boolean isPending) {
+        this.isPending = isPending;
+    }
+
+    public Date getAcceptedDate() {
+        return acceptedDate;
+    }
+
+    public void setAcceptedDate(Date acceptedDate) {
+        this.acceptedDate = acceptedDate;
+    }
+
+    @Override
+    public String toString() {
+        return "Invitation{" +
+                "id='" + id + '\'' +
+                ", receiver='" + receiver + '\'' +
+                ", scoreboardId='" + scoreboardId + '\'' +
+                ", scoreboardName='" + scoreboardName + '\'' +
+                ", isPending=" + isPending +
+                ", acceptedDate=" + acceptedDate +
+                ", created=" + getCreated() +
+                ", lastModified=" + getLastModified() +
+                ", createdBy='" + getCreatedBy() + '\'' +
+                ", isActive=" + getIsActive() +
+                '}';
+    }
+}
+
