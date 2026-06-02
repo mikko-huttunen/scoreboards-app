@@ -1,25 +1,29 @@
-import type { Result } from './Result';
-
 export type ResultEntry = {
   id: string;
-  created: Date;
   scoreboardId: string;
   sessionId: string;
   userId: string;
-  results: Set<Result>;
+  isPending: boolean;
+  results: Set<string>;
   totalPoints: number;
+  created: Date;
+  lastModified: Date;
+  createdBy: string;
   isActive: boolean;
 };
 
 export const ResultEntry = {
-  create: (data: Partial<ResultEntry>): ResultEntry => ({
+  create: (data: ResultEntry): ResultEntry => ({
     id: data.id ?? '',
-    created: data.created ?? new Date(),
     scoreboardId: data.scoreboardId ?? '',
     sessionId: data.sessionId ?? '',
     userId: data.userId ?? '',
+    isPending: data.isPending ?? true,
     results: data.results ?? new Set(),
     totalPoints: data.totalPoints ?? 0,
+    created: data.created ?? new Date(),
+    lastModified: data.lastModified ?? new Date(),
+    createdBy: data.createdBy ?? '',
     isActive: data.isActive ?? true,
   }),
 };

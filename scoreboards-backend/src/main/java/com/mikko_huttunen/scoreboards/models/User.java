@@ -43,10 +43,6 @@ public class User extends Auditable {
     @Field("scoreboards")
     @NotNull(message = "Scoreboards cannot be null")
     private Set<String> scoreboards = new HashSet<>();
-    
-    @Field("notifications")
-    @NotNull(message = "Notifications cannot be null")
-    private List<String> notifications = new ArrayList<>();
 
     public String getId() {
         return id;
@@ -92,14 +88,6 @@ public class User extends Auditable {
         this.scoreboards = scoreboards;
     }
 
-    public List<String> getNotifications() {
-        return notifications;
-    }
-
-    public void setNotifications(List<String> notifications) {
-        this.notifications = notifications;
-    }
-
     @Override
     public String toString() {
         return "User{" +
@@ -107,12 +95,11 @@ public class User extends Auditable {
                 ", name='" + name + '\'' +
                 ", email='" + email + '\'' +
                 ", avatar='" + avatar + '\'' +
+                ", scoreboards=" + scoreboards +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +
                 ", isActive=" + getIsActive() +
-                ", scoreboards=" + scoreboards +
-                ", notifications=" + notifications +
                 '}';
     }
 }

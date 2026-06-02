@@ -28,18 +28,16 @@ import CloseIcon from '@mui/icons-material/Close';
 import StarIcon from '@mui/icons-material/Star';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { useNavigate } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
 import type { Scoreboard } from '../../types/Scoreboard';
 import type { Invitation } from '../../types/Invitation';
 import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
-import { ScoreboardsService } from '../../services/ScoreboardsService';
+import { ScoreboardsService } from '../../services/ScoreboardService';
 import { InvitationService } from '../../services/InvitationService';
 import { UserService } from '../../services/UserService';
 import type { User } from '../../types/User';
 
 export const ScoreboardsList: React.FC = () => {
   const navigate = useNavigate();
-  const { getAccessTokenSilently } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
   const [user, setUser] = useState<User | null>(null);
   const [scoreboards, setScoreboards] = useState<Scoreboard[]>([]);
@@ -68,20 +66,17 @@ export const ScoreboardsList: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const token = await getAccessTokenSilently();
-
         //Fetch user
-        const userData = await UserService.getCurrentUser(token);
+        const userData = await UserService.getCurrentUser();
         setUser(userData);
 
         // Fetch scoreboards
         const scoreboardsData =
-          await ScoreboardsService.getScoreboardsByUser(token);
+          await ScoreboardsService.getScoreboardsByCurrentUser();
         setScoreboards(scoreboardsData);
 
         //Fetch invitations
-        const fetchedInvitations =
-          await InvitationService.getPendingInvitations(token);
+        const fetchedInvitations = await InvitationService.getInvitations();
         setPendingInvitations(fetchedInvitations);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -92,7 +87,7 @@ export const ScoreboardsList: React.FC = () => {
     };
 
     fetchData();
-  }, [getAccessTokenSilently]);
+  }, []);
 
   const handleDeleteClick = (scoreboardId: string, scoreboardName: string) => {
     setSelectedScoreboardId(scoreboardId);
@@ -111,8 +106,7 @@ export const ScoreboardsList: React.FC = () => {
     // Default implementation: call backend API
     try {
       setDeleting(true);
-      const token = await getAccessTokenSilently();
-      await ScoreboardsService.deleteScoreboard(selectedScoreboardId, token);
+      await ScoreboardsService.deleteScoreboard(selectedScoreboardId);
       // Remove from local state
       setScoreboards(
         scoreboards.filter((sb) => sb.id !== selectedScoreboardId)
@@ -145,8 +139,7 @@ export const ScoreboardsList: React.FC = () => {
 
     try {
       setLeaving(true);
-      const token = await getAccessTokenSilently();
-      await ScoreboardsService.leaveScoreboard(selectedScoreboardId, token);
+      await ScoreboardsService.leaveScoreboard(selectedScoreboardId);
 
       // Remove from local state
       setScoreboards(
@@ -172,9 +165,8 @@ export const ScoreboardsList: React.FC = () => {
   const handleAcceptInvitation = async (invitationId: string) => {
     try {
       setProcessingInvitation(invitationId);
-      const token = await getAccessTokenSilently();
 
-      await InvitationService.acceptInvitation(invitationId, token);
+      await InvitationService.acceptInvitation(invitationId);
 
       // Remove from pending invitations
       setPendingInvitations(
@@ -186,7 +178,7 @@ export const ScoreboardsList: React.FC = () => {
 
       // Refresh scoreboards list and user to include the newly joined scoreboard
       const updatedScoreboards =
-        await ScoreboardsService.getScoreboardsByUser(token);
+        await ScoreboardsService.getScoreboardsByCurrentUser();
       setScoreboards(updatedScoreboards);
     } catch (err) {
       console.error('Error accepting invitation:', err);
@@ -201,9 +193,8 @@ export const ScoreboardsList: React.FC = () => {
   const handleDeclineInvitation = async (invitationId: string) => {
     try {
       setProcessingInvitation(invitationId);
-      const token = await getAccessTokenSilently();
 
-      await InvitationService.declineInvitation(invitationId, token);
+      await InvitationService.deleteInvitation(invitationId);
 
       // Remove from pending invitations
       setPendingInvitations(

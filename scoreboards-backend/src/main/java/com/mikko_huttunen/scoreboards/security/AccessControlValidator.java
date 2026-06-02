@@ -40,7 +40,7 @@ public class AccessControlValidator {
         User currentUser = currentUserContext.requireCurrentUser();
 
         if (document instanceof User user) {
-            validateUserAccess(currentUser, user, requireCreator);
+            validateUserAccess(currentUser, user);
             return;
         }
 
@@ -55,7 +55,7 @@ public class AccessControlValidator {
         }
 
         if (document instanceof Session session) {
-            validateScoreboardIdAccess(currentUser, session.getScoreboardId());
+            validateSessionAccess(currentUser, session);
             return;
         }
 
@@ -77,7 +77,7 @@ public class AccessControlValidator {
         throw new IllegalArgumentException("Unsupported MongoDB document type: " + document.getClass().getSimpleName());
     }
 
-    private void validateUserAccess(User currentUser, User requestedUser, boolean requireCreator) {
+    private void validateUserAccess(User currentUser, User requestedUser) {
         if (Objects.equals(currentUser.getId(), requestedUser.getId())) {
             return;
         }
@@ -100,7 +100,7 @@ public class AccessControlValidator {
     private void validateScoreboardAccess(User currentUser, Scoreboard scoreboard, boolean requireCreator) {
         if (requireCreator) {
             if (!Objects.equals(scoreboard.getCreatedBy(), currentUser.getId())) {
-                throw new IllegalArgumentException("User is not authorized to delete this scoreboard");
+                throw new IllegalArgumentException("User is not authorized to access this scoreboard");
             }
             return;
         }
@@ -120,15 +120,21 @@ public class AccessControlValidator {
         }
     }
 
+    private void validateSessionAccess(User currentUser, Session session) {
+        if (!Objects.equals(currentUser.getId(), session.getCreatedBy())) {
+            throw new IllegalArgumentException("User is not authorized to access this session");
+        }
+    }
+
     private void validateInvitationAccess(User currentUser, Invitation invitation, boolean requireCreator) {
         if (requireCreator) {
             if (!Objects.equals(invitation.getCreatedBy(), currentUser.getId())) {
-                throw new IllegalArgumentException("User is not authorized to delete this invitation");
+                throw new IllegalArgumentException("User is not authorized to access this invitation");
             }
             return;
         }
 
-        boolean isReceiver = Objects.equals(invitation.getReceiver(), currentUser.getId());
+        boolean isReceiver = Objects.equals(invitation.getReceiverId(), currentUser.getId());
         boolean hasScoreboardAccess = currentUser.getScoreboards() != null
                 && currentUser.getScoreboards().contains(invitation.getScoreboardId());
 

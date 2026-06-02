@@ -18,9 +18,9 @@ public class Invitation extends Auditable {
     @Id
     private String id;
     
-    @Field("receiver")
-    @NotBlank(message = "Receiver cannot be blank")
-    private String receiver; // User ID of the receiver
+    @Field("receiverId")
+    @NotBlank(message = "Receiver ID cannot be blank")
+    private String receiverId;
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
@@ -45,12 +45,12 @@ public class Invitation extends Auditable {
         this.id = id;
     }
 
-    public String getReceiver() {
-        return receiver;
+    public String getReceiverId() {
+        return receiverId;
     }
 
-    public void setReceiver(String receiver) {
-        this.receiver = receiver;
+    public void setReceiverId(String receiverId) {
+        this.receiverId = receiverId;
     }
 
     public String getScoreboardId() {
@@ -89,7 +89,7 @@ public class Invitation extends Auditable {
     public String toString() {
         return "Invitation{" +
                 "id='" + id + '\'' +
-                ", receiver='" + receiver + '\'' +
+                ", receiverId='" + receiverId + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", scoreboardName='" + scoreboardName + '\'' +
                 ", isPending=" + isPending +

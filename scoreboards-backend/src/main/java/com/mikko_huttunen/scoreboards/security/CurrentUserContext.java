@@ -32,4 +32,8 @@ public class CurrentUserContext {
                 .orElseThrow(() -> new IllegalArgumentException("User is not authorized"));
         return currentUser;
     }
+
+    public void clear() {
+        currentUser = null;
+    }
 }

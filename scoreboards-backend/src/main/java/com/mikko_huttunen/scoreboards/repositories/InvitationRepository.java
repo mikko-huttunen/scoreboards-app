@@ -18,14 +18,14 @@ public interface InvitationRepository extends MongoRepository<Invitation, String
      * @param receiverId The ID of the user who received the invitation
      * @return List of pending active invitations
      */
-    List<Invitation> findByReceiverAndIsPendingTrueAndIsActiveTrue(String receiverId);
+    List<Invitation> findByReceiverIdAndIsPendingTrueAndIsActiveTrue(String receiverId);
     
     /**
      * Find all invitations for a specific receiver that are active.
      * @param receiverId The ID of the user who received the invitation
      * @return List of active invitations
      */
-    List<Invitation> findByReceiverAndIsActiveTrue(String receiverId);
+    List<Invitation> findByReceiverIdAndIsActiveTrue(String receiverId);
     
     /**
      * Find all invitations for a specific scoreboard that are active.
@@ -47,6 +47,6 @@ public interface InvitationRepository extends MongoRepository<Invitation, String
      * @param scoreboardId The ID of the scoreboard
      * @return true if such an invitation exists
      */
-    boolean existsByReceiverAndScoreboardIdAndIsPendingTrueAndIsActiveTrue(String receiverId, String scoreboardId);
+    boolean existsByReceiverIdAndScoreboardIdAndIsPendingTrueAndIsActiveTrue(String receiverId, String scoreboardId);
 }
 

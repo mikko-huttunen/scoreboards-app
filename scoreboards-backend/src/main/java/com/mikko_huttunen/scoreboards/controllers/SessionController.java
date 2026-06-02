@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.models.CreateSessionDTO;
+import com.mikko_huttunen.scoreboards.models.Scoreboard;
 import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.models.UpdateSessionDTO;
 import com.mikko_huttunen.scoreboards.services.SessionService;
@@ -14,9 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * REST controller for Session operations.
@@ -34,6 +33,40 @@ public class SessionController {
     @Autowired
     public SessionController(SessionService sessionService) {
         this.sessionService = sessionService;
+    }
+
+    /**
+     * Create a new session.
+     * @param dto The DTO containing session data
+     * @return ResponseEntity containing the created session
+     */
+    @PostMapping
+    public ResponseEntity<Session> createSession(
+            @Valid @RequestBody CreateSessionDTO dto) {
+        logger.info("POST /api/sessions - Creating new session for scoreboard: {}",
+                dto != null ? dto.getScoreboardName() : "null");
+
+        if (dto == null) {
+            logger.error("POST /api/sessions - Request body is null");
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            Session createdSession = sessionService.createSession(
+                    dto.getScoreboardId(),
+                    dto.getScoreboardName(),
+                    dto.getParticipants(),
+                    dto.getPointCategories()
+            );
+            logger.info("POST /api/sessions - Successfully created session with ID: {}", createdSession.getId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
+        } catch (IllegalArgumentException e) {
+            logger.warn("POST /api/sessions - Invalid request: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("POST /api/sessions - Error creating session: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
@@ -63,35 +96,28 @@ public class SessionController {
     /**
      * Get a session by ID.
      * @param id The session ID
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity containing the session if found
      */
     @GetMapping("/{id}")
     public ResponseEntity<Session> getSessionById(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
+            @PathVariable String id) {
         logger.info("GET /api/sessions/{} - Fetching session", id);
         
         if (id == null || id.trim().isEmpty()) {
             logger.warn("GET /api/sessions/{} - Invalid session ID", id);
             return ResponseEntity.badRequest().build();
         }
-
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("GET /api/sessions/{} - Unable to extract user ID from JWT", id);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         
         try {
-            Session session = sessionService.getSessionById(id);
-            if (session != null) {
-                logger.info("GET /api/sessions/{} - Found session", id);
-                return ResponseEntity.ok(session);
-            } else {
+            Optional<Session> session = sessionService.getSessionById(id);
+
+            if (session.isEmpty()) {
                 logger.warn("GET /api/sessions/{} - Session not found", id);
                 return ResponseEntity.notFound().build();
             }
+
+            logger.info("GET /api/sessions/{} - Found session", id);
+            return ResponseEntity.ok(session.get());
         } catch (Exception e) {
             logger.error("GET /api/sessions/{} - Error fetching session: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -99,80 +125,29 @@ public class SessionController {
     }
     
     /**
-     * Create a new session.
-     * @param dto The DTO containing session data
-     * @param jwt The authenticated user's JWT token
-     * @return ResponseEntity containing the created session
-     */
-    @PostMapping
-    public ResponseEntity<?> createSession(
-            @Valid @RequestBody CreateSessionDTO dto,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("POST /api/sessions - Creating new session for scoreboard: {}", 
-                dto != null ? dto.getScoreboardName() : "null");
-        
-        if (dto == null) {
-            logger.error("POST /api/sessions - Request body is null");
-            return ResponseEntity.badRequest().body(createErrorResponse("Request body cannot be null"));
-        }
-        
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("POST /api/sessions - Unable to extract user ID from JWT");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        try {
-            Session createdSession = sessionService.createSession(
-                    dto.getScoreboardId(),
-                    dto.getScoreboardName(),
-                    dto.getParticipants(),
-                    dto.getPointCategories(),
-                    userId
-            );
-            logger.info("POST /api/sessions - Successfully created session with ID: {}", createdSession.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
-        } catch (IllegalArgumentException e) {
-            logger.warn("POST /api/sessions - Invalid request: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
-        } catch (Exception e) {
-            logger.error("POST /api/sessions - Error creating session: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to create session: " + e.getMessage()));
-        }
-    }
-    
-    /**
      * Update an existing session.
      * @param id The ID of the session to update
      * @param dto The DTO containing updated session data
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity containing the updated session if found
      */
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateSession(
+    public ResponseEntity<Session> updateSession(
             @PathVariable String id,
-            @Valid @RequestBody UpdateSessionDTO dto,
-            @AuthenticationPrincipal Jwt jwt) {
+            @Valid @RequestBody UpdateSessionDTO dto) {
         logger.info("PUT /api/sessions/{} - Updating session", id);
         
         if (dto == null) {
             logger.error("PUT /api/sessions/{} - Request body is null", id);
-            return ResponseEntity.badRequest().body(createErrorResponse("Request body cannot be null"));
-        }
-        
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("PUT /api/sessions/{} - Unable to extract user ID from JWT", id);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.badRequest().build();
         }
         
         try {
             Session updatedSession = sessionService.updateSession(
                     id,
+                    dto.getPending(),
                     dto.getParticipants(),
                     dto.getPointCategories(),
-                    userId
+                    dto.getResultEntries()
             );
             if (updatedSession != null) {
                 logger.info("PUT /api/sessions/{} - Successfully updated session", id);
@@ -183,71 +158,52 @@ public class SessionController {
             }
         } catch (IllegalArgumentException e) {
             logger.warn("PUT /api/sessions/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             logger.error("PUT /api/sessions/{} - Error updating session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to update session: " + e.getMessage()));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Delete a session (soft delete).
      * @param id The ID of the session to delete
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity with no content if deleted
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteSession(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Session> deleteSession(
+            @PathVariable String id) {
         logger.info("DELETE /api/sessions/{} - Deleting session", id);
         
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("DELETE /api/sessions/{} - Unable to extract user ID from JWT", id);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
         try {
-            boolean deleted = sessionService.deleteSession(id, userId);
-            if (deleted) {
-                logger.info("DELETE /api/sessions/{} - Successfully deleted session", id);
-                return ResponseEntity.noContent().build();
-            } else {
+            Session deleted = sessionService.deleteSessions(Set.of(id)).getFirst();
+            if (deleted == null) {
                 logger.warn("DELETE /api/sessions/{} - Session not found", id);
                 return ResponseEntity.notFound().build();
             }
+            logger.info("DELETE /api/sessions/{} - Successfully deleted session", id);
+            return ResponseEntity.ok(deleted);
         } catch (IllegalArgumentException e) {
             logger.warn("DELETE /api/sessions/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             logger.error("DELETE /api/sessions/{} - Error deleting session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to delete session: " + e.getMessage()));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Finish a session (check all participants submitted and mark as complete).
      * @param id The ID of the session to finish
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity containing the finished session if found
      */
     @PostMapping("/{id}/finish")
-    public ResponseEntity<?> finishSession(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Session> finishSession(
+            @PathVariable String id) {
         logger.info("POST /api/sessions/{}/finish - Finishing session", id);
         
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("POST /api/sessions/{}/finish - Unable to extract user ID from JWT", id);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
         try {
-            Session finishedSession = sessionService.finishSession(id, userId);
+            Session finishedSession = sessionService.finishSession(id);
             if (finishedSession != null) {
                 logger.info("POST /api/sessions/{}/finish - Successfully finished session", id);
                 return ResponseEntity.ok(finishedSession);
@@ -257,60 +213,11 @@ public class SessionController {
             }
         } catch (IllegalArgumentException e) {
             logger.warn("POST /api/sessions/{}/finish - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
-        } catch (Exception e) {
-            logger.error("POST /api/sessions/{}/finish - Error finishing session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to finish session: " + e.getMessage()));
-        }
-    }
-    
-    /**
-     * Get all pending sessions for the current user.
-     * @param jwt The authenticated user's JWT token
-     * @return ResponseEntity containing list of pending sessions
-     */
-    @GetMapping("/pending")
-    public ResponseEntity<List<Session>> getPendingSessions(
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("GET /api/sessions/pending - Fetching pending sessions");
-        
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("GET /api/sessions/pending - Unable to extract user ID from JWT");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        try {
-            List<Session> sessions = sessionService.getPendingSessionsByUser(userId);
-            logger.info("GET /api/sessions/pending - Found {} pending sessions", sessions.size());
-            return ResponseEntity.ok(sessions);
-        } catch (IllegalArgumentException e) {
-            logger.warn("GET /api/sessions/pending - Invalid request: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("GET /api/sessions/pending - Error fetching pending sessions: {}", e.getMessage(), e);
+            logger.error("POST /api/sessions/{}/finish - Error finishing session: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-    }
-    
-    /**
-     * Create an error response map.
-     */
-    private Map<String, String> createErrorResponse(String message) {
-        Map<String, String> error = new HashMap<>();
-        error.put("error", message);
-        return error;
-    }
-
-    /**
-     * Extract user ID from JWT token.
-     */
-    private String extractUserId(Jwt jwt) {
-        if (jwt == null) {
-            return null;
-        }
-        return jwt.getClaimAsString("sub");
     }
 }
 

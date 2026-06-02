@@ -11,7 +11,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
 import { ScoreboardForm } from './ScoreboardForm';
-import { ScoreboardsService } from '../../services/ScoreboardsService';
+import { ScoreboardsService } from '../../services/ScoreboardService';
 import { useEffect, useState } from 'react';
 import type { Scoreboard } from '../../types/Scoreboard';
 

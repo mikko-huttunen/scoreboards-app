@@ -1,20 +1,17 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.models.Invitation;
+import com.mikko_huttunen.scoreboards.models.User;
+import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import com.mikko_huttunen.scoreboards.services.InvitationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * REST controller for managing invitations.
@@ -27,301 +24,137 @@ public class InvitationController {
     private static final Logger logger = LoggerFactory.getLogger(InvitationController.class);
     
     private final InvitationService invitationService;
+    private final CurrentUserContext currentUserContext;
     
     @Autowired
-    public InvitationController(InvitationService invitationService) {
+    public InvitationController(InvitationService invitationService, CurrentUserContext currentUserContext) {
         this.invitationService = invitationService;
-    }
-    
-    /**
-     * Extract user ID from JWT token.
-     * @param jwt JWT token
-     * @return User ID or null if not found
-     */
-    private String getUserIdFromJwt(Jwt jwt) {
-        if (jwt == null) {
-            return null;
-        }
-        String userId = jwt.getClaimAsString("sub");
-        if (userId == null) {
-            userId = jwt.getClaimAsString("user_id");
-        }
-        if (userId == null) {
-            userId = jwt.getClaimAsString("id");
-        }
-        return userId;
+        this.currentUserContext = currentUserContext;
     }
     
     /**
      * Create a new invitation.
-     * POST /api/invitations
+     * @param request The request body containing receiverEmail and scoreboardId
+     * @return ResponseEntity with created Invitation or error response
      */
     @PostMapping
-    public ResponseEntity<?> createInvitation(
-            @RequestBody Map<String, String> request,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to create invitation");
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+    public ResponseEntity<Invitation> createInvitation(@RequestBody Map<String, String> request) {
+        logger.info("POST /api/invitations - Creating new invitation with request: {}", request);
         
         try {
             String receiverEmail = request.get("receiverEmail");
             String scoreboardId = request.get("scoreboardId");
             
             if (receiverEmail == null || receiverEmail.trim().isEmpty()) {
-                logger.error("Bad request: receiverEmail is required");
-                return ResponseEntity.badRequest().body(createErrorResponse("receiverEmail is required"));
+                logger.error("POST /api/invitations - Bad request: receiverEmail is required");
+                return ResponseEntity.badRequest().build();
             }
             if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-                logger.error("Bad request: scoreboardId is required");
-                return ResponseEntity.badRequest().body(createErrorResponse("scoreboardId is required"));
+                logger.error("POST /api/invitations - Bad request: scoreboardId is required");
+                return ResponseEntity.badRequest().build();
             }
             
-            Invitation invitation = invitationService.createInvitation(receiverEmail, scoreboardId, userId);
-            logger.info("Successfully created invitation with ID: {}", invitation.getId());
+            Invitation invitation = invitationService.createInvitation(receiverEmail, scoreboardId);
+            logger.info("POST /api/invitations - Successfully created invitation: {}", invitation);
             return ResponseEntity.status(HttpStatus.CREATED).body(invitation);
         } catch (IllegalArgumentException e) {
-            logger.error("Bad request: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
+            logger.error("POST /api/invitations - Validation error: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("Error creating invitation: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to create invitation: " + e.getMessage()));
+            logger.error("POST /api/invitations - Failed to create invitation: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Get all pending invitations for the current user.
-     * GET /api/invitations/pending
+     * @return ResponseEntity containing a list of pending invitations
      */
-    @GetMapping("/pending")
-    public ResponseEntity<List<Invitation>> getPendingInvitations(@AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to get pending invitations");
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+    @GetMapping
+    public ResponseEntity<List<Invitation>> getInvitations() {
+        logger.info("GET /api/invitations - Fetching pending invitations for user");
+        User user = currentUserContext.requireCurrentUser();
         
         try {
-            List<Invitation> invitations = invitationService.getPendingInvitations(userId);
-            logger.info("Successfully retrieved {} pending invitations", invitations.size());
+            List<Invitation> invitations = invitationService.getInvitationsByUserId(user.getId());
+            logger.info("GET /api/invitations - Successfully retrieved {} pending invitations", invitations.size());
             return ResponseEntity.ok(invitations);
         } catch (Exception e) {
-            logger.error("Error fetching pending invitations: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-    
-    /**
-     * Get all invitations for the current user.
-     * GET /api/invitations/me
-     */
-    @GetMapping("/me")
-    public ResponseEntity<List<Invitation>> getMyInvitations(@AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to get user's invitations");
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        try {
-            List<Invitation> invitations = invitationService.getInvitationsByReceiver(userId);
-            logger.info("Successfully retrieved {} invitations", invitations.size());
-            return ResponseEntity.ok(invitations);
-        } catch (Exception e) {
-            logger.error("Error fetching invitations: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-    
-    /**
-     * Get all invitations for a scoreboard.
-     * GET /api/invitations/scoreboard/{scoreboardId}
-     */
-    @GetMapping("/scoreboard/{scoreboardId}")
-    public ResponseEntity<List<Invitation>> getInvitationsByScoreboard(
-            @PathVariable String scoreboardId,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to get invitations for scoreboard: {}", scoreboardId);
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        try {
-            List<Invitation> invitations = invitationService.getInvitationsByScoreboard(scoreboardId);
-            logger.info("Successfully retrieved {} invitations for scoreboard", invitations.size());
-            return ResponseEntity.ok(invitations);
-        } catch (Exception e) {
-            logger.error("Error fetching invitations for scoreboard: {}", e.getMessage(), e);
+            logger.error("GET /api/invitations - Error fetching pending invitations: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Get invitation by ID.
-     * GET /api/invitations/{id}
+     * @param id The invitation ID
+     * @return ResponseEntity containing the invitation if found
      */
     @GetMapping("/{id}")
     public ResponseEntity<Invitation> getInvitationById(@PathVariable String id) {
-        logger.info("Received request to get invitation with ID: {}", id);
+        logger.info("GET /api/invitations/{} - Fetching invitation", id);
         
         try {
             Optional<Invitation> invitation = invitationService.getInvitationById(id);
             if (invitation.isPresent()) {
-                logger.info("Successfully retrieved invitation with ID: {}", id);
+                logger.info("GET /api/invitations/{} - Successfully retrieved invitation", id);
                 return ResponseEntity.ok(invitation.get());
             } else {
-                logger.warn("Invitation with ID {} not found", id);
+                logger.warn("GET /api/invitations/{} - Invitation not found", id);
                 return ResponseEntity.notFound().build();
             }
         } catch (Exception e) {
-            logger.error("Error fetching invitation: {}", e.getMessage(), e);
+            logger.error("GET /api/invitations/{} - Error fetching invitation: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Accept an invitation.
-     * POST /api/invitations/{id}/accept
+     * @param id The invitation ID
+     * @return ResponseEntity containing the accepted invitation
      */
     @PostMapping("/{id}/accept")
-    public ResponseEntity<?> acceptInvitation(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to accept invitation: {}", id);
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+    public ResponseEntity<Invitation> acceptInvitation(@PathVariable String id) {
+        logger.info("PUT /api/invitations/{}/accept - Accepting invitation", id);
         
         try {
-            Invitation invitation = invitationService.acceptInvitation(id, userId);
-            logger.info("Successfully accepted invitation: {}", id);
+            Invitation invitation = invitationService.acceptInvitation(id);
+            logger.info("PUT /api/invitations/{}/accept - Successfully accepted invitation", id);
             return ResponseEntity.ok(invitation);
         } catch (IllegalArgumentException e) {
-            logger.error("Bad request: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
+            logger.error("PUT /api/invitations/{}/accept - Invalid request: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("Error accepting invitation: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to accept invitation: " + e.getMessage()));
-        }
-    }
-    
-    /**
-     * Decline an invitation.
-     * POST /api/invitations/{id}/decline
-     */
-    @PostMapping("/{id}/decline")
-    public ResponseEntity<?> declineInvitation(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to decline invitation: {}", id);
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        try {
-            Invitation invitation = invitationService.declineInvitation(id, userId);
-            logger.info("Successfully declined invitation: {}", id);
-            return ResponseEntity.ok(invitation);
-        } catch (IllegalArgumentException e) {
-            logger.error("Bad request: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
-        } catch (Exception e) {
-            logger.error("Error declining invitation: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to decline invitation: " + e.getMessage()));
+            logger.error("PUT /api/invitations/{}/accept - Error accepting invitation: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
     /**
      * Delete an invitation.
-     * DELETE /api/invitations/{id}
+     * @param id The invitation ID
+     * @return ResponseEntity with the deleted invitation or error response
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteInvitation(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
-        logger.info("Received request to delete invitation: {}", id);
-        
-        if (jwt == null) {
-            logger.error("Unauthorized: No JWT token provided");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        String userId = getUserIdFromJwt(jwt);
-        if (userId == null) {
-            logger.error("Unauthorized: No user ID in JWT token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+    public ResponseEntity<Invitation> deleteInvitation(@PathVariable String id) {
+        logger.info("DELETE /api/invitations/{} - Deleting invitation", id);
         
         try {
-            boolean deleted = invitationService.deleteInvitation(id, userId);
-            if (deleted) {
-                logger.info("Successfully deleted invitation: {}", id);
-                return ResponseEntity.noContent().build();
-            } else {
-                logger.warn("Invitation with ID {} not found", id);
+            Invitation deleted = invitationService.deleteInvitations(Set.of(id)).getFirst();
+            if (deleted == null) {
+                logger.warn("DELETE /api/invitations/{} - Invitation not found", id);
                 return ResponseEntity.notFound().build();
             }
+            logger.info("DELETE /api/invitations/{} - Successfully deleted invitation", id);
+            return ResponseEntity.ok(deleted);
         } catch (IllegalArgumentException e) {
-            logger.error("Bad request: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(createErrorResponse(e.getMessage()));
+            logger.error("DELETE /api/invitations/{} - Invalid request: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("Error deleting invitation: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to delete invitation: " + e.getMessage()));
+            logger.error("DELETE /api/invitations/{} - Error deleting invitation: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-    }
-    
-    /**
-     * Create an error response map.
-     */
-    private Map<String, String> createErrorResponse(String message) {
-        Map<String, String> error = new HashMap<>();
-        error.put("error", message);
-        return error;
     }
 }
 

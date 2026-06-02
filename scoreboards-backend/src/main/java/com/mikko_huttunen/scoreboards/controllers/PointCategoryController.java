@@ -34,28 +34,20 @@ public class PointCategoryController {
     /**
      * Get all active point categories for a specific scoreboard.
      * @param scoreboardId The scoreboard ID
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity containing a list of point categories
      */
     @GetMapping("/scoreboard/{scoreboardId}")
     public ResponseEntity<List<PointCategory>> getPointCategoriesByScoreboardId(
-            @PathVariable String scoreboardId,
-            @AuthenticationPrincipal Jwt jwt) {
+            @PathVariable String scoreboardId) {
         logger.info("GET /api/point-categories/scoreboard/{} - Fetching point categories", scoreboardId);
         
         if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
             logger.warn("GET /api/point-categories/scoreboard/{} - Invalid scoreboard ID", scoreboardId);
             return ResponseEntity.badRequest().build();
         }
-
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("GET /api/point-categories/scoreboard/{} - Unable to extract user ID from JWT", scoreboardId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         
         try {
-            List<PointCategory> categories = pointCategoryService.getPointCategoriesByScoreboard(scoreboardId);
+            List<PointCategory> categories = pointCategoryService.getPointCategoriesByScoreboardId(scoreboardId);
             logger.info("GET /api/point-categories/scoreboard/{} - Found {} point categories", 
                     scoreboardId, categories.size());
             return ResponseEntity.ok(categories);
@@ -69,24 +61,15 @@ public class PointCategoryController {
     /**
      * Get a point category by ID.
      * @param id The point category ID
-     * @param jwt The authenticated user's JWT token
      * @return ResponseEntity containing the point category if found
      */
     @GetMapping("/{id}")
-    public ResponseEntity<PointCategory> getPointCategoryById(
-            @PathVariable String id,
-            @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<PointCategory> getPointCategoryById(@PathVariable String id) {
         logger.info("GET /api/point-categories/{} - Fetching point category", id);
         
         if (id == null || id.trim().isEmpty()) {
             logger.warn("GET /api/point-categories/{} - Invalid point category ID", id);
             return ResponseEntity.badRequest().build();
-        }
-
-        String userId = extractUserId(jwt);
-        if (userId == null) {
-            logger.warn("GET /api/point-categories/{} - Unable to extract user ID from JWT", id);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         
         try {
@@ -103,16 +86,6 @@ public class PointCategoryController {
                     id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-    }
-
-    /**
-     * Extract user ID from JWT token.
-     */
-    private String extractUserId(Jwt jwt) {
-        if (jwt == null) {
-            return null;
-        }
-        return jwt.getClaimAsString("sub");
     }
 }
 

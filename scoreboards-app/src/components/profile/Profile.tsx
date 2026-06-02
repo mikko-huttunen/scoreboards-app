@@ -21,18 +21,15 @@ import type { User } from '../../types/User';
 import './Profile.css';
 
 export const ProfileView: React.FC = () => {
-  const { user: auth0User, getAccessTokenSilently, logout } = useAuth0();
+  const { user: auth0User, logout } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -41,8 +38,7 @@ export const ProfileView: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const token = await getAccessTokenSilently();
-        const userData = await UserService.getCurrentUser(token);
+        const userData = await UserService.getCurrentUser();
         setUser(userData);
         setUsername(userData.name || '');
       } catch (err) {
@@ -56,7 +52,7 @@ export const ProfileView: React.FC = () => {
     };
 
     fetchUser();
-  }, [getAccessTokenSilently]);
+  }, []);
 
   const avatarUrl = useMemo(() => {
     if (avatarFile) {
@@ -65,9 +61,6 @@ export const ProfileView: React.FC = () => {
 
     return auth0User?.picture ?? undefined;
   }, [avatarFile, user?.avatar, auth0User?.picture]);
-
-  const isPasswordMatch =
-    newPassword.length > 0 && newPassword === confirmPassword;
 
   const handlePickAvatar = () => fileInputRef.current?.click();
 
@@ -81,16 +74,8 @@ export const ProfileView: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const token = await getAccessTokenSilently();
-      const updatedUser = await UserService.updateCurrentUser(
-        username,
-        undefined,
-        token
-      );
+      const updatedUser = await UserService.updateCurrentUser();
       setUser(updatedUser);
-      // Refresh user data to ensure avatar is properly loaded
-      // const refreshedUser = await UserService.getCurrentUser(token);
-      // setUser(refreshedUser);
     } catch (err) {
       console.error('Error saving profile:', err);
       setError(err instanceof Error ? err.message : 'Failed to save profile');
@@ -99,38 +84,12 @@ export const ProfileView: React.FC = () => {
     }
   };
 
-  const handleChangePassword = async () => {
-    if (!isPasswordMatch || changingPassword) return;
-    setChangingPassword(true);
-    try {
-      const token = await getAccessTokenSilently();
-      await fetch('/api/profile/password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ newPassword }),
-      });
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err) {
-      console.error('Error changing password:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to change password'
-      );
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
   const handleDelete = async () => {
     if (deleting || !user) return;
     setDeleting(true);
     setError(null);
     try {
-      const token = await getAccessTokenSilently();
-      await UserService.deleteCurrentUser(token);
+      await UserService.deleteCurrentUser();
       setConfirmOpen(false);
       logout({ logoutParams: { returnTo: window.location.origin } });
     } catch (err) {
@@ -217,7 +176,9 @@ export const ProfileView: React.FC = () => {
             <Button
               variant="contained"
               onClick={() =>
-                logout({ logoutParams: { returnTo: window.location.origin } })
+                logout({
+                  logoutParams: { returnTo: `${window.location.origin}/login` },
+                })
               }
               sx={{
                 backgroundColor: '#ffffff',
@@ -267,40 +228,6 @@ export const ProfileView: React.FC = () => {
               }}
               helperText={' '}
             />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="New Password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                fullWidth
-                helperText={
-                  newPassword && !isPasswordMatch ? 'Passwords must match' : ' '
-                }
-                error={Boolean(newPassword) && !isPasswordMatch}
-                sx={{
-                  '& .MuiInputLabel-root': { color: '#1b5e20' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' },
-                }}
-              />
-              <TextField
-                label="Confirm Password"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                fullWidth
-                helperText={
-                  confirmPassword && !isPasswordMatch
-                    ? 'Passwords must match'
-                    : ' '
-                }
-                error={Boolean(confirmPassword) && !isPasswordMatch}
-                sx={{
-                  '& .MuiInputLabel-root': { color: '#1b5e20' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' },
-                }}
-              />
-            </Stack>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={2}
@@ -317,22 +244,6 @@ export const ProfileView: React.FC = () => {
                 }}
               >
                 {saving ? <CircularProgress size={24} /> : 'Save Changes'}
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleChangePassword}
-                disabled={
-                  !isPasswordMatch ||
-                  newPassword.length === 0 ||
-                  changingPassword
-                }
-                sx={{
-                  backgroundColor: '#ffffff',
-                  color: '#38a14f',
-                  ':hover': { backgroundColor: '#f7f7f7' },
-                }}
-              >
-                {changingPassword ? 'Changing…' : 'Change Password'}
               </Button>
               <Button
                 variant="outlined"

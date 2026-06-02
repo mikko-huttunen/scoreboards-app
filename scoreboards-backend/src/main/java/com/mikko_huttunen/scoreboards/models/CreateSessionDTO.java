@@ -3,7 +3,9 @@ package com.mikko_huttunen.scoreboards.models;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * DTO for creating a new session.
@@ -17,10 +19,10 @@ public class CreateSessionDTO {
     private String scoreboardName;
     
     @NotNull(message = "Participants cannot be null")
-    private List<String> participants = new ArrayList<>();
+    private Set<String> participants = new HashSet<>();
     
     @NotNull(message = "Point categories cannot be null")
-    private List<String> pointCategories = new ArrayList<>();
+    private Set<String> pointCategories = new HashSet<>();
 
     public String getScoreboardId() {
         return scoreboardId;
@@ -38,19 +40,19 @@ public class CreateSessionDTO {
         this.scoreboardName = scoreboardName;
     }
 
-    public List<String> getParticipants() {
+    public Set<String> getParticipants() {
         return participants;
     }
 
-    public void setParticipants(List<String> participants) {
+    public void setParticipants(Set<String> participants) {
         this.participants = participants;
     }
 
-    public List<String> getPointCategories() {
+    public Set<String> getPointCategories() {
         return pointCategories;
     }
 
-    public void setPointCategories(List<String> pointCategories) {
+    public void setPointCategories(Set<String> pointCategories) {
         this.pointCategories = pointCategories;
     }
 }

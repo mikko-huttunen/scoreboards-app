@@ -133,10 +133,10 @@ public class ScoreboardController {
     /**
      * Delete a scoreboard by ID (soft delete).
      * @param id The ID of the scoreboard to delete
-     * @return ResponseEntity with no content if deleted successfully
+     * @return ResponseEntity with a deleted scoreboard if successful
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteScoreboard(@PathVariable String id) {
+    public ResponseEntity<Scoreboard> deleteScoreboard(@PathVariable String id) {
         logger.info("DELETE /api/scoreboards/{} - Deleting scoreboard", id);
 
         try {
@@ -147,7 +147,7 @@ public class ScoreboardController {
             }
 
             logger.info("DELETE /api/scoreboards/{} - Successfully deleted scoreboard", id);
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok(deleted.getFirst());
         } catch (IllegalArgumentException e) {
             logger.warn("DELETE /api/scoreboards/{} - Invalid request: {}", id, e.getMessage());
             return ResponseEntity.badRequest().build();

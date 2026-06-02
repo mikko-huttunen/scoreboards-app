@@ -5,6 +5,8 @@ import com.mikko_huttunen.scoreboards.repositories.PointCategoryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,12 +20,12 @@ import java.util.Optional;
 public class PointCategoryService {
     
     private static final Logger logger = LoggerFactory.getLogger(PointCategoryService.class);
-    
-    private final PointCategoryRepository pointCategoryRepository;
+
+    private final MongoDBService mongoDBService;
     
     @Autowired
-    public PointCategoryService(PointCategoryRepository pointCategoryRepository) {
-        this.pointCategoryRepository = pointCategoryRepository;
+    public PointCategoryService(MongoDBService mongoDBService) {
+        this.mongoDBService = mongoDBService;
     }
     
     /**
@@ -31,7 +33,7 @@ public class PointCategoryService {
      * @param scoreboardId The scoreboard ID
      * @return List of active point categories for the scoreboard
      */
-    public List<PointCategory> getPointCategoriesByScoreboard(String scoreboardId) {
+    public List<PointCategory> getPointCategoriesByScoreboardId(String scoreboardId) {
         logger.info("Fetching point categories for scoreboard: {}", scoreboardId);
         
         if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
@@ -40,9 +42,10 @@ public class PointCategoryService {
         }
         
         try {
-            List<PointCategory> categories = pointCategoryRepository.findByScoreboardIdAndIsActiveTrue(scoreboardId);
-            logger.info("Found {} active point categories for scoreboard: {}", categories.size(), scoreboardId);
-            return categories;
+            Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId));
+            List<PointCategory> pointCategories = mongoDBService.find(query, PointCategory.class);
+            logger.info("Found {} point categories for scoreboard: {}", pointCategories.size(), scoreboardId);
+            return pointCategories;
         } catch (Exception e) {
             logger.error("Error fetching point categories for scoreboard {}: {}", scoreboardId, e.getMessage(), e);
             throw new RuntimeException("Failed to fetch point categories", e);
@@ -63,14 +66,13 @@ public class PointCategoryService {
         }
         
         try {
-            Optional<PointCategory> category = pointCategoryRepository.findByIdAndIsActiveTrue(id);
-            if (category.isPresent()) {
-                logger.info("Found active point category with ID: {}", id);
-                return category.get();
-            } else {
+            Optional<PointCategory> pointCategory = mongoDBService.findById(id, PointCategory.class);
+            if (pointCategory.isEmpty()) {
                 logger.warn("Point category with ID {} not found or not active", id);
                 return null;
             }
+            logger.info("Found active point category with ID: {}", id);
+            return pointCategory.get();
         } catch (Exception e) {
             logger.error("Error fetching point category by ID {}: {}", id, e.getMessage(), e);
             throw new RuntimeException("Failed to fetch point category", e);

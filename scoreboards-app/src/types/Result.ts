@@ -1,27 +1,29 @@
 export type Result = {
   id: string;
-  created: Date;
   scoreboardId: string;
   sessionId: string;
   resultEntryId: string;
   userId: string;
   pointCategoryId: string;
-  points: number; // double
+  points: number;
+  created: Date;
+  lastModified: Date;
+  createdBy: string;
   isActive: boolean;
 };
 
 export const Result = {
-  create: (data: Partial<Result>): Result => ({
-    id: data.id ?? "",
-    created: data.created ?? new Date(),
-    scoreboardId: data.scoreboardId ?? "",
-    sessionId: data.sessionId ?? "",
-    resultEntryId: data.resultEntryId ?? "",
-    userId: data.userId ?? "",
-    pointCategoryId: data.pointCategoryId ?? "",
+  create: (data: Result): Result => ({
+    id: data.id ?? '',
+    scoreboardId: data.scoreboardId ?? '',
+    sessionId: data.sessionId ?? '',
+    resultEntryId: data.resultEntryId ?? '',
+    userId: data.userId ?? '',
+    pointCategoryId: data.pointCategoryId ?? '',
     points: data.points ?? 0,
+    created: data.created ?? new Date(),
+    lastModified: data.lastModified ?? new Date(),
+    createdBy: data.createdBy ?? '',
     isActive: data.isActive ?? true,
   }),
 };
-
-

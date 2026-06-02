@@ -6,10 +6,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Session entity representing a session document in MongoDB.
@@ -20,10 +17,6 @@ public class Session extends Auditable {
     
     @Id
     private String id;
-    
-    @Field("createdById")
-    @NotBlank(message = "Created by ID cannot be blank")
-    private String createdById;
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
@@ -39,15 +32,15 @@ public class Session extends Auditable {
     
     @Field("participants")
     @NotNull(message = "Participants cannot be null")
-    private List<String> participants = new ArrayList<>(); // User IDs
+    private Set<String> participants = new HashSet<>(); // User IDs
     
     @Field("pointCategories")
     @NotNull(message = "Point categories cannot be null")
-    private List<String> pointCategories = new ArrayList<>(); // PointCategory IDs
+    private Set<String> pointCategories = new HashSet<>(); // PointCategory IDs
     
     @Field("resultEntries")
     @NotNull(message = "Result entries cannot be null")
-    private List<String> resultEntries = new ArrayList<>(); // ResultEntry IDs
+    private Set<String> resultEntries = new HashSet<>(); // ResultEntry IDs
 
     public String getId() {
         return id;
@@ -55,14 +48,6 @@ public class Session extends Auditable {
 
     public void setId(String id) {
         this.id = id;
-    }
-
-    public String getCreatedById() {
-        return createdById;
-    }
-
-    public void setCreatedById(String createdById) {
-        this.createdById = createdById;
     }
 
     public String getScoreboardId() {
@@ -89,27 +74,27 @@ public class Session extends Auditable {
         this.isPending = isPending;
     }
 
-    public List<String> getParticipants() {
+    public Set<String> getParticipants() {
         return participants;
     }
 
-    public void setParticipants(List<String> participants) {
+    public void setParticipants(Set<String> participants) {
         this.participants = participants;
     }
 
-    public List<String> getPointCategories() {
+    public Set<String> getPointCategories() {
         return pointCategories;
     }
 
-    public void setPointCategories(List<String> pointCategories) {
+    public void setPointCategories(Set<String> pointCategories) {
         this.pointCategories = pointCategories;
     }
 
-    public List<String> getResultEntries() {
+    public Set<String> getResultEntries() {
         return resultEntries;
     }
 
-    public void setResultEntries(List<String> resultEntries) {
+    public void setResultEntries(Set<String> resultEntries) {
         this.resultEntries = resultEntries;
     }
 
@@ -117,7 +102,6 @@ public class Session extends Auditable {
     public String toString() {
         return "Session{" +
                 "id='" + id + '\'' +
-                ", createdById='" + createdById + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", scoreboardName='" + scoreboardName + '\'' +
                 ", isPending=" + isPending +

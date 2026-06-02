@@ -5,6 +5,7 @@ import com.mikko_huttunen.scoreboards.models.Scoreboard;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
+import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,17 +31,19 @@ public class UserService {
     private final MongoDBService mongoDBService;
     private final ScoreboardService scoreboardService;
     private final UserRepository userRepository;
+    private final CurrentUserContext currentUserContext;
     
     @Autowired
     public UserService(
             Auth0ManagementService auth0ManagementService,
             AuthProvider authProvider,
-            MongoDBService mongoDBService, ScoreboardService scoreboardService, UserRepository userRepository) {
+            MongoDBService mongoDBService, ScoreboardService scoreboardService, UserRepository userRepository, CurrentUserContext currentUserContext) {
         this.auth0ManagementService = auth0ManagementService;
         this.authProvider = authProvider;
         this.mongoDBService = mongoDBService;
         this.scoreboardService = scoreboardService;
         this.userRepository = userRepository;
+        this.currentUserContext = currentUserContext;
     }
     
     /**
@@ -80,7 +83,7 @@ public class UserService {
     }
 
     /**
-     * Get the current authenticated user.
+     * Get the current user.
      * @return Optional containing the user if found and active
      */
     public Optional<User> getCurrentUser() {
@@ -126,22 +129,18 @@ public class UserService {
      */
     @Transactional
     public Optional<User> updateUser(String name) {
-        Optional<User> user = getCurrentUser();
-        if (user.isEmpty()) {
-            logger.warn("User not found or is inactive");
-            return Optional.empty();
-        }
+        User user = currentUserContext.requireCurrentUser();
 
         try {
             //Update Auth0 user
-            auth0ManagementService.updateUser(user.get().getAuth0Id(), name);
+            auth0ManagementService.updateUser(user.getAuth0Id(), name);
 
-            return mongoDBService.update(user.get().getId(), User.class, userToUpdate -> {
+            return mongoDBService.update(user.getId(), User.class, userToUpdate -> {
                 userToUpdate.setName(name);
             });
         } catch (Exception e) {
-            logger.error("Error updating user {}: {}", user.get().getId(), e.getMessage(), e);
-            throw new RuntimeException("Failed to update user: " + user.get().getId(), e);
+            logger.error("Error updating user {}: {}", user.getId(), e.getMessage(), e);
+            throw new RuntimeException("Failed to update user: " + user.getId(), e);
         }
     }
 
@@ -151,23 +150,24 @@ public class UserService {
      */
     @Transactional
     public User deleteUser() {
-        Optional<User> user = getCurrentUser();
-
-        if (user.isEmpty()) {
-            logger.warn("User not found or is inactive");
-            return null;
-        }
+        User user = currentUserContext.requireCurrentUser();
 
         try {
-            auth0ManagementService.deleteUser(user.get().getAuth0Id());
+            //Delete user from Auth0
+            auth0ManagementService.deleteUser(user.getAuth0Id());
+
+            //Delete user from scoreboards
             List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
             Set<String> createdScoreboardsIds = scoreboards.stream().filter(sb ->
-                    sb.getCreatedBy().equals(user.get().getId())).map(Scoreboard::getId).collect(Collectors.toSet());
+                    sb.getCreatedBy().equals(user.getId())).map(Scoreboard::getId).collect(Collectors.toSet());
+
+            //Delete scoreboards created by the user
             scoreboardService.deleteScoreboards(createdScoreboardsIds);
-            return mongoDBService.delete(user.get().getId(), User.class);
+
+            return mongoDBService.deleteById(user.getId(), User.class);
         } catch (Exception e) {
-            logger.error("Error deleting user {}: {}", user.get().getId(), e.getMessage(), e);
-            throw new RuntimeException("Failed to delete user: " + user.get().getId(), e);
+            logger.error("Error deleting user {}: {}", user.getId(), e.getMessage(), e);
+            throw new RuntimeException("Failed to delete user: " + user.getId(), e);
         }
     }
 }

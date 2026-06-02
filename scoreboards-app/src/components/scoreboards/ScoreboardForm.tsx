@@ -14,7 +14,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
-import { ScoreboardsService } from '../../services/ScoreboardsService';
+import { ScoreboardsService } from '../../services/ScoreboardService';
 import { PointCategoryService } from '../../services/PointCategoryService';
 import type { Scoreboard } from '../../types/Scoreboard';
 import './ScoreboardForm.css';

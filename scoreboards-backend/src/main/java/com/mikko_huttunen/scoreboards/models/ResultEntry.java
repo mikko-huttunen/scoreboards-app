@@ -7,7 +7,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * ResultEntry entity representing a result entry document in MongoDB.
@@ -30,10 +32,14 @@ public class ResultEntry extends Auditable {
     @Field("userId")
     @NotBlank(message = "User ID cannot be blank")
     private String userId;
+
+    @Field("isPending")
+    @NotNull(message = "Is pending cannot be null")
+    private Boolean isPending = true;
     
     @Field("results")
     @NotNull(message = "Results cannot be null")
-    private List<String> results = new ArrayList<>(); // Result IDs
+    private Set<String> results = new HashSet<>(); // Result IDs
 
     @Field("totalPoints")
     @NotNull(message = "Total points cannot be null")
@@ -46,6 +52,10 @@ public class ResultEntry extends Auditable {
     public void setId(String id) {
         this.id = id;
     }
+
+    public Boolean getIsPending() { return isPending; }
+
+    public void setIsPending(Boolean pending) { isPending = pending; }
 
     public String getScoreboardId() {
         return scoreboardId;
@@ -71,11 +81,11 @@ public class ResultEntry extends Auditable {
         this.userId = userId;
     }
 
-    public List<String> getResults() {
+    public Set<String> getResults() {
         return results;
     }
 
-    public void setResults(List<String> results) {
+    public void setResults(Set<String> results) {
         this.results = results;
     }
 
@@ -94,6 +104,7 @@ public class ResultEntry extends Auditable {
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", sessionId='" + sessionId + '\'' +
                 ", userId='" + userId + '\'' +
+                ", isPending=" + isPending + '\'' +
                 ", results=" + results +
                 ", totalPoints=" + totalPoints +
                 ", created=" + getCreated() +

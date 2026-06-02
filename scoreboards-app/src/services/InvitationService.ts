@@ -1,234 +1,114 @@
+import axios from 'axios';
 import type { Invitation } from '../types/Invitation';
+import apiClient from '../api/Interceptor';
 
 const API_BASE_URL = '/api/invitations';
 
 /**
  * Service for interacting with the Invitations API.
- * All methods require an authentication token.
  */
 export class InvitationService {
   /**
    * Create a new invitation.
    * @param receiverEmail Email of the user to invite
    * @param scoreboardId ID of the scoreboard
-   * @param token Authentication token
    * @returns Promise resolving to the created invitation
    */
   static async createInvitation(
     receiverEmail: string,
-    scoreboardId: string,
-    token: string
+    scoreboardId: string
   ): Promise<Invitation> {
-    const response = await fetch(API_BASE_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    try {
+      const response = await apiClient.post<Invitation>(API_BASE_URL, {
         receiverEmail,
         scoreboardId,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: response.statusText }));
-      throw new Error(
-        errorData.error || `Failed to create invitation: ${response.statusText}`
-      );
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to create invitation: ${error.message}`);
+      }
+      throw new Error(`Failed to create invitation: ${error}`);
     }
-
-    return response.json();
   }
 
   /**
    * Get all pending invitations for the current user.
-   * @param token Authentication token
    * @returns Promise resolving to array of pending invitations
    */
-  static async getPendingInvitations(token: string): Promise<Invitation[]> {
-    const response = await fetch(`${API_BASE_URL}/pending`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch pending invitations: ${response.statusText}`
-      );
+  static async getInvitations(): Promise<Invitation[]> {
+    try {
+      const response = await apiClient.get<Invitation[]>(API_BASE_URL);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch pending invitations: ${error.message}`
+        );
+      }
+      throw new Error(`Failed to fetch pending invitations: ${error}`);
     }
-
-    return response.json();
-  }
-
-  /**
-   * Get all invitations for the current user.
-   * @param token Authentication token
-   * @returns Promise resolving to array of invitations
-   */
-  static async getMyInvitations(token: string): Promise<Invitation[]> {
-    const response = await fetch(`${API_BASE_URL}/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch invitations: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Get all invitations for a scoreboard.
-   * @param scoreboardId ID of the scoreboard
-   * @param token Authentication token
-   * @returns Promise resolving to array of invitations
-   */
-  static async getInvitationsByScoreboard(
-    scoreboardId: string,
-    token: string
-  ): Promise<Invitation[]> {
-    const response = await fetch(`${API_BASE_URL}/scoreboard/${scoreboardId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch invitations: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
   /**
    * Get invitation by ID.
    * @param invitationId ID of the invitation
-   * @param token Authentication token
    * @returns Promise resolving to the invitation
    */
-  static async getInvitationById(
-    invitationId: string,
-    token: string
-  ): Promise<Invitation> {
-    const response = await fetch(`${API_BASE_URL}/${invitationId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch invitation: ${response.statusText}`);
+  static async getInvitationById(invitationId: string): Promise<Invitation> {
+    try {
+      const response = await apiClient.get<Invitation>(
+        `${API_BASE_URL}/${invitationId}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to fetch invitation: ${error.message}`);
+      }
+      throw new Error(`Failed to fetch invitation: ${error}`);
     }
-
-    return response.json();
   }
 
   /**
    * Accept an invitation.
    * @param invitationId ID of the invitation
-   * @param token Authentication token
    * @returns Promise resolving to the updated invitation
    */
-  static async acceptInvitation(
-    invitationId: string,
-    token: string
-  ): Promise<Invitation> {
-    const response = await fetch(`${API_BASE_URL}/${invitationId}/accept`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: response.statusText }));
-      throw new Error(
-        errorData.error || `Failed to accept invitation: ${response.statusText}`
+  static async acceptInvitation(invitationId: string): Promise<Invitation> {
+    try {
+      const response = await apiClient.post<Invitation>(
+        `${API_BASE_URL}/${invitationId}/accept`
       );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to accept invitation: ${error.message}`);
+      }
+      throw new Error(`Failed to accept invitation: ${error}`);
     }
-
-    return response.json();
-  }
-
-  /**
-   * Decline an invitation.
-   * @param invitationId ID of the invitation
-   * @param token Authentication token
-   * @returns Promise resolving to the updated invitation
-   */
-  static async declineInvitation(
-    invitationId: string,
-    token: string
-  ): Promise<Invitation> {
-    const response = await fetch(`${API_BASE_URL}/${invitationId}/decline`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: response.statusText }));
-      throw new Error(
-        errorData.error ||
-          `Failed to decline invitation: ${response.statusText}`
-      );
-    }
-
-    return response.json();
   }
 
   /**
    * Delete an invitation.
    * @param invitationId ID of the invitation
-   * @param token Authentication token
-   * @returns Promise resolving to true if deleted successfully
+   * @returns Promise resolving to the deleted invitation or null if not found
    */
   static async deleteInvitation(
-    invitationId: string,
-    token: string
-  ): Promise<boolean> {
-    const response = await fetch(`${API_BASE_URL}/${invitationId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (response.status === 404) {
-      return false;
-    }
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: response.statusText }));
-      throw new Error(
-        errorData.error || `Failed to delete invitation: ${response.statusText}`
+    invitationId: string
+  ): Promise<Invitation | null> {
+    try {
+      const response = await apiClient.delete<Invitation>(
+        `${API_BASE_URL}/${invitationId}`
       );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to delete invitation: ${error.message}`);
+      }
+      throw new Error(`Failed to delete invitation: ${error}`);
     }
-
-    return true;
   }
 }

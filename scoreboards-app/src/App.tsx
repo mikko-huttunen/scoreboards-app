@@ -1,103 +1,83 @@
-import './App.css';
-import { useAuth0 } from '@auth0/auth0-react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoginView } from './components/authentication/Login';
-import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProfileView } from './components/profile/Profile';
-import { ScoreboardsView } from './components/scoreboards/ScoreboardView';
 import { ScoreboardsList } from './components/scoreboards/ScoreboardsList';
 import { CreateScoreboard } from './components/scoreboards/CreateScoreboard';
+import { ScoreboardsView } from './components/scoreboards/ScoreboardView';
 import { EditScoreboard } from './components/scoreboards/EditScoreboard';
 import { AddScores } from './components/scoreboards/AddScores';
+import { useAccessTokenManager } from './hooks/useAccessTokenManager';
+import { RootRedirect } from './components/authentication/RootRedirect';
+import ProtectedRoute from './components/authentication/ProtectedRoute';
+import { useAuth0 } from '@auth0/auth0-react';
+import { setupAxiosInterceptors } from './api/Interceptor';
 
 function App() {
-  const { isAuthenticated, isLoading } = useAuth0();
+  const { getAccessTokenSilently } = useAuth0();
+
+  useAccessTokenManager();
+  setupAxiosInterceptors(getAccessTokenSilently);
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          isAuthenticated ? <Navigate to="/profile" replace /> : <LoginView />
-        }
-      />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/login" element={<LoginView />} />
+
       <Route
         path="/profile"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <ProfileView />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/scoreboards"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <ScoreboardsList />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/scoreboards/new"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <CreateScoreboard />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/scoreboards/:scoreboardId"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <ScoreboardsView />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/scoreboards/:scoreboardId/edit"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <EditScoreboard />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/sessions/:sessionId/add-scores"
         element={
-          isLoading ? (
-            <div>Loading...</div>
-          ) : isAuthenticated ? (
+          <ProtectedRoute>
             <AddScores />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
-      <Route
-        path="*"
-        element={
-          <Navigate to={isAuthenticated ? '/scoreboards' : '/'} replace />
-        }
-      />
+
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

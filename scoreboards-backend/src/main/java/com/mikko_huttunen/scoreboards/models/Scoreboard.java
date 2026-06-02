@@ -31,7 +31,7 @@ public class Scoreboard extends Auditable {
     
     @Field("pointCategories")
     @NotNull(message = "Point categories cannot be null")
-    private List<String> pointCategories = new ArrayList<>();
+    private Set<String> pointCategories = new HashSet<>();
 
     public String getId() {
         return id;
@@ -57,11 +57,11 @@ public class Scoreboard extends Auditable {
         this.users = users;
     }
 
-    public List<String> getPointCategories() {
+    public Set<String> getPointCategories() {
         return pointCategories;
     }
 
-    public void setPointCategories(List<String> pointCategories) {
+    public void setPointCategories(Set<String> pointCategories) {
         this.pointCategories = pointCategories;
     }
 

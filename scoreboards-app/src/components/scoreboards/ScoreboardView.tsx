@@ -42,7 +42,7 @@ import type { Invitation } from '../../types/Invitation';
 import type { PointCategory } from '../../types/PointCategory';
 import type { ResultEntry } from '../../types/ResultEntry';
 import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
-import { ScoreboardsService } from '../../services/ScoreboardsService';
+import { ScoreboardsService } from '../../services/ScoreboardService';
 import { UserService } from '../../services/UserService';
 import { InvitationService } from '../../services/InvitationService';
 import { PointCategoryService } from '../../services/PointCategoryService';
@@ -59,12 +59,7 @@ export type ScoreboardsViewProps = {
   onEdit?: () => void | Promise<void>;
 };
 
-export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
-  sessions: propSessions = [],
-  onCreateSession,
-  users: propUsers = [],
-  onEdit,
-}) => {
+export const ScoreboardsView: React.FC<ScoreboardsViewProps> = () => {
   const navigate = useNavigate();
   const { scoreboardId } = useParams<{ scoreboardId: string }>();
   const { getAccessTokenSilently, user: auth0User } = useAuth0();
@@ -76,7 +71,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     []
   );
   const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
-  const [sessions, setSessions] = useState<Session[]>(propSessions);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -87,9 +82,9 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
   const [processingInvitation, setProcessingInvitation] = useState<
     string | null
   >(null);
-  const [kickDialogOpen, setKickDialogOpen] = useState(false);
-  const [userToKick, setUserToKick] = useState<User | null>(null);
-  const [kicking, setKicking] = useState(false);
+  const [removeUserDialogOpen, setRemoveUserDialogOpen] = useState(false);
+  const [userToRemove, setUserToRemove] = useState<User | null>(null);
+  const [removingUser, setRemovingUser] = useState(false);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState<BarData[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
@@ -109,22 +104,14 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
   const [leaving, setLeaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const hasFetchedRef = useRef(false);
-  const currentScoreboardIdRef = useRef<string | undefined>(undefined);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Reset fetch flag if scoreboardId changes
-    if (currentScoreboardIdRef.current !== scoreboardId) {
-      hasFetchedRef.current = false;
-      currentScoreboardIdRef.current = scoreboardId;
-    }
-
-    // Only fetch if we haven't fetched for this scoreboardId yet
-    if (hasFetchedRef.current || !scoreboardId) {
-      if (!scoreboardId) {
-        setError('Scoreboard ID is missing');
-        setLoading(false);
-      }
+    if (!scoreboardId) {
+      setError('Scoreboard ID is missing');
+      setLoading(false);
       return;
     }
 
@@ -132,14 +119,10 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
       try {
         setLoading(true);
         setError(null);
-        hasFetchedRef.current = true;
-        const token = await getAccessTokenSilently();
 
         // Fetch scoreboard
-        const scoreboardData = await ScoreboardsService.getScoreboardById(
-          scoreboardId,
-          token
-        );
+        const scoreboardData =
+          await ScoreboardsService.getScoreboardById(scoreboardId);
         if (!scoreboardData) {
           setError('Scoreboard not found');
           setLoading(false);
@@ -147,290 +130,72 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
         }
         setScoreboard(scoreboardData);
 
-        // Fetch users for scoreboard (always fetch, don't rely on propUsers)
-        const usersData = await UserService.getUsersForScoreboard(
-          scoreboardId,
-          token
-        );
+        const userData = await UserService.getCurrentUser();
+        setCurrentUser(userData);
+
+        // Fetch users for scoreboard
+        const usersData = await UserService.getUsersForScoreboard(scoreboardId);
         setUsers(usersData);
 
         // Fetch point categories
-        const categories =
+        const pointCategoriesData =
           await PointCategoryService.getPointCategoriesByScoreboard(
-            scoreboardId,
-            token
+            scoreboardId
           );
-        setPointCategories(categories);
+        setPointCategories(pointCategoriesData);
 
         // Fetch sessions (non-pending only)
-        if (scoreboardData.name) {
-          try {
-            const sessionsData = await SessionService.getSessionsByScoreboardId(
-              scoreboardData.id,
-              token
-            );
-            // Convert backend sessions to frontend format
-            const convertedSessions = sessionsData.map((s: any) =>
-              Session.create({
-                id: s.id,
-                created: new Date(s.created),
-                createdById: s.createdById,
-                scoreboardId: s.scoreboardId,
-                scoreboardName: s.scoreboardName,
-                isPending: s.isPending ?? false,
-                participants: new Set<User>(),
-                pointCategories: new Set<PointCategory>(),
-                resultEntries: new Set<ResultEntry>(), // Will be populated when needed
-                isActive: s.isActive,
-              })
-            );
-            setSessions(convertedSessions);
-          } catch (err) {
-            console.error('Error fetching sessions:', err);
-            // Don't fail the whole page if sessions fail
-            // Use prop sessions if available
-            if (propSessions.length > 0) {
-              setSessions(propSessions);
-            }
-          }
-        } else if (propSessions.length > 0) {
-          // Use prop sessions if scoreboard name is not available
-          setSessions(propSessions);
-        }
-
-        // Fetch pending invitations
-        const invitations =
-          await InvitationService.getPendingInvitations(token);
-        setPendingInvitations(
-          invitations.filter((inv) => inv.scoreboardId === scoreboardId)
+        const sessionsData = await SessionService.getSessionsByScoreboardId(
+          scoreboardData.id
         );
+        setSessions(sessionsData.filter((s) => !s.isPending));
+        setPendingSessions(sessionsData.filter((s) => s.isPending));
 
-        // Fetch leaderboard data (will be called after users and pointCategories are set)
+        // Fetch pending invitations (only for the creator)
+        if (scoreboardData.createdBy === userData?.id) {
+          const invitations = await InvitationService.getInvitations();
+          setPendingInvitations(
+            invitations.filter((inv) => inv.scoreboardId === scoreboardId)
+          );
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
         setError(
           err instanceof Error ? err.message : 'Failed to load scoreboard'
         );
-        hasFetchedRef.current = false; // Allow retry on error
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [scoreboardId, getAccessTokenSilently]);
+  }, [scoreboardId]);
 
-  // Fetch leaderboard data when sessions, users, and pointCategories are available
+  // Check access after scoreboard and users are loaded
   useEffect(() => {
-    const loadLeaderboard = async () => {
-      if (
-        !scoreboardId ||
-        sessions.length === 0 ||
-        users.length === 0 ||
-        pointCategories.length === 0
-      ) {
-        setLeaderboardData([]);
-        return;
-      }
+    if (!scoreboard || !currentUser || loading) {
+      setHasAccess(null);
+      return;
+    }
 
-      try {
-        setLoadingLeaderboard(true);
-        const token = await getAccessTokenSilently();
+    // Check if user is the creator
+    const isCreator = scoreboard.createdBy === currentUser.id;
+    setIsOwner(isCreator);
 
-        // Fetch all resultEntries for all sessions
-        const allResultEntries: ResultEntry[] = [];
-        for (const session of sessions) {
-          try {
-            const entries = await ResultEntryService.getResultEntriesBySession(
-              session.id,
-              token
-            );
-            allResultEntries.push(...entries);
-          } catch (err) {
-            console.error(
-              `Error fetching result entries for session ${session.id}:`,
-              err
-            );
-            // Continue with other sessions
-          }
-        }
+    // Check if user is in the users list (either as creator or joined user)
+    const isInUsersList = users.some((u) => u.id === currentUser.id);
 
-        // Create a map of user ID to user name
-        const userMap = new Map<string, User>();
-        users.forEach((u) => userMap.set(u.id, u));
+    const userHasAccess = isCreator || isInUsersList;
+    setHasAccess(userHasAccess);
 
-        // Create a map of point category ID to point category
-        const categoryMap = new Map<string, PointCategory>();
-        pointCategories.forEach((cat) => categoryMap.set(cat.id, cat));
-
-        // Aggregate points by user and point category
-        // Map: userId -> Map: pointCategoryId -> total points
-        const userPointsMap = new Map<string, Map<string, number>>();
-
-        for (const entry of allResultEntries) {
-          const userId = entry.userId;
-          if (!userPointsMap.has(userId)) {
-            userPointsMap.set(userId, new Map<string, number>());
-          }
-          const categoryPointsMap = userPointsMap.get(userId)!;
-
-          // Process results from the entry
-          // Handle both cases: results as Set<Result> or as array (from backend)
-          const results = entry.results;
-          if (results) {
-            let resultsArray: any[] = [];
-            if (results instanceof Set) {
-              resultsArray = Array.from(results);
-            } else if (Array.isArray(results)) {
-              resultsArray = results;
-            }
-
-            resultsArray.forEach((item: any) => {
-              if (
-                typeof item === 'object' &&
-                item.pointCategoryId &&
-                item.points !== undefined
-              ) {
-                // It's a Result object
-                const categoryId = item.pointCategoryId;
-                const currentPoints = categoryPointsMap.get(categoryId) || 0;
-                categoryPointsMap.set(categoryId, currentPoints + item.points);
-              }
-            });
-          }
-
-          // If we couldn't get category breakdown from results, use totalPoints
-          // and distribute evenly (this is a fallback - ideally we'd fetch Results)
-          if (
-            categoryPointsMap.size === 0 &&
-            entry.totalPoints > 0 &&
-            pointCategories.length > 0
-          ) {
-            // Distribute totalPoints evenly across all point categories
-            // This is not ideal but works as a fallback
-            const pointsPerCategory =
-              entry.totalPoints / pointCategories.length;
-            pointCategories.forEach((cat) => {
-              categoryPointsMap.set(cat.id, pointsPerCategory);
-            });
-          }
-        }
-
-        // Convert to BarData format
-        const barData: BarData[] = Array.from(userPointsMap.entries()).map(
-          ([userId, categoryPoints]) => {
-            const user = userMap.get(userId);
-            const userName = user?.name || user?.email || 'Unknown User';
-
-            const segments = Array.from(categoryPoints.entries())
-              .map(([categoryId, points]) => {
-                const category = categoryMap.get(categoryId);
-                return {
-                  categoryId,
-                  categoryName: category?.name || 'Unknown',
-                  value: points,
-                  color: category?.color || '#38a14f',
-                };
-              })
-              .sort((a, b) => b.value - a.value); // Sort by points descending
-
-            const total = Array.from(categoryPoints.values()).reduce(
-              (sum, points) => sum + points,
-              0
-            );
-
-            return {
-              label: userName,
-              total,
-              userId: userId,
-              avatar: user ? (auth0User?.picture ?? undefined) : undefined,
-              segments,
-            };
-          }
-        );
-
-        // Sort by total points descending
-        barData.sort((a, b) => b.total - a.total);
-
-        setLeaderboardData(barData);
-      } catch (err) {
-        console.error('Error fetching leaderboard data:', err);
-        setLeaderboardData([]);
-      } finally {
-        setLoadingLeaderboard(false);
-      }
-    };
-
-    loadLeaderboard();
-  }, [sessions, users, pointCategories, scoreboardId, getAccessTokenSilently]);
-
-  // Fetch pending sessions for this scoreboard
-  useEffect(() => {
-    const fetchPendingSessions = async () => {
-      if (!scoreboardId || !auth0User?.sub) {
-        setPendingSessions([]);
-        return;
-      }
-
-      try {
-        const token = await getAccessTokenSilently();
-        const allPendingSessions =
-          await SessionService.getPendingSessions(token);
-
-        // Filter to only sessions for this scoreboard
-        const scoreboardSessions = allPendingSessions
-          .filter((s: any) => s.scoreboardId === scoreboardId)
-          .map((s: any) => {
-            // Convert participants from array to Set if needed
-            // Backend returns participants as List<String> (array of user IDs)
-            let participantsSet: Set<string> = new Set();
-            if (s.participants) {
-              if (Array.isArray(s.participants)) {
-                participantsSet = new Set(s.participants);
-              } else if (s.participants instanceof Set) {
-                participantsSet = s.participants;
-              }
-            }
-
-            return Session.create({
-              id: s.id,
-              created: new Date(s.created),
-              createdById: s.createdById,
-              scoreboardId: s.scoreboardId,
-              scoreboardName: s.scoreboardName,
-              isPending: s.isPending ?? true,
-              participants: participantsSet as any, // Store as Set of IDs for checking
-              pointCategories: new Set<PointCategory>(),
-              resultEntries: new Set<ResultEntry>(),
-              isActive: s.isActive,
-            });
-          });
-
-        setPendingSessions(scoreboardSessions);
-
-        // Fetch user info for unique createdByIds
-        const uniqueUserIds = Array.from(
-          new Set(scoreboardSessions.map((s) => s.createdById))
-        );
-        const usersMap = new Map<string, User>();
-        for (const userId of uniqueUserIds) {
-          try {
-            const user = await UserService.getUserById(userId, token);
-            if (user) {
-              usersMap.set(userId, user);
-            }
-          } catch (err) {
-            console.error(`Error fetching user ${userId}:`, err);
-          }
-        }
-        setSessionUsers(usersMap);
-      } catch (err) {
-        console.error('Error fetching pending sessions:', err);
-      }
-    };
-
-    fetchPendingSessions();
-  }, [scoreboardId, auth0User?.sub, getAccessTokenSilently]);
+    // Redirect if user doesn't have access
+    if (!userHasAccess) {
+      console.log(
+        'User does not have access to this scoreboard, redirecting...'
+      );
+      navigate('/scoreboards');
+    }
+  }, [scoreboard, users, currentUser, loading, navigate]);
 
   const handleAddScores = (sessionId: string) => {
     navigate(`/sessions/${sessionId}/add-scores`);
@@ -439,11 +204,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
   const handleFinishSession = async (sessionId: string) => {
     try {
       setFinishingSession(sessionId);
-      const token = await getAccessTokenSilently();
-      const finishedSession = await SessionService.finishSession(
-        sessionId,
-        token
-      );
+      const finishedSession = await SessionService.finishSession(sessionId);
 
       // Remove from pending sessions
       setPendingSessions(pendingSessions.filter((s) => s.id !== sessionId));
@@ -452,38 +213,19 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
       if (finishedSession) {
         const convertedFinishedSession = Session.create({
           id: finishedSession.id,
-          created: new Date(finishedSession.created),
-          createdById: finishedSession.createdById,
           scoreboardId: finishedSession.scoreboardId,
           scoreboardName: finishedSession.scoreboardName,
           isPending: finishedSession.isPending ?? false,
-          participants: new Set<User>(),
-          pointCategories: new Set<PointCategory>(),
-          resultEntries: new Set<ResultEntry>(),
+          participants: finishedSession.participants ?? new Set<string>(),
+          pointCategories: finishedSession.pointCategories ?? new Set<string>(),
+          resultEntries: finishedSession.resultEntries ?? new Set<string>(),
+          created: new Date(finishedSession.created),
+          lastModified: new Date(finishedSession.lastModified),
+          createdById: finishedSession.createdById,
           isActive: finishedSession.isActive,
         });
         setSessions([convertedFinishedSession, ...sessions]);
       }
-
-      // Refresh pending sessions to ensure we have the latest state
-      const updatedSessions = await SessionService.getPendingSessions(token);
-      const convertedSessions = updatedSessions
-        .filter((s: any) => s.scoreboardId === scoreboardId)
-        .map((s: any) =>
-          Session.create({
-            id: s.id,
-            created: new Date(s.created),
-            createdById: s.createdById,
-            scoreboardId: s.scoreboardId,
-            scoreboardName: s.scoreboardName,
-            isPending: s.isPending ?? true,
-            participants: new Set<User>(),
-            pointCategories: new Set<PointCategory>(),
-            resultEntries: new Set<ResultEntry>(),
-            isActive: s.isActive,
-          })
-        );
-      setPendingSessions(convertedSessions);
     } catch (err) {
       console.error('Error finishing session:', err);
       setError(err instanceof Error ? err.message : 'Failed to finish session');
@@ -504,8 +246,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     if (!sessionToCancel) return;
     try {
       setCancellingSession(sessionToCancel);
-      const token = await getAccessTokenSilently();
-      await SessionService.deleteSession(sessionToCancel, token);
+      await SessionService.deleteSession(sessionToCancel);
       setPendingSessions(
         pendingSessions.filter((s) => s.id !== sessionToCancel)
       );
@@ -528,53 +269,31 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
   };
 
   const handleSessionCreated = async (session: Session) => {
-    if (onCreateSession) {
-      await onCreateSession(session);
-    }
     // Refresh pending sessions immediately
     const fetchPendingSessions = async () => {
-      if (!scoreboardId || !auth0User?.sub) return;
+      if (!scoreboardId) return;
       try {
-        const token = await getAccessTokenSilently();
-        const allPendingSessions =
-          await SessionService.getPendingSessions(token);
-
-        // Filter to only sessions for this scoreboard
-        const scoreboardSessions = allPendingSessions
-          .filter((s: any) => s.scoreboardId === scoreboardId)
-          .map((s: any) =>
+        const sessions =
+          await SessionService.getSessionsByScoreboardId(scoreboardId);
+        const pendingSessions = sessions
+          .filter((s) => s.isPending)
+          .map((s: Session) =>
             Session.create({
               id: s.id,
-              created: new Date(s.created),
-              createdById: s.createdById,
               scoreboardId: s.scoreboardId,
               scoreboardName: s.scoreboardName,
               isPending: s.isPending ?? true,
-              participants: new Set<User>(),
-              pointCategories: new Set<PointCategory>(),
-              resultEntries: new Set<ResultEntry>(),
+              participants: s.participants ?? new Set<string>(),
+              pointCategories: s.pointCategories ?? new Set<string>(),
+              resultEntries: s.resultEntries ?? new Set<string>(),
+              created: new Date(s.created),
+              lastModified: new Date(s.lastModified),
+              createdById: s.createdById,
               isActive: s.isActive,
             })
           );
 
-        setPendingSessions(scoreboardSessions);
-
-        // Fetch user info for unique createdByIds
-        const uniqueUserIds = Array.from(
-          new Set(scoreboardSessions.map((s) => s.createdById))
-        );
-        const usersMap = new Map<string, User>();
-        for (const userId of uniqueUserIds) {
-          try {
-            const user = await UserService.getUserById(userId, token);
-            if (user) {
-              usersMap.set(userId, user);
-            }
-          } catch (err) {
-            console.error(`Error fetching user ${userId}:`, err);
-          }
-        }
-        setSessionUsers(usersMap);
+        setPendingSessions(pendingSessions);
       } catch (err) {
         console.error('Error fetching pending sessions:', err);
       }
@@ -607,12 +326,10 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
       setInviteLoading(true);
       setInviteError(null);
       setInviteSuccess(false);
-      const token = await getAccessTokenSilently();
 
       await InvitationService.createInvitation(
         inviteEmail.trim(),
-        scoreboardId,
-        token
+        scoreboardId
       );
 
       setInviteSuccess(true);
@@ -635,20 +352,15 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
 
     try {
       setProcessingInvitation(invitationId);
-      const token = await getAccessTokenSilently();
 
-      await InvitationService.acceptInvitation(invitationId, token);
+      await InvitationService.acceptInvitation(invitationId);
 
       // Refresh users and invitations
-      const usersData = await UserService.getUsersForScoreboard(
-        scoreboardId,
-        token
-      );
+      const usersData = await UserService.getUsersForScoreboard(scoreboardId);
       setUsers(usersData);
 
-      const invitations = await InvitationService.getPendingInvitations(token);
       setPendingInvitations(
-        invitations.filter((inv) => inv.scoreboardId === scoreboardId)
+        pendingInvitations.filter((inv) => inv.id !== invitationId)
       );
     } catch (err) {
       console.error('Error accepting invitation:', err);
@@ -665,14 +377,9 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
 
     try {
       setProcessingInvitation(invitationId);
-      const token = await getAccessTokenSilently();
-
-      await InvitationService.declineInvitation(invitationId, token);
-
-      // Refresh invitations
-      const invitations = await InvitationService.getPendingInvitations(token);
+      await InvitationService.deleteInvitation(invitationId);
       setPendingInvitations(
-        invitations.filter((inv) => inv.scoreboardId === scoreboardId)
+        pendingInvitations.filter((inv) => inv.id !== invitationId)
       );
     } catch (err) {
       console.error('Error declining invitation:', err);
@@ -684,55 +391,6 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     }
   };
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [hasAccess, setHasAccess] = useState<boolean | null>(null); // null = checking, true = has access, false = no access
-
-  const isOwner = scoreboard && auth0User?.sub === scoreboard.createdBy;
-  const isJoined =
-    currentUser &&
-    !isOwner &&
-    currentUser.joinedScoreboardIds?.includes(scoreboardId || '');
-
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const token = await getAccessTokenSilently();
-        const user = await UserService.getCurrentUser(token);
-        setCurrentUser(user);
-      } catch (err) {
-        console.error('Error fetching current user:', err);
-      }
-    };
-    if (auth0User?.sub) {
-      fetchCurrentUser();
-    }
-  }, [auth0User?.sub, getAccessTokenSilently]);
-
-  // Check access after scoreboard and users are loaded
-  useEffect(() => {
-    if (!scoreboard || !auth0User?.sub || loading) {
-      setHasAccess(null);
-      return;
-    }
-
-    // Check if user is the creator
-    const isCreator = scoreboard.createdBy === auth0User.sub;
-
-    // Check if user is in the users list (either as creator or joined user)
-    const isInUsersList = users.some((u) => u.id === auth0User.sub);
-
-    const userHasAccess = isCreator || isInUsersList;
-    setHasAccess(userHasAccess);
-
-    // Redirect if user doesn't have access
-    if (!userHasAccess) {
-      console.log(
-        'User does not have access to this scoreboard, redirecting...'
-      );
-      navigate('/scoreboards');
-    }
-  }, [scoreboard, users, auth0User?.sub, loading, navigate]);
-
   const handleEditClick = () => {
     if (!scoreboardId) return;
     navigate(`/scoreboards/${scoreboardId}/edit`);
@@ -740,21 +398,16 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
 
   const handleLeaveClick = () => {
     // Check if user has pending sessions
-    const userPendingSessions = pendingSessions.filter((s) => {
+    const userPendingSessions = pendingSessions.filter((s: Session) => {
       // Check if user is the creator (creators can't leave, but check anyway)
-      if (s.createdById === auth0User?.sub) {
+      if (s.createdById === currentUser?.id) {
         return true;
       }
       // Check if user is a participant in the session
       // Participants are stored as Set<string> (user IDs) in the frontend
       if (s.participants) {
         const participantsArray = Array.from(s.participants);
-        return participantsArray.some((p: any) => {
-          // p is a string (user ID) when stored from backend
-          const participantId =
-            typeof p === 'string' ? p : (p as User)?.id || p;
-          return participantId === auth0User?.sub;
-        });
+        return participantsArray.some((p: string) => p === currentUser?.id);
       }
       return false;
     });
@@ -773,8 +426,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     if (!scoreboardId) return;
     try {
       setLeaving(true);
-      const token = await getAccessTokenSilently();
-      await ScoreboardsService.leaveScoreboard(scoreboardId, token);
+      await ScoreboardsService.leaveScoreboard(scoreboardId);
       setLeaveDialogOpen(false);
       navigate('/scoreboards');
     } catch (err) {
@@ -794,8 +446,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     if (!scoreboardId) return;
     try {
       setDeleting(true);
-      const token = await getAccessTokenSilently();
-      await ScoreboardsService.deleteScoreboard(scoreboardId, token);
+      await ScoreboardsService.deleteScoreboard(scoreboardId);
       setDeleteDialogOpen(false);
       navigate('/scoreboards');
     } catch (err) {
@@ -812,7 +463,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
     setSessionModalOpen(true);
   };
 
-  const handleKickClick = (user: User) => {
+  const handleRemoveUserClick = (user: User) => {
     // Check if user has pending sessions
     const userPendingSessions = pendingSessions.filter((s) => {
       // Check if user is the creator
@@ -820,56 +471,42 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
         return true;
       }
       // Check if user is a participant in the session
-      // Participants are stored as Set<string> (user IDs) in the frontend
       if (s.participants) {
         const participantsArray = Array.from(s.participants);
-        return participantsArray.some((p: any) => {
-          // p is a string (user ID) when stored from backend
-          const participantId =
-            typeof p === 'string' ? p : (p as User)?.id || p;
-          return participantId === user.id;
-        });
+        return participantsArray.some((p: string) => p === user.id);
       }
       return false;
     });
 
     if (userPendingSessions.length > 0) {
       setError(
-        `Cannot kick user while they have ${userPendingSessions.length} pending session(s). Please wait for sessions to be finished.`
+        `Cannot remove user while they have ${userPendingSessions.length} pending session(s). Please wait for sessions to be finished.`
       );
       return;
     }
 
-    setUserToKick(user);
-    setKickDialogOpen(true);
+    setUserToRemove(user);
+    setRemoveUserDialogOpen(true);
   };
 
-  const handleKickConfirm = async () => {
-    if (!scoreboardId || !userToKick) return;
+  const handleRemoveUserConfirm = async () => {
+    if (!scoreboardId || !userToRemove) return;
 
-    setKicking(true);
+    setRemovingUser(true);
     try {
-      const token = await getAccessTokenSilently();
       await ScoreboardsService.removeUserFromScoreboard(
         scoreboardId,
-        userToKick.id,
-        token
+        userToRemove.id
       );
 
-      // Refresh users
-      const usersData = await UserService.getUsersForScoreboard(
-        scoreboardId,
-        token
-      );
-      setUsers(usersData);
-
-      setKickDialogOpen(false);
-      setUserToKick(null);
+      setUsers(users.filter((u) => u.id !== userToRemove.id));
+      setRemoveUserDialogOpen(false);
+      setUserToRemove(null);
     } catch (err) {
-      console.error('Error kicking user:', err);
-      setError(err instanceof Error ? err.message : 'Failed to kick user');
+      console.error('Error removing user:', err);
+      setError(err instanceof Error ? err.message : 'Failed to remove user');
     } finally {
-      setKicking(false);
+      setRemovingUser(false);
     }
   };
 
@@ -994,7 +631,7 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
                   </Button>
                 </>
               )}
-              {isJoined && (
+              {!isOwner && (
                 <Button
                   variant="contained"
                   color="warning"
@@ -1460,12 +1097,12 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
                             {isOwner && (
                               <TableCell align="right">
                                 {!isCreator && (
-                                  <Tooltip title="Kick user">
+                                  <Tooltip title="Remove user">
                                     <IconButton
                                       size="small"
                                       color="error"
-                                      onClick={() => handleKickClick(u)}
-                                      aria-label="kick user"
+                                      onClick={() => handleRemoveUserClick(u)}
+                                      aria-label="remove user"
                                     >
                                       <DeleteIcon />
                                     </IconButton>
@@ -1642,29 +1279,32 @@ export const ScoreboardsView: React.FC<ScoreboardsViewProps> = ({
 
       {/* Kick User Confirmation Dialog */}
       <Dialog
-        open={kickDialogOpen}
-        onClose={() => !kicking && setKickDialogOpen(false)}
+        open={removeUserDialogOpen}
+        onClose={() => !removingUser && setRemoveUserDialogOpen(false)}
       >
-        <DialogTitle>Confirm Kick User</DialogTitle>
+        <DialogTitle>Confirm Remove User</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to kick{' '}
-            {userToKick?.name || userToKick?.email || 'this user'} from the
+            Are you sure you want to remove{' '}
+            {userToRemove?.name || userToRemove?.email || 'this user'} from the
             scoreboard? They will lose access to this scoreboard and will need
             to be invited again to rejoin.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setKickDialogOpen(false)} disabled={kicking}>
+          <Button
+            onClick={() => setRemoveUserDialogOpen(false)}
+            disabled={removingUser}
+          >
             Cancel
           </Button>
           <Button
             color="error"
-            onClick={handleKickConfirm}
+            onClick={handleRemoveUserConfirm}
             autoFocus
-            disabled={kicking}
+            disabled={removingUser}
           >
-            {kicking ? <CircularProgress size={24} /> : 'Kick User'}
+            {removingUser ? <CircularProgress size={24} /> : 'Remove User'}
           </Button>
         </DialogActions>
       </Dialog>

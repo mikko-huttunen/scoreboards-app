@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class MongoDBService {
@@ -40,32 +41,45 @@ public class MongoDBService {
         if (document == null) {
             throw new IllegalArgumentException("Document cannot be null");
         }
+        return createMany(List.of(document)).getFirst();
+    }
+
+    @Transactional
+    public <T extends Auditable> List<T> createMany(List<T> documents) {
+        if (documents == null || documents.isEmpty()) {
+            throw new IllegalArgumentException("Documents cannot be null or empty");
+        }
 
         try {
             Date now = new Date();
 
-            setId(document);
-            document.setCreated(now);
-            document.setLastModified(now);
-            document.setCreatedBy(currentUserContext.requireCurrentUser().getId());
-            document.setIsActive(true);
+            for (T document : documents) {
+                setId(document);
+                document.setCreated(now);
+                document.setLastModified(now);
+                document.setCreatedBy(currentUserContext.requireCurrentUser().getId());
+                document.setIsActive(true);
 
-            accessControlValidator.validateWriteAccess(document);
+                accessControlValidator.validateWriteAccess(document);
+            }
 
-            T savedDocument = mongoTemplate.save(document);
-            logger.info("Created {} with ID {}", document.getClass().getSimpleName(), getId(document));
+            Collection<T> savedDocuments = mongoTemplate.insertAll(documents);
+            List<T> savedDocumentsList = (savedDocuments instanceof List<T> list)
+                    ? list
+                    : new ArrayList<>(savedDocuments);
 
-            return savedDocument;
+            logger.info("Created {} documents of type {} with IDs {}",
+                    savedDocumentsList.size(),
+                    savedDocumentsList.getFirst().getClass().getSimpleName(),
+                    savedDocumentsList.stream().map(this::getId).collect(Collectors.toList()));
+
+            return savedDocumentsList;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to create document {}: {}", document.getClass().getSimpleName(), e.getMessage(), e);
-            throw new RuntimeException("Failed to create document", e);
+            logger.error("Failed to create {} documents of type {}: {}", documents.size(), documents.getClass().getSimpleName(), e.getMessage(), e);
+            throw new RuntimeException("Failed to create documents", e);
         }
-    }
-
-    public <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass) {
-        return findById(id, documentClass, false);
     }
 
     public <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass, boolean includeDeleted) {
@@ -91,8 +105,12 @@ public class MongoDBService {
         }
     }
 
-    public <T extends Auditable> List<T> find(Query query, Class<T> documentClass) {
-        return find(query, documentClass, false);
+    public <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass) {
+        if (id == null || id.trim().isEmpty()) {
+            logger.warn("Attempted to fetch document with null or empty ID");
+            return Optional.empty();
+        }
+        return findById(id, documentClass, false);
     }
 
     public <T extends Auditable> List<T> find(Query query, Class<T> documentClass, boolean includeDeleted) {
@@ -116,17 +134,67 @@ public class MongoDBService {
         }
     }
 
+    public <T extends Auditable> List<T> find(Query query, Class<T> documentClass) {
+        if (query == null) {
+            query = new Query();
+        }
+        return find(query, documentClass, false);
+    }
+
     public <T extends Auditable> List<T> findByType(Class<T> documentClass, boolean includeDeleted) {
         Query query = new Query();
         query.addCriteria(Criteria.where("isActive").is(!includeDeleted));
         return find(new Query(), documentClass);
     }
 
+    public <T extends Auditable> List<T> findByType(Class<T> documentClass) {
+        return findByType(documentClass, false);
+    }
+
+    @Transactional
+    public <T extends Auditable> Optional<T> update(String id, Class<T> documentClass, DocumentUpdater<T> updater) {
+        validateId(id);
+
+        if (updater == null) {
+            throw new IllegalArgumentException("Document updater cannot be null");
+        }
+
+        try {
+            Optional<T> existingDocumentOpt = findById(id, documentClass);
+
+            if (existingDocumentOpt.isEmpty()) {
+                return Optional.empty();
+            }
+
+            T existingDocument = existingDocumentOpt.get();
+
+            accessControlValidator.validateWriteAccess(existingDocument);
+
+            updater.update(existingDocument);
+
+            existingDocument.setLastModified(new Date());
+
+            T savedDocument = mongoTemplate.save(existingDocument);
+            logger.info("Updated {} with ID {}", documentClass.getSimpleName(), id);
+
+            // Clear the cached user context after updating user
+            if (documentClass == User.class) {
+                currentUserContext.clear();
+            }
+
+            return Optional.of(savedDocument);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Failed to update {} with ID {}: {}", documentClass.getSimpleName(), id, e.getMessage(), e);
+            throw new RuntimeException("Failed to update document with ID: " + id, e);
+        }
+    }
+
     @Transactional
     public <T extends Auditable> List<T> updateAll(Set<String> ids, Class<T> documentClass, DocumentUpdater<T> updater) {
-        if (ids == null || ids.isEmpty()) {
-            throw new IllegalArgumentException("IDs cannot be null or empty");
-        }
+        ids.forEach(this::validateId);
+
         if (documentClass == null) {
             throw new IllegalArgumentException("Document class cannot be null");
         }
@@ -162,52 +230,18 @@ public class MongoDBService {
 
             bulkOps.execute();
 
-            logger.info("Updated {} documents of type {} using query", documents.size(), documentClass.getSimpleName());
+            // Clear the cached user context after updating user
+            if (documentClass == User.class) {
+                currentUserContext.clear();
+            }
+
+            logger.info("Updated {} documents of type {} with ids {}", documents.size(), documentClass.getSimpleName(), ids);
             return documents;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to update documents of type {} using query: {}", documentClass.getSimpleName(), e.getMessage(), e);
+            logger.error("Failed to update documents {} of type {} with ids {}: {}", ids.size(), documentClass.getSimpleName(), ids, e.getMessage(), e);
             throw new RuntimeException("Failed to update documents using query", e);
-        }
-    }
-
-    @Transactional
-    public <T extends Auditable> Optional<T> update(String id, Class<T> documentClass, DocumentUpdater<T> updater) {
-        validateId(id);
-
-        if (updater == null) {
-            throw new IllegalArgumentException("Document updater cannot be null");
-        }
-
-        try {
-            Optional<T> existingDocumentOpt = findById(id, documentClass);
-
-            if (existingDocumentOpt.isEmpty()) {
-                return Optional.empty();
-            }
-
-            T existingDocument = existingDocumentOpt.get();
-
-            accessControlValidator.validateWriteAccess(existingDocument);
-
-            updater.update(existingDocument);
-
-            existingDocument.setLastModified(new Date());
-
-            T savedDocument = mongoTemplate.save(existingDocument);
-            logger.info("Updated {} with ID {}", documentClass.getSimpleName(), id);
-
-            if (documentClass == User.class) {
-                currentUserContext.refresh();
-            }
-
-            return Optional.of(savedDocument);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.error("Failed to update {} with ID {}: {}", documentClass.getSimpleName(), id, e.getMessage(), e);
-            throw new RuntimeException("Failed to update document with ID: " + id, e);
         }
     }
 
@@ -258,34 +292,58 @@ public class MongoDBService {
     }
 
     @Transactional
-    public <T extends Auditable> T delete(String id, Class<T> documentClass) {
-        validateId(id);
+    public <T extends Auditable> List<T> deleteAll(Set<String> ids, Class<T> documentClass) {
+        ids.forEach(this::validateId);
+
+        if (documentClass == null) {
+            throw new IllegalArgumentException("Document class cannot be null");
+        }
 
         try {
-            Optional<T> existingDocumentOpt = findById(id, documentClass);
+            Query query = new Query(Criteria.where("_id").in(ids));
+            List<T> documents = find(query, documentClass);
 
-            if (existingDocumentOpt.isEmpty()) {
-                throw new IllegalArgumentException("Document with ID " + id + " not found");
+            if (documents.isEmpty()) {
+                return List.of();
             }
 
-            T existingDocument = existingDocumentOpt.get();
+            for (T document : documents) {
+                accessControlValidator.validateDeleteAccess(document);
 
-            accessControlValidator.validateDeleteAccess(existingDocument);
+                document.setIsActive(false);
+                document.setLastModified(new Date());
+            }
 
-            existingDocument.setIsActive(false);
-            existingDocument.setLastModified(new Date());
+            var bulkOps = mongoTemplate.bulkOps(
+                    org.springframework.data.mongodb.core.BulkOperations.BulkMode.UNORDERED,
+                    documentClass
+            );
 
-            T savedDocument = mongoTemplate.save(existingDocument);
+            for (T document : documents) {
+                Object idValue = getId(document);
+                Query byId = new Query(Criteria.where("_id").is(idValue));
+                bulkOps.replaceOne(byId, document);
+            }
 
-            logger.info("Deleted {} with ID {}", savedDocument.getClass().getSimpleName(), getId(savedDocument));
+            bulkOps.execute();
 
-            return savedDocument;
+            logger.info("Deleted {} documents of type {} with IDs {}",
+                    documents.size(),
+                    documents.getClass().getSimpleName(),
+                    documents.stream().map(this::getId).collect(Collectors.toList()));
+
+            return documents;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to delete {} with ID {}: {}", documentClass.getSimpleName(), id, e.getMessage(), e);
-            throw new RuntimeException("Failed to delete document with ID: " + id, e);
+            logger.error("Failed to delete {} documents of type {} with ids {}: {}", ids.size(), documentClass.getSimpleName(), ids, e.getMessage(), e);
+            throw new RuntimeException("Failed to delete documents", e);
         }
+    }
+
+    @Transactional
+    public <T extends Auditable> T deleteById(String id, Class<T> documentClass) {
+        return deleteAll(Set.of(id), documentClass).getFirst();
     }
 
     private void validateId(String id) {

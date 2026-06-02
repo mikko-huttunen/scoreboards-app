@@ -14,8 +14,7 @@ root.render(
     authorizationParams={{
       redirect_uri: window.location.origin,
       audience: `https://${import.meta.env.VITE_AUTH_DOMAIN}/api/v2/`,
-      scope:
-        'openid profile email read:current_user update:current_user_metadata',
+      scope: 'openid profile email offline_access',
     }}
     useRefreshTokens={true}
     cacheLocation="localstorage"
