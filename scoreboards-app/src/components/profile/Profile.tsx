@@ -15,7 +15,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
-import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
+import { useNavigationSpacing } from '../navigation/Navigation';
 import { UserService } from '../../services/UserService';
 import type { User } from '../../types/User';
 import './Profile.css';
@@ -74,7 +74,7 @@ export const ProfileView: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const updatedUser = await UserService.updateCurrentUser();
+      const updatedUser = await UserService.updateCurrentUser(username);
       setUser(updatedUser);
     } catch (err) {
       console.error('Error saving profile:', err);
@@ -108,7 +108,6 @@ export const ProfileView: React.FC = () => {
           position: 'relative',
         }}
       >
-        <Navigation />
         <Box
           sx={{
             px: 2,
@@ -134,7 +133,6 @@ export const ProfileView: React.FC = () => {
           position: 'relative',
         }}
       >
-        <Navigation />
         <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
           <Alert severity="error">
             {error || 'Failed to load user profile'}
@@ -152,7 +150,6 @@ export const ProfileView: React.FC = () => {
         position: 'relative',
       }}
     >
-      <Navigation />
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack spacing={4} alignItems="flex-start">
           {error && (

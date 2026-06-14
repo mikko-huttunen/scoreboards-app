@@ -1,5 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
+import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.*;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
@@ -23,22 +25,21 @@ import java.util.stream.Collectors;
 public class ScoreboardService {
     
     private static final Logger logger = LoggerFactory.getLogger(ScoreboardService.class);
-    
-    private final ScoreboardRepository scoreboardRepository;
-    private final UserRepository userRepository;
+
     private final AuthProvider authProvider;
     private final MongoDBService mongoDBService;
     private final CurrentUserContext currentUserContext;
+    private final PointCategoryService pointCategoryService;
 
     @Autowired
     public ScoreboardService(
-            ScoreboardRepository scoreboardRepository,
-            UserRepository userRepository, AuthProvider authProvider, MongoDBService mongoDBService, CurrentUserContext currentUserContext) {
-        this.scoreboardRepository = scoreboardRepository;
-        this.userRepository = userRepository;
+            AuthProvider authProvider,
+            MongoDBService mongoDBService,
+            CurrentUserContext currentUserContext, PointCategoryService pointCategoryService) {
         this.authProvider = authProvider;
         this.mongoDBService = mongoDBService;
         this.currentUserContext = currentUserContext;
+        this.pointCategoryService = pointCategoryService;
     }
 
     /**
@@ -47,7 +48,7 @@ public class ScoreboardService {
      * @return The created scoreboard with point category IDs
      */
     @Transactional
-    public Scoreboard createScoreboard(CreateScoreboardDTO dto) {
+    public Scoreboard createScoreboard(ScoreboardDTO dto) {
         if (dto == null) {
             logger.error("Attempted to create scoreboard with null DTO");
             throw new IllegalArgumentException("DTO cannot be null");
@@ -80,28 +81,8 @@ public class ScoreboardService {
                     User.class,
                     u -> u.getScoreboards().add(savedScoreboard.getId()));
 
-
-            // Create point categories
-            List<PointCategory> pointCategoriesToCreate = new ArrayList<>();
-            for (CreateScoreboardDTO.PointCategoryData categoryData : dto.getPointCategories()) {
-                if (categoryData.getName() == null || categoryData.getName().trim().isEmpty()) {
-                    logger.warn("Skipping point category with empty name");
-                    continue;
-                }
-                if (categoryData.getColor() == null || categoryData.getColor().trim().isEmpty()) {
-                    logger.warn("Skipping point category with empty color");
-                    continue;
-                }
-
-                PointCategory pointCategory = new PointCategory();
-                pointCategory.setName(categoryData.getName().trim());
-                pointCategory.setColor(categoryData.getColor().trim());
-                pointCategory.setScoreboardId(savedScoreboard.getId());
-
-                pointCategoriesToCreate.add(pointCategory);
-            }
-
-            List<PointCategory> createdPointCategories = mongoDBService.createMany(pointCategoriesToCreate);
+            List<PointCategory> createdPointCategories = pointCategoryService.createPointCategories(
+                    dto.getPointCategories(), savedScoreboard.getId());
             Set<String> pointCategoryIds = createdPointCategories.stream().map(
                     PointCategory::getId).collect(Collectors.toSet());
 
@@ -167,20 +148,64 @@ public class ScoreboardService {
      * @return Optional containing the updated scoreboard if found and updated successfully
      */
     @Transactional
-    public Optional<Scoreboard> updateScoreboard(String id, Scoreboard updatedScoreboard) {
-        Set<String> pointCategoryIds = updatedScoreboard.getPointCategories();
+    public Optional<Scoreboard> updateScoreboard(String id, ScoreboardDTO updatedScoreboard) {
+        if (updatedScoreboard == null) {
+            throw new IllegalArgumentException("Updated scoreboard cannot be null");
+        }
 
-        mongoDBService.updateAll(pointCategoryIds, PointCategory.class, pc -> {
-            PointCategory pointCategory = new PointCategory();
-            pointCategory.setName(pc.getName());
-            pointCategory.setColor(pc.getColor());
-            pointCategory.setScoreboardId(pc.getScoreboardId());
+        Optional<Scoreboard> existingScoreboardOpt = getScoreboardById(id);
+        if (existingScoreboardOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Scoreboard existingScoreboard = existingScoreboardOpt.get();
+
+        List<PointCategoryDTO> pointCategoriesToUpdate = new ArrayList<>();
+        List<PointCategoryDTO> pointCategoriesToCreate = new ArrayList<>();
+
+        Set<String> existingPointCategoryIds = existingScoreboard.getPointCategories();
+        Set<String> currentPointCategoryIds = updatedScoreboard.getPointCategories().stream()
+                .map(PointCategoryDTO::getId).collect(Collectors.toSet());
+        Set<String> pointCategoriesToDelete = existingPointCategoryIds.stream()
+                .filter(pcId -> !currentPointCategoryIds.contains(pcId))
+                .collect(Collectors.toSet());
+
+        pointCategoryService.deletePointCategories(pointCategoriesToDelete);
+
+        updatedScoreboard.getPointCategories().forEach(updatedCategory -> {
+            if (updatedCategory.getId() == null || updatedCategory.getId().trim().isEmpty()) {
+                pointCategoriesToCreate.add(updatedCategory);
+            }
+            else {
+                pointCategoriesToUpdate.add(updatedCategory);
+            }
         });
 
+        Set<String> updatedPointCategoryIds = new HashSet<>();
+
+        if (!pointCategoriesToCreate.isEmpty()) {
+            List<PointCategory> newPointCategories = pointCategoryService.createPointCategories(
+                    pointCategoriesToCreate, existingScoreboard.getId());
+            Set<String> pointCategoryIds = newPointCategories.stream()
+                    .map(PointCategory::getId).collect(Collectors.toSet());
+            updatedPointCategoryIds.addAll(pointCategoryIds);
+        }
+
+        if (!pointCategoriesToUpdate.isEmpty()) {
+            List<PointCategory> updatedPointCategories = pointCategoryService.updatePointCategories(
+                    pointCategoriesToUpdate, existingScoreboard.getId());
+            Set<String> pointCategoryIds = updatedPointCategories.stream()
+                    .map(PointCategory::getId).collect(Collectors.toSet());
+            updatedPointCategoryIds.addAll(pointCategoryIds);
+        }
+
+        if (!pointCategoriesToDelete.isEmpty()) {
+            pointCategoryService.deletePointCategories(pointCategoriesToDelete);
+        }
+
         return mongoDBService.update(id, Scoreboard.class, sb -> {
-            sb.setName(updatedScoreboard.getName());
-            sb.setUsers(updatedScoreboard.getUsers());
-            sb.setPointCategories(pointCategoryIds);
+            sb.setName(updatedScoreboard.getName().trim());
+            sb.setPointCategories(updatedPointCategoryIds);
         });
     }
     

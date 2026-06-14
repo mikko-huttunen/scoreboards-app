@@ -25,6 +25,10 @@ public class Session extends Auditable {
     @Field("scoreboardName")
     @NotBlank(message = "Scoreboard name cannot be blank")
     private String scoreboardName;
+
+    @Field("createdByName")
+    @NotBlank(message = "Created by name cannot be blank")
+    private String createdByName;
     
     @Field("isPending")
     @NotNull(message = "IsPending cannot be null")
@@ -64,6 +68,14 @@ public class Session extends Auditable {
 
     public void setScoreboardName(String scoreboardName) {
         this.scoreboardName = scoreboardName;
+    }
+
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String createdByName) {
+        this.createdByName = createdByName;
     }
 
     public Boolean getIsPending() {

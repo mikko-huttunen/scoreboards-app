@@ -13,8 +13,10 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
-import { ScoreboardsService } from '../../services/ScoreboardService';
+import {
+  type ScoreboardData,
+  ScoreboardsService,
+} from '../../services/ScoreboardService';
 import { PointCategoryService } from '../../services/PointCategoryService';
 import type { Scoreboard } from '../../types/Scoreboard';
 import './ScoreboardForm.css';
@@ -37,7 +39,6 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
   onSuccess,
 }) => {
   const navigate = useNavigate();
-  const { getAccessTokenSilently } = useAuth0();
   const isEditing = !!scoreboardId;
 
   const [name, setName] = useState(initialName);
@@ -57,13 +58,9 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
       const loadScoreboard = async () => {
         try {
           setLoading(true);
-          const token = await getAccessTokenSilently();
           const [scoreboard, categories] = await Promise.all([
-            ScoreboardsService.getScoreboardById(scoreboardId, token),
-            PointCategoryService.getPointCategoriesByScoreboard(
-              scoreboardId,
-              token
-            ),
+            ScoreboardsService.getScoreboardById(scoreboardId),
+            PointCategoryService.getPointCategoriesByScoreboard(scoreboardId),
           ]);
           if (scoreboard) {
             setName(scoreboard.name);
@@ -90,7 +87,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
       };
       loadScoreboard();
     }
-  }, [scoreboardId, isEditing, getAccessTokenSilently]);
+  }, [scoreboardId, isEditing]);
 
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
@@ -181,14 +178,16 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
     setSubmitting(true);
 
     try {
-      const token = await getAccessTokenSilently();
-
       if (isEditing && scoreboardId) {
+        const scoreboardToUpdate: ScoreboardData = {
+          name: name.trim(),
+          pointCategories: pointCategories,
+        };
+
         // Update existing scoreboard
         const updated = await ScoreboardsService.updateScoreboard(
           scoreboardId,
-          { name: name.trim() },
-          token
+          scoreboardToUpdate
         );
         if (updated) {
           if (onSuccess) {
@@ -207,16 +206,18 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
             color: cat.color.trim(),
           }));
 
-        const createdScoreboard = await ScoreboardsService.createScoreboard(
-          name.trim(),
-          validCategories,
-          token
-        );
+        const scoreboardToCreate: ScoreboardData = {
+          name: name.trim(),
+          pointCategories: validCategories,
+        };
+
+        const createdScoreboard =
+          await ScoreboardsService.createScoreboard(scoreboardToCreate);
 
         if (onSuccess) {
           onSuccess(createdScoreboard);
         } else {
-          navigate(`/scoreboards/${createdScoreboard.id}`);
+          navigate(`/scoreboards`);
         }
       }
     } catch (error) {
@@ -282,19 +283,6 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 <Typography variant="h6" sx={{ color: '#1b5e20' }}>
                   Point Categories
                 </Typography>
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={handleAddPointCategory}
-                  disabled={pointCategories.length >= 20 || submitting}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#38a14f',
-                    color: '#ffffff',
-                    ':hover': { backgroundColor: '#2d7f3d' },
-                  }}
-                >
-                  Add Category
-                </Button>
               </Stack>
 
               {errors.pointCategories && (
@@ -366,6 +354,19 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                   </Paper>
                 ))}
               </Stack>
+              <Button
+                startIcon={<AddIcon />}
+                onClick={handleAddPointCategory}
+                disabled={pointCategories.length >= 20 || submitting}
+                size="small"
+                sx={{
+                  backgroundColor: '#38a14f',
+                  color: '#ffffff',
+                  ':hover': { backgroundColor: '#2d7f3d' },
+                }}
+              >
+                Add Category
+              </Button>
 
               <Typography variant="caption" sx={{ color: '#666' }}>
                 {pointCategories.length} of 20 categories (minimum 1 required)
@@ -380,13 +381,6 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
               justifyContent="flex-end"
               sx={{ width: '100%' }}
             >
-              <Button
-                onClick={() => navigate('/scoreboards')}
-                disabled={submitting}
-                variant="outlined"
-              >
-                Cancel
-              </Button>
               <Button
                 type="submit"
                 variant="contained"
@@ -413,6 +407,13 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 ) : (
                   'Create Scoreboard'
                 )}
+              </Button>
+              <Button
+                onClick={() => navigate('/scoreboards')}
+                disabled={submitting}
+                variant="outlined"
+              >
+                Cancel
               </Button>
             </Stack>
           </Stack>

@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.dtos.UpdateResultDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.ResultEntryRepository;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;

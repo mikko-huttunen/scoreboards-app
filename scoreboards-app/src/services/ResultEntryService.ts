@@ -1,8 +1,11 @@
+import axios from 'axios';
+import apiClient from '../api/Interceptor';
 import type { ResultEntry } from '../types/ResultEntry';
+import type { Result } from '../types/Result';
 
 const API_BASE_URL = '/api/result-entries';
 
-export type CreateResultEntryData = {
+export type ResultEntryData = {
   scoreboardId: string;
   sessionId: string;
   results: Array<{
@@ -20,200 +23,124 @@ export class ResultEntryService {
   /**
    * Get all active result entries for a specific session.
    * @param sessionId The session ID
-   * @param token Authentication token
    * @returns Promise resolving to array of result entries
    */
   static async getResultEntriesBySession(
-    sessionId: string,
-    token: string
+    sessionId: string
   ): Promise<ResultEntry[]> {
-    const response = await fetch(`${API_BASE_URL}/session/${sessionId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch result entries: ${response.statusText}`);
+    try {
+      const response = await apiClient.get<ResultEntry[]>(
+        `${API_BASE_URL}/session/${sessionId}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch result entries by session: ${error.message}`
+        );
+      }
+      throw new Error(`Failed to fetch result entries by session: ${error}`);
     }
-
-    return response.json();
-  }
-
-  /**
-   * Get a result entry by session ID and current user.
-   * @param sessionId The session ID
-   * @param token Authentication token
-   * @returns Promise resolving to result entry or null if not found
-   */
-  static async getResultEntryBySessionAndUser(
-    sessionId: string,
-    token: string
-  ): Promise<ResultEntry | null> {
-    const response = await fetch(`${API_BASE_URL}/session/${sessionId}/user`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (response.status === 404) {
-      return null;
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch result entry: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
   /**
    * Get all active result entries for the current user.
-   * @param token Authentication token
    * @returns Promise resolving to array of result entries
    */
-  static async getResultEntriesByUser(token: string): Promise<ResultEntry[]> {
-    const response = await fetch(`${API_BASE_URL}/user`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch result entries: ${response.statusText}`);
+  static async getResultEntriesByUser(): Promise<ResultEntry[]> {
+    try {
+      const response = await apiClient.get<ResultEntry[]>(
+        `${API_BASE_URL}/user`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch result entries by user: ${error.message}`
+        );
+      }
+      throw new Error(`Failed to fetch result entries by user: ${error}`);
     }
-
-    return response.json();
   }
 
   /**
    * Get a result entry by ID.
    * @param id Result entry ID
-   * @param token Authentication token
    * @returns Promise resolving to result entry or null if not found
    */
-  static async getResultEntryById(
-    id: string,
-    token: string
-  ): Promise<ResultEntry | null> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (response.status === 404) {
-      return null;
+  static async getResultEntryById(id: string): Promise<ResultEntry | null> {
+    try {
+      const response = await apiClient.get<ResultEntry | null>(
+        `${API_BASE_URL}/${id}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to fetch result entry by ID: ${error.message}`);
+      }
+      throw new Error(`Failed to fetch result entry by ID: ${error}`);
     }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch result entry: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
   /**
-   * Create a new result entry with results.
-   * @param data Result entry data
-   * @param token Authentication token
-   * @returns Promise resolving to created result entry
+   * Create a new result entry.
+   * @param id Result entry ID
+   * @returns Promise resolving to array of results of an result entry
    */
-  static async createResultEntry(
-    data: CreateResultEntryData,
-    token: string
-  ): Promise<ResultEntry> {
-    const response = await fetch(API_BASE_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Failed to create result entry: ${response.statusText} - ${errorText}`
+  static async getResultsByResultEntryId(id: string): Promise<Result[]> {
+    try {
+      const response = await apiClient.get<Result[]>(
+        `${API_BASE_URL}/${id}/results`
       );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch results by result entry ID: ${error.message}`
+        );
+      }
+      throw new Error(`Failed to fetch results by result entry ID: ${error}`);
     }
-
-    return response.json();
   }
 
   /**
    * Update an existing result entry.
    * @param id Result entry ID
    * @param resultIds List of result IDs
-   * @param token Authentication token
    * @returns Promise resolving to updated result entry or null if not found
    */
   static async updateResultEntry(
     id: string,
-    resultIds: string[],
-    token: string
+    data: ResultEntryData
   ): Promise<ResultEntry | null> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(resultIds),
-    });
-
-    if (response.status === 404) {
-      return null;
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Failed to update result entry: ${response.statusText} - ${errorText}`
+    try {
+      const response = await apiClient.put<ResultEntry | null>(
+        `${API_BASE_URL}/${id}`,
+        data
       );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to update result entry: ${error.message}`);
+      }
+      throw new Error(`Failed to update result entry: ${error}`);
     }
-
-    return response.json();
   }
 
   /**
    * Delete a result entry (soft delete).
    * @param id Result entry ID
-   * @param token Authentication token
-   * @returns Promise resolving to true if deleted, false if not found
+   * @returns Promise resolving to deleted result entry or null if not found
    */
-  static async deleteResultEntry(id: string, token: string): Promise<boolean> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (response.status === 404) {
-      return false;
+  static async deleteResultEntry(id: string): Promise<ResultEntry | null> {
+    try {
+      const response = await apiClient.delete(`${API_BASE_URL}/${id}`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to delete result entry: ${error.message}`);
+      }
+      throw new Error(`Failed to delete result entry: ${error}`);
     }
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: response.statusText }));
-      throw new Error(
-        errorData.error ||
-          `Failed to delete result entry: ${response.statusText}`
-      );
-    }
-
-    return true;
   }
 }

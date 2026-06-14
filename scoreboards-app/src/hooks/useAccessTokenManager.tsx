@@ -39,7 +39,6 @@ export function useAccessTokenManager() {
         if (!mounted) return;
 
         const payload = jwtDecode<JwtPayload>(token);
-        console.log(payload);
         if (!payload?.exp) {
           doLogout();
           return;

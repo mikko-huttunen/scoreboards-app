@@ -70,7 +70,7 @@ public class AccessControlValidator {
         }
 
         if (document instanceof Invitation invitation) {
-            validateInvitationAccess(currentUser, invitation, requireCreator);
+            validateInvitationAccess(currentUser, invitation);
             return;
         }
 
@@ -105,6 +105,10 @@ public class AccessControlValidator {
             return;
         }
 
+        if (currentUser.getScoreboards().contains(scoreboard.getId())) {
+            return;
+        }
+
         if (scoreboard.getUsers() == null || !scoreboard.getUsers().contains(currentUser.getId())) {
             throw new IllegalArgumentException("User is not authorized to access this scoreboard");
         }
@@ -121,25 +125,33 @@ public class AccessControlValidator {
     }
 
     private void validateSessionAccess(User currentUser, Session session) {
-        if (!Objects.equals(currentUser.getId(), session.getCreatedBy())) {
-            throw new IllegalArgumentException("User is not authorized to access this session");
-        }
-    }
+        boolean isCreator = Objects.equals(session.getCreatedBy(), currentUser.getId());
 
-    private void validateInvitationAccess(User currentUser, Invitation invitation, boolean requireCreator) {
-        if (requireCreator) {
-            if (!Objects.equals(invitation.getCreatedBy(), currentUser.getId())) {
-                throw new IllegalArgumentException("User is not authorized to access this invitation");
-            }
+        boolean hasScoreboardAccess = currentUser.getScoreboards() != null
+                && currentUser.getScoreboards().contains(session.getScoreboardId());
+
+        boolean isParticipant = session.getParticipants() != null
+                && session.getParticipants().contains(currentUser.getId());
+
+        if (isCreator || hasScoreboardAccess || isParticipant) {
             return;
         }
 
+        throw new IllegalArgumentException("User is not authorized to access this session");
+    }
+
+    private void validateInvitationAccess(User currentUser, Invitation invitation) {
+        boolean isCreator = Objects.equals(invitation.getCreatedBy(), currentUser.getId());
+
         boolean isReceiver = Objects.equals(invitation.getReceiverId(), currentUser.getId());
+
         boolean hasScoreboardAccess = currentUser.getScoreboards() != null
                 && currentUser.getScoreboards().contains(invitation.getScoreboardId());
 
-        if (!isReceiver && !hasScoreboardAccess) {
-            throw new IllegalArgumentException("User is not authorized to access this invitation");
+        if (isCreator || isReceiver || hasScoreboardAccess) {
+            return;
         }
+
+        throw new IllegalArgumentException("User is not authorized to access this invitation");
     }
 }

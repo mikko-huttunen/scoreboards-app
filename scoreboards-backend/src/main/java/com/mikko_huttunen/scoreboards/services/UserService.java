@@ -1,7 +1,9 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mikko_huttunen.scoreboards.models.Invitation;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
+import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
@@ -13,9 +15,12 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.MultiValueMap;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
  * Service class for handling User business logic.
@@ -124,20 +129,54 @@ public class UserService {
 
     /**
      * Update user information.
-     * @param name The new name (optional)
+     * @param userData Map containing the new user data
      * @return Optional containing the updated user if found
      */
     @Transactional
-    public Optional<User> updateUser(String name) {
+    public User updateUser(Map <String, String> userData) {
         User user = currentUserContext.requireCurrentUser();
 
         try {
+            String name = userData.get("name");
+            if (name == null) {
+                logger.warn("When updating user {}: name was null. Skipping update.", user.getId());
+                throw new IllegalArgumentException("Name cannot be null");
+            }
+
             //Update Auth0 user
             auth0ManagementService.updateUser(user.getAuth0Id(), name);
 
-            return mongoDBService.update(user.getId(), User.class, userToUpdate -> {
-                userToUpdate.setName(name);
+            //Update user in database
+            Optional<User> updatedUserOpt = mongoDBService.update(user.getId(), User.class, userToUpdate ->
+                    userToUpdate.setName(name));
+            if (updatedUserOpt.isEmpty()) {
+                logger.warn("User {} not found or not active", user.getId());
+                throw new IllegalArgumentException("User not found or not active");
+            }
+
+            User updatedUser = updatedUserOpt.get();
+
+            //Update username in all sessions and invitations created by the user
+            Query sessionQuery = new Query(Criteria.where("createdBy").is(user.getId()));
+
+            mongoDBService.updateByQuery(sessionQuery, Session.class, session ->
+                    session.setCreatedByName(updatedUser.getName()));
+
+            Query invitationQuery = new Query(new Criteria().orOperator(
+                    where("createdBy").is(user.getId()),
+                    where("receiverId").is(user.getId())
+            ));
+
+            mongoDBService.updateByQuery(invitationQuery, Invitation.class, invitation -> {
+                if (invitation.getReceiverId().equals(user.getId())) {
+                    invitation.setReceiverName(updatedUser.getName());
+                }
+                if (invitation.getCreatedBy().equals(user.getId())) {
+                    invitation.setCreatedByName(updatedUser.getName());
+                }
             });
+
+            return updatedUser;
         } catch (Exception e) {
             logger.error("Error updating user {}: {}", user.getId(), e.getMessage(), e);
             throw new RuntimeException("Failed to update user: " + user.getId(), e);

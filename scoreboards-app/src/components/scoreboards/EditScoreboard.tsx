@@ -9,7 +9,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
-import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
+import { useNavigationSpacing } from '../navigation/Navigation';
 import { ScoreboardForm } from './ScoreboardForm';
 import { ScoreboardsService } from '../../services/ScoreboardService';
 import { useEffect, useState } from 'react';
@@ -35,11 +35,7 @@ export const EditScoreboard: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const token = await getAccessTokenSilently();
-        const data = await ScoreboardsService.getScoreboardById(
-          scoreboardId,
-          token
-        );
+        const data = await ScoreboardsService.getScoreboardById(scoreboardId);
         if (data) {
           setScoreboard(data);
         } else {
@@ -67,7 +63,6 @@ export const EditScoreboard: React.FC = () => {
           pb: { xs: 10, sm: 4 },
         }}
       >
-        <Navigation />
         <Box
           sx={{
             px: 2,
@@ -93,7 +88,6 @@ export const EditScoreboard: React.FC = () => {
           pb: { xs: 10, sm: 4 },
         }}
       >
-        <Navigation />
         <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
           <Typography variant="h6" sx={{ color: '#d32f2f' }}>
             {error || 'Scoreboard not found'}
@@ -111,7 +105,6 @@ export const EditScoreboard: React.FC = () => {
         pb: { xs: 10, sm: 4 },
       }}
     >
-      <Navigation />
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack
           spacing={4}

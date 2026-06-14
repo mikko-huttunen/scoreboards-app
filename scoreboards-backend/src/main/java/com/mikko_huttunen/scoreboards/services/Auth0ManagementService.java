@@ -108,6 +108,11 @@ public class Auth0ManagementService {
     public void updateUser(String auth0UserId, String name) {
         try {
             logger.info("Updating Auth0 user: {}", auth0UserId);
+
+            if (name == null) {
+                logger.info("No user fields to update for Auth0 user {} (name was null). Skipping Auth0 PATCH.", auth0UserId);
+                return;
+            }
             
             // UriComponentsBuilder will automatically URL-encode the path variable
             String updateUrl = UriComponentsBuilder.fromHttpUrl("https://" + auth0Domain + "/api/v2/users/{userId}")

@@ -246,6 +246,57 @@ public class MongoDBService {
     }
 
     @Transactional
+    public <T extends Auditable> List<T> updateByQuery(Query query, Class<T> documentClass, DocumentUpdater<T> updater) {
+        if (query == null) {
+            throw new IllegalArgumentException("Query cannot be null");
+        }
+        if (documentClass == null) {
+            throw new IllegalArgumentException("Document class cannot be null");
+        }
+
+        try {
+            List<T> documents = find(query, documentClass);
+
+            if (documents.isEmpty()) {
+                return List.of();
+            }
+
+            Date now = new Date();
+            for (T document : documents) {
+                accessControlValidator.validateWriteAccess(document);
+                updater.update(document);
+                document.setLastModified(now);
+            }
+
+            var bulkOps = mongoTemplate.bulkOps(
+                    org.springframework.data.mongodb.core.BulkOperations.BulkMode.UNORDERED,
+                    documentClass
+            );
+
+            for (T document : documents) {
+                Object idValue = getId(document);
+                Query byId = new Query(Criteria.where("_id").is(idValue));
+                bulkOps.replaceOne(byId, document);
+            }
+
+            bulkOps.execute();
+
+            // Clear the cached user context after updating user
+            if (documentClass == User.class) {
+                currentUserContext.clear();
+            }
+
+            logger.info("Updated {} documents of type {} using query", documents.size(), documentClass.getSimpleName());
+            return documents;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Failed to update documents of type {} using query: {}", documentClass.getSimpleName(), e.getMessage(), e);
+            throw new RuntimeException("Failed to update documents using query", e);
+        }
+    }
+
+    @Transactional
     public <T extends Auditable> List<T> deleteByQuery(Query query, Class<T> documentClass) {
         if (query == null) {
             throw new IllegalArgumentException("Query cannot be null");

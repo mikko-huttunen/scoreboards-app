@@ -1,8 +1,20 @@
 import axios from 'axios';
 import type { Scoreboard } from '../types/Scoreboard';
 import apiClient from '../api/Interceptor';
+import type { User } from '../types/User';
 
 const API_BASE_URL = '/api/scoreboards';
+
+export type ScoreboardData = {
+  name: string;
+  pointCategories: PointCategoriesData[];
+};
+
+export type PointCategoriesData = {
+  id?: string;
+  name: string;
+  color: string;
+};
 
 /**
  * Service for interacting with the Scoreboards API.
@@ -10,19 +22,17 @@ const API_BASE_URL = '/api/scoreboards';
 export class ScoreboardsService {
   /**
    * Create a new scoreboard.
-   * @param name Scoreboard name
-   * @param pointCategories Array of point categories with name and color
    * @returns Promise resolving to created scoreboard
+   * @param scoreboard
    */
   static async createScoreboard(
-    name: string,
-    pointCategories: Array<{ name: string; color: string }>
+    scoreboard: ScoreboardData
   ): Promise<Scoreboard> {
     try {
-      const response = await apiClient.post<Scoreboard>(API_BASE_URL, {
-        name,
-        pointCategories,
-      });
+      const response = await apiClient.post<Scoreboard>(
+        API_BASE_URL,
+        scoreboard
+      );
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -67,6 +77,20 @@ export class ScoreboardsService {
     }
   }
 
+  static async getUsersForScoreboard(scoreboardId: string): Promise<User[]> {
+    try {
+      const response = await apiClient.get<User[]>(
+        `${API_BASE_URL}/${scoreboardId}/users`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to fetch users: ${error.message}`);
+      }
+      throw new Error(`Failed to fetch users: ${error}`);
+    }
+  }
+
   /**
    * Update an existing scoreboard.
    * @param id Scoreboard ID
@@ -75,10 +99,9 @@ export class ScoreboardsService {
    */
   static async updateScoreboard(
     id: string,
-    scoreboard: Partial<
-      Omit<Scoreboard, 'id' | 'created' | 'lastModified' | 'createdBy'>
-    >
+    scoreboard: ScoreboardData
   ): Promise<Scoreboard | null> {
+    console.log('Updating scoreboard:', id, scoreboard);
     try {
       const response = await apiClient.put<Scoreboard>(
         `${API_BASE_URL}/${id}`,

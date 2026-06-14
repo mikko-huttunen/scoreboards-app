@@ -1,9 +1,8 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
-import com.mikko_huttunen.scoreboards.models.CreateSessionDTO;
-import com.mikko_huttunen.scoreboards.models.Scoreboard;
+import com.mikko_huttunen.scoreboards.dtos.CreateSessionDTO;
 import com.mikko_huttunen.scoreboards.models.Session;
-import com.mikko_huttunen.scoreboards.models.UpdateSessionDTO;
+import com.mikko_huttunen.scoreboards.dtos.UpdateSessionDTO;
 import com.mikko_huttunen.scoreboards.services.SessionService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -11,8 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -197,25 +194,25 @@ public class SessionController {
      * @param id The ID of the session to finish
      * @return ResponseEntity containing the finished session if found
      */
-    @PostMapping("/{id}/finish")
+    @PutMapping("/{id}/finish")
     public ResponseEntity<Session> finishSession(
             @PathVariable String id) {
-        logger.info("POST /api/sessions/{}/finish - Finishing session", id);
+        logger.info("PUT /api/sessions/{}/finish - Finishing session", id);
         
         try {
             Session finishedSession = sessionService.finishSession(id);
             if (finishedSession != null) {
-                logger.info("POST /api/sessions/{}/finish - Successfully finished session", id);
+                logger.info("PUT /api/sessions/{}/finish - Successfully finished session", id);
                 return ResponseEntity.ok(finishedSession);
             } else {
-                logger.warn("POST /api/sessions/{}/finish - Session not found", id);
+                logger.warn("PUT /api/sessions/{}/finish - Session not found", id);
                 return ResponseEntity.notFound().build();
             }
         } catch (IllegalArgumentException e) {
-            logger.warn("POST /api/sessions/{}/finish - Invalid request: {}", id, e.getMessage());
+            logger.warn("PUT /api/sessions/{}/finish - Invalid request: {}", id, e.getMessage());
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            logger.error("POST /api/sessions/{}/finish - Error finishing session: {}", id, e.getMessage(), e);
+            logger.error("PUT /api/sessions/{}/finish - Error finishing session: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

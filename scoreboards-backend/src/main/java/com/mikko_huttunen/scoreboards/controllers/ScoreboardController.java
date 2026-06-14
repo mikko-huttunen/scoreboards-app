@@ -1,6 +1,6 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
-import com.mikko_huttunen.scoreboards.models.CreateScoreboardDTO;
+import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
 import com.mikko_huttunen.scoreboards.services.ScoreboardService;
 import jakarta.validation.Valid;
@@ -39,7 +39,7 @@ public class ScoreboardController {
      * @return ResponseEntity containing the created scoreboard
      */
     @PostMapping
-    public ResponseEntity<Scoreboard> createScoreboard(@Valid @RequestBody CreateScoreboardDTO dto) {
+    public ResponseEntity<Scoreboard> createScoreboard(@Valid @RequestBody ScoreboardDTO dto) {
         logger.info("POST /api/scoreboards - Creating new scoreboard with name: {}", dto.getName());
 
         try {
@@ -108,7 +108,7 @@ public class ScoreboardController {
     @PutMapping("/{id}")
     public ResponseEntity<Scoreboard> updateScoreboard(
             @PathVariable String id,
-            @Valid @RequestBody Scoreboard scoreboard) {
+            @Valid @RequestBody ScoreboardDTO scoreboard) {
         logger.info("PUT /api/scoreboards/{} - Updating scoreboard", id);
 
         try {

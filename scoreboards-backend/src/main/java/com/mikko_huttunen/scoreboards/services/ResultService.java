@@ -1,7 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.models.Result;
-import com.mikko_huttunen.scoreboards.models.UpdateResultDTO;
+import com.mikko_huttunen.scoreboards.dtos.UpdateResultDTO;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.repositories.ResultRepository;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
@@ -16,8 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Service class for handling Result business logic.

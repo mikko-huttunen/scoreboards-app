@@ -24,7 +24,6 @@ public class SessionService {
 
     private final ResultEntryService resultEntryService;
     private final CurrentUserContext currentUserContext;
-    private final ScoreboardService scoreboardService;
     private final UserService userService;
     private final MongoDBService mongoDBService;
     
@@ -32,12 +31,10 @@ public class SessionService {
     public SessionService(
             ResultEntryService resultEntryService,
             CurrentUserContext currentUserContext,
-            ScoreboardService scoreboardService,
             UserService userService,
             MongoDBService mongoDBService) {
         this.resultEntryService = resultEntryService;
         this.currentUserContext = currentUserContext;
-        this.scoreboardService = scoreboardService;
         this.userService = userService;
         this.mongoDBService = mongoDBService;
     }
@@ -98,6 +95,7 @@ public class SessionService {
             Session session = new Session();
             session.setScoreboardId(scoreboardId);
             session.setScoreboardName(scoreboardName);
+            session.setCreatedByName(currentUser.getName());
             session.setIsPending(true);
             session.setParticipants(participantIds);
             session.setPointCategories(pointCategoryIds);
@@ -252,14 +250,13 @@ public class SessionService {
             //Delete sessions
             List<Session> deletedSessions = mongoDBService.deleteAll(ids, Session.class);
 
-            Query deleteQuery = new Query(Criteria.where("sessionId").in(ids));
-
             //Delete related result entries
             mongoDBService.deleteByQuery(
-                    deleteQuery, ResultEntry.class);
+                    new Query(Criteria.where("sessionId").in(ids)), ResultEntry.class);
 
             //Delete related results
-            mongoDBService.deleteByQuery(deleteQuery, Result.class);
+            mongoDBService.deleteByQuery(
+                    new Query(Criteria.where("sessionId").in(ids)), Result.class);
 
             logger.info("Successfully deleted sessions: {}", ids);
             return deletedSessions;

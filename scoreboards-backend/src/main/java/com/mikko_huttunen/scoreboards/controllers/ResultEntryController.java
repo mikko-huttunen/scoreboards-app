@@ -2,7 +2,7 @@ package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.models.Result;
 import com.mikko_huttunen.scoreboards.models.ResultEntry;
-import com.mikko_huttunen.scoreboards.models.UpdateResultEntryDTO;
+import com.mikko_huttunen.scoreboards.dtos.UpdateResultEntryDTO;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import com.mikko_huttunen.scoreboards.services.ResultEntryService;
@@ -13,8 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

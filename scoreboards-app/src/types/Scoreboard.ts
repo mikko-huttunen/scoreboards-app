@@ -1,7 +1,7 @@
 export type Scoreboard = {
   id: string;
   name: string;
-  users: Set<String>;
+  users: Set<string>;
   pointCategories: Set<string>;
   created: Date;
   lastModified: Date;

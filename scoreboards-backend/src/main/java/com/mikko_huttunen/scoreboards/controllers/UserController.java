@@ -8,9 +8,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,22 +61,17 @@ public class UserController {
     
     /**
      * Update the current authenticated user.
-     * @param name The new name (optional)
+     * @param userData Map containing the new user data
      * @return ResponseEntity containing the updated user
      */
     @PutMapping("/user")
-    public ResponseEntity<User> updateCurrentUser(@RequestParam(required = false) String name) {
+    public ResponseEntity<User> updateCurrentUser(@RequestBody Map<String, String> userData) {
         logger.info("PUT /api/users/user - Updating current user");
         
         try {
-            Optional<User> updatedUser = userService.updateUser(name);
-            if (updatedUser.isPresent()) {
-                logger.info("PUT /api/users/user - Successfully updated user");
-                return ResponseEntity.ok(updatedUser.get());
-            } else {
-                logger.warn("PUT /api/users/user - User not found");
-                return ResponseEntity.notFound().build();
-            }
+            User updatedUser = userService.updateUser(userData);
+            logger.info("PUT /api/users/user - Successfully updated user");
+            return ResponseEntity.ok(updatedUser);
         } catch (IllegalArgumentException e) {
             logger.warn("PUT /api/users/user - Invalid request: {}", e.getMessage());
             return ResponseEntity.badRequest().build();

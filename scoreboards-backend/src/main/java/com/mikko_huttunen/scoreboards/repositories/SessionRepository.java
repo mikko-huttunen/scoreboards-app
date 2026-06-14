@@ -46,9 +46,9 @@ public interface SessionRepository extends MongoRepository<Session, String> {
     
     /**
      * Find all pending sessions created by a specific user.
-     * @param createdById The creator user ID
+     * @param createdBy The creator user ID
      * @return List of pending sessions created by the user
      */
-    List<Session> findByCreatedByIdAndIsPendingTrueAndIsActiveTrue(String createdById);
+    List<Session> findByCreatedByAndIsPendingTrueAndIsActiveTrue(String createdBy);
 }
 

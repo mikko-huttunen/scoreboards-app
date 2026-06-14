@@ -3,6 +3,7 @@ package com.mikko_huttunen.scoreboards.services;
 import com.mikko_huttunen.scoreboards.models.Invitation;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
 import com.mikko_huttunen.scoreboards.models.User;
+import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+
+import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
  * Service class for handling Invitation business logic.
@@ -27,16 +30,18 @@ public class InvitationService {
     private final UserService userService;
     private final ScoreboardService scoreboardService;
     private final CurrentUserContext currentUserContext;
+    private final UserRepository userRepository;
     
     @Autowired
     public InvitationService(MongoDBService mongoDBService,
                              UserService userService,
                              ScoreboardService scoreboardService,
-                             CurrentUserContext currentUserContext) {
+                             CurrentUserContext currentUserContext, UserRepository userRepository) {
         this.mongoDBService = mongoDBService;
         this.userService = userService;
         this.scoreboardService = scoreboardService;
         this.currentUserContext = currentUserContext;
+        this.userRepository = userRepository;
     }
     
     /**
@@ -51,7 +56,14 @@ public class InvitationService {
         
         try {
             User inviter = currentUserContext.requireCurrentUser();
-            User receiver = userService.getUserByEmail(receiverEmail);
+
+            Optional<User> receiverOpt = userRepository.findByEmailAndIsActiveTrue(receiverEmail);
+            if (receiverOpt.isEmpty()) {
+                logger.error("User with email {} not found or is inactive", receiverEmail);
+                throw new IllegalArgumentException("User not found or is inactive");
+            }
+
+            User receiver = receiverOpt.get();
             
             //Check if user is trying to invite themselves
             if (receiver.getId().equals(inviter.getId())) {
@@ -90,6 +102,8 @@ public class InvitationService {
             // Create invitation
             Invitation invitation = new Invitation();
             invitation.setReceiverId(receiver.getId());
+            invitation.setReceiverName(receiver.getName());
+            invitation.setCreatedByName(inviter.getName());
             invitation.setScoreboardId(scoreboardId);
             invitation.setScoreboardName(scoreboard.getName());
             invitation.setIsPending(true);
@@ -121,7 +135,9 @@ public class InvitationService {
         }
         
         try {
-            Query query = new Query(Criteria.where("receiver").is(userId));
+            Query query = new Query(new Criteria().orOperator(
+                    where("receiverId").is(userId),
+                    where("createdBy").is(userId)));
             List<Invitation> invitations = mongoDBService.find(query, Invitation.class);
             logger.info("Successfully fetched {} invitations for user: {}", invitations.size(), userId);
             return invitations;
@@ -183,30 +199,8 @@ public class InvitationService {
 
             Invitation invitation = invitationOpt.get();
 
-            //Verify scoreboard still exists
-            Optional<Scoreboard> scoreboardOpt = scoreboardService.getScoreboardById(invitation.getScoreboardId());
-            if (scoreboardOpt.isEmpty()) {
-                logger.error("Scoreboard {} no longer exists", invitation.getScoreboardId());
-                deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("Scoreboard no longer exists");
-            }
-
-            Scoreboard scoreboard = scoreboardOpt.get();
-
-            //Add user to scoreboard
-            Set<String> scoreboardUsers = scoreboard.getUsers();
             String userToAddId = invitation.getReceiverId();
-            if (!scoreboardUsers.contains(userToAddId)) {
-                scoreboardUsers.add(userToAddId);
-                mongoDBService.update(scoreboard.getId(), Scoreboard.class, sb ->
-                        sb.setUsers(scoreboardUsers));
-                logger.info("Added user {} to the scoreboard {}", userToAddId, invitation.getScoreboardId());
-            } else {
-                logger.info("User {} has already joined the scoreboard {}", userToAddId, invitation.getScoreboardId());
-                deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("User has already joined this scoreboard");
-            }
-            
+
             // Add scoreboard to the user
             Optional<User> userOpt = userService.getUserById(userToAddId);
             if (userOpt.isEmpty()) {
@@ -228,7 +222,30 @@ public class InvitationService {
                 deleteInvitations(Set.of(invitationId));
                 throw new IllegalArgumentException("Scoreboard already added to user");
             }
-            
+
+            //Verify scoreboard still exists
+            Optional<Scoreboard> scoreboardOpt = scoreboardService.getScoreboardById(invitation.getScoreboardId());
+            if (scoreboardOpt.isEmpty()) {
+                logger.error("Scoreboard {} no longer exists", invitation.getScoreboardId());
+                deleteInvitations(Set.of(invitationId));
+                throw new IllegalArgumentException("Scoreboard no longer exists");
+            }
+
+            Scoreboard scoreboard = scoreboardOpt.get();
+
+            //Add user to scoreboard
+            Set<String> scoreboardUsers = scoreboard.getUsers();
+            if (!scoreboardUsers.contains(userToAddId)) {
+                scoreboardUsers.add(userToAddId);
+                mongoDBService.update(scoreboard.getId(), Scoreboard.class, sb ->
+                        sb.setUsers(scoreboardUsers));
+                logger.info("Added user {} to the scoreboard {}", userToAddId, invitation.getScoreboardId());
+            } else {
+                logger.info("User {} has already joined the scoreboard {}", userToAddId, invitation.getScoreboardId());
+                deleteInvitations(Set.of(invitationId));
+                throw new IllegalArgumentException("User has already joined this scoreboard");
+            }
+
             //Delete invitation after it's accepted
             Invitation deleted = deleteInvitations(Set.of(invitationId)).getFirst();
             logger.info("Successfully accepted invitation {}", invitationId);

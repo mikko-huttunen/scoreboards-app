@@ -17,38 +17,38 @@ import {
   Alert,
   CircularProgress,
   Box,
-  TextField,
 } from '@mui/material';
-import { useAuth0 } from '@auth0/auth0-react';
-import { SessionService } from '../../services/SessionService';
-import { PointCategoryService } from '../../services/PointCategoryService';
+import {
+  SessionService,
+  type CreateSessionData,
+} from '../../services/SessionService';
 import type { User } from '../../types/User';
 import type { PointCategory } from '../../types/PointCategory';
 import type { Session } from '../../types/Session';
-import type { ResultEntry } from '../../types/ResultEntry';
 import { Session as SessionType } from '../../types/Session';
+import type { Scoreboard } from '../../types/Scoreboard';
 
 type SessionFormProps = {
   open: boolean;
   onClose: () => void;
-  scoreboardId: string;
-  scoreboardName: string;
+  scoreboard: Scoreboard;
+  currentUser: User;
   users: User[];
+  pointCategories?: PointCategory[];
   onSuccess?: (session: Session) => void;
 };
 
 export const SessionForm: React.FC<SessionFormProps> = ({
   open,
   onClose,
-  scoreboardId,
-  scoreboardName,
+  scoreboard,
+  currentUser,
   users,
+  pointCategories,
   onSuccess,
 }) => {
-  const { getAccessTokenSilently, user: auth0User } = useAuth0();
-  const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(
-    []
+  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(
+    new Set()
   );
   const [selectedPointCategories, setSelectedPointCategories] = useState<
     Set<string>
@@ -58,22 +58,17 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && scoreboardId && auth0User?.sub) {
+    if (open && scoreboard && currentUser) {
       const loadPointCategories = async () => {
         try {
           setLoading(true);
           setError(null);
-          const token = await getAccessTokenSilently();
-          const categories =
-            await PointCategoryService.getPointCategoriesByScoreboard(
-              scoreboardId,
-              token
-            );
-          setPointCategories(categories);
           // Select all categories by default
-          setSelectedPointCategories(new Set(categories.map((cat) => cat.id)));
+          setSelectedPointCategories(
+            new Set(pointCategories?.map((pc) => pc.id) || [])
+          );
           // Add all users to participants by default
-          setSelectedParticipants(users.map((u) => u.id));
+          setSelectedParticipants(new Set(users.map((u) => u.id)));
         } catch (err) {
           console.error('Error loading point categories:', err);
           setError(
@@ -88,23 +83,11 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       loadPointCategories();
     } else {
       // Reset form when closed
-      setSelectedParticipants([]);
+      setSelectedParticipants(new Set());
       setSelectedPointCategories(new Set());
       setError(null);
     }
-  }, [open, scoreboardId, getAccessTokenSilently, auth0User?.sub, users]);
-
-  const handleParticipantChange = (userId: string) => {
-    // Prevent removing the creator
-    if (userId === auth0User?.sub && selectedParticipants.includes(userId)) {
-      return;
-    }
-    setSelectedParticipants((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
-    );
-  };
+  }, [open, scoreboard, currentUser, users, pointCategories]);
 
   const handlePointCategoryToggle = (categoryId: string) => {
     setSelectedPointCategories((prev) => {
@@ -119,7 +102,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!auth0User?.sub) {
+    if (!currentUser) {
       setError('User not authenticated');
       return;
     }
@@ -129,9 +112,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       return;
     }
 
-    // Require at least 2 participants (creator + at least one other)
-    if (selectedParticipants.length < 2) {
-      setError('At least 2 participants are required (including yourself)');
+    // Require at least 2 participants
+    if (selectedParticipants.size < 2) {
+      setError('At least 2 participants are required');
       return;
     }
 
@@ -139,46 +122,33 @@ export const SessionForm: React.FC<SessionFormProps> = ({
     setError(null);
 
     try {
-      const token = await getAccessTokenSilently();
-      const sessionData = {
-        scoreboardId,
-        scoreboardName,
-        participants: selectedParticipants,
+      const sessionData: CreateSessionData = {
+        scoreboardId: scoreboard.id,
+        scoreboardName: scoreboard.name,
+        participants: Array.from(selectedParticipants),
         pointCategories: Array.from(selectedPointCategories),
       };
 
-      const createdSession = await SessionService.createSession(
-        sessionData,
-        token
-      );
+      const createdSession = await SessionService.createSession(sessionData);
 
-      // Convert backend response to frontend Session type
-      // Backend returns participants and pointCategories as arrays, and results as Map
-      const allParticipantIds: string[] = [
-        createdSession.createdById,
-        ...(Array.isArray(createdSession.participants)
-          ? createdSession.participants
-          : []),
-      ];
-      const pointCategoryIds: string[] = Array.isArray(
-        createdSession.pointCategories
-      )
+      const allParticipantIds: Set<string> = createdSession.participants
+        ? createdSession.participants
+        : new Set<string>();
+      const pointCategoryIds: Set<string> = createdSession.pointCategories
         ? createdSession.pointCategories
-        : [];
+        : new Set<string>();
       const session: Session = SessionType.create({
         id: createdSession.id,
-        created: new Date(createdSession.created),
-        createdById: createdSession.createdById,
         scoreboardId: createdSession.scoreboardId,
         scoreboardName: createdSession.scoreboardName,
+        createdByName: createdSession.createdByName,
         isPending: createdSession.isPending ?? true,
-        participants: new Set(
-          users.filter((u) => allParticipantIds.includes(u.id))
-        ),
-        pointCategories: new Set(
-          pointCategories.filter((cat) => pointCategoryIds.includes(cat.id))
-        ),
-        resultEntries: new Set<ResultEntry>(), // Will be populated when needed
+        participants: allParticipantIds,
+        pointCategories: pointCategoryIds,
+        resultEntries: new Set<string>(),
+        created: new Date(createdSession.created),
+        lastModified: new Date(createdSession.lastModified),
+        createdBy: createdSession.createdBy,
         isActive: createdSession.isActive,
       });
 
@@ -213,13 +183,13 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   labelId="participants-label"
                   label="Participants"
                   multiple
-                  value={selectedParticipants}
+                  value={Array.from(selectedParticipants)}
                   onChange={(e) =>
-                    setSelectedParticipants(e.target.value as string[])
+                    setSelectedParticipants(new Set(e.target.value as string[]))
                   }
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {(selected as string[]).map((userId) => {
+                      {Array.from(selected).map((userId) => {
                         const user = users.find((u) => u.id === userId);
                         return (
                           <Chip
@@ -234,8 +204,8 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   disabled={submitting}
                 >
                   {users.map((user) => {
-                    const isCreator = user.id === auth0User?.sub;
-                    const isSelected = selectedParticipants.includes(user.id);
+                    const isCreator = user.id === currentUser.id;
+                    const isSelected = selectedParticipants.has(user.id);
                     return (
                       <MenuItem
                         key={user.id}
@@ -255,7 +225,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   Point Categories
                 </Typography>
                 <Stack spacing={1}>
-                  {pointCategories.map((category) => (
+                  {pointCategories?.map((category) => (
                     <FormControlLabel
                       key={category.id}
                       control={
@@ -282,7 +252,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                       }
                     />
                   ))}
-                  {pointCategories.length === 0 && (
+                  {pointCategories?.length === 0 && (
                     <Typography variant="body2" sx={{ color: '#666' }}>
                       No point categories available
                     </Typography>
@@ -304,7 +274,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
             submitting ||
             loading ||
             selectedPointCategories.size === 0 ||
-            selectedParticipants.length < 2
+            selectedParticipants.size < 2
           }
           sx={{ backgroundColor: '#38a14f', color: '#ffffff' }}
         >

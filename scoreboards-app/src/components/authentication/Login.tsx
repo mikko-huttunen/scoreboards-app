@@ -3,13 +3,14 @@ import { Button, CircularProgress, Stack } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
 import './Login.css';
 import logo from '../../resources/scoreboards_logo_white.png';
+import { Navigate } from 'react-router-dom';
 
 export type LoginViewProps = {
   onLogin?: () => void | Promise<void>;
 };
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
-  const { isLoading, loginWithRedirect } = useAuth0();
+  const { isLoading, loginWithRedirect, isAuthenticated } = useAuth0();
 
   const handleLogin = useCallback(async () => {
     if (onLogin) {
@@ -18,6 +19,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       await loginWithRedirect();
     }
   }, [onLogin, loginWithRedirect]);
+
+  if (isAuthenticated) {
+    return <Navigate to="/profile" />;
+  }
 
   return (
     <div className="container">

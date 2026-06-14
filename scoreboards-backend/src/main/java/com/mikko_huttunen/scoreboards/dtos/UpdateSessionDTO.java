@@ -1,6 +1,5 @@
-package com.mikko_huttunen.scoreboards.models;
+package com.mikko_huttunen.scoreboards.dtos;
 
-import java.util.List;
 import java.util.Set;
 
 /**

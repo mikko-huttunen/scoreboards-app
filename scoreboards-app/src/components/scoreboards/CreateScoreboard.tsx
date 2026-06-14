@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Stack, Typography, IconButton } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
-import { Navigation, useNavigationSpacing } from '../navigation/Navigation';
+import { useNavigationSpacing } from '../navigation/Navigation';
 import { ScoreboardForm } from './ScoreboardForm';
 
 export const CreateScoreboard: React.FC = () => {
@@ -17,7 +17,6 @@ export const CreateScoreboard: React.FC = () => {
         pb: { xs: 10, sm: 4 },
       }}
     >
-      <Navigation />
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack
           spacing={4}

@@ -1,4 +1,4 @@
-package com.mikko_huttunen.scoreboards.models;
+package com.mikko_huttunen.scoreboards.dtos;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +18,9 @@ public class UpdateResultEntryDTO {
     
     @NotNull(message = "Results cannot be null")
     private List<UpdateResultDTO> results = new ArrayList<>();
+
+    @NotNull(message = "Total points cannot be null")
+    private Double totalPoints;
     
     public String getScoreboardId() {
         return scoreboardId;
@@ -41,6 +44,14 @@ public class UpdateResultEntryDTO {
     
     public void setResults(List<UpdateResultDTO> results) {
         this.results = results;
+    }
+
+    public Double getTotalPoints() {
+        return totalPoints;
+    }
+
+    public void setTotalPoints(Double totalPoints) {
+        this.totalPoints = totalPoints;
     }
 }
 

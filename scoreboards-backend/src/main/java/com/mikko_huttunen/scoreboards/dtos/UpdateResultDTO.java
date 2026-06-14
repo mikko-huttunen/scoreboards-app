@@ -1,4 +1,4 @@
-package com.mikko_huttunen.scoreboards.models;
+package com.mikko_huttunen.scoreboards.dtos;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

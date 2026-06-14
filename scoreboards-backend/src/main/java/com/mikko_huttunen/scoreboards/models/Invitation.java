@@ -21,6 +21,14 @@ public class Invitation extends Auditable {
     @Field("receiverId")
     @NotBlank(message = "Receiver ID cannot be blank")
     private String receiverId;
+
+    @Field("receiverName")
+    @NotBlank(message = "Receiver name cannot be blank")
+    private String receiverName;
+
+    @Field("createdByName")
+    @NotBlank(message = "Created by name cannot be blank")
+    private String createdByName;
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
@@ -51,6 +59,18 @@ public class Invitation extends Auditable {
 
     public void setReceiverId(String receiverId) {
         this.receiverId = receiverId;
+    }
+
+    public String getReceiverName() { return receiverName; }
+
+    public void setReceiverName(String receiverName) { this.receiverName = receiverName; }
+
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String senderName) {
+        this.createdByName = senderName;
     }
 
     public String getScoreboardId() {
