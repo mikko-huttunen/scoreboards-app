@@ -1,9 +1,12 @@
 package com.mikko_huttunen.scoreboards.dtos;
 
+import com.mikko_huttunen.scoreboards.models.Result;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * DTO for updating a result entry with results.
@@ -17,7 +20,7 @@ public class UpdateResultEntryDTO {
     private String sessionId;
     
     @NotNull(message = "Results cannot be null")
-    private List<UpdateResultDTO> results = new ArrayList<>();
+    private Set<Result> results = new HashSet<>();
 
     @NotNull(message = "Total points cannot be null")
     private Double totalPoints;
@@ -38,11 +41,11 @@ public class UpdateResultEntryDTO {
         this.sessionId = sessionId;
     }
     
-    public List<UpdateResultDTO> getResults() {
+    public Set<Result> getResults() {
         return results;
     }
     
-    public void setResults(List<UpdateResultDTO> results) {
+    public void setResults(Set<Result> results) {
         this.results = results;
     }
 

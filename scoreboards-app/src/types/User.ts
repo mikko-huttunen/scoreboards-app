@@ -3,7 +3,6 @@ export type User = {
   name: string;
   email: string;
   avatar: string;
-  scoreboards: Set<string>;
   created: Date;
   lastModified: Date;
   isActive: boolean;
@@ -15,7 +14,6 @@ export const User = {
     name: data.name ?? '',
     email: data.email ?? '',
     avatar: data.avatar ?? '',
-    scoreboards: data.scoreboards ?? new Set(),
     created: data.created ?? new Date(),
     lastModified: data.lastModified ?? new Date(),
     isActive: data.isActive ?? true,

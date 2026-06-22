@@ -21,13 +21,6 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 
-export type DataTablePermission =
-  | 'Author'
-  | 'Create'
-  | 'Add'
-  | 'Edit'
-  | 'Delete';
-
 type DataTableRow = Record<string, unknown>;
 
 export type DataTableProps<T extends DataTableRow = DataTableRow> = {
@@ -37,19 +30,17 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   isLoading?: boolean;
   emptyText?: string;
   showBadge?: boolean;
-  permissions?: DataTablePermission[];
-  disableCreate?: boolean | ((row: T) => boolean);
-  onCreate?: () => void | Promise<void>;
-  disableAdd?: boolean | ((row: T) => boolean);
-  onAdd?: () => void | Promise<void>;
-  disableDelete?: boolean | ((row: T) => boolean);
-  onDelete?: (row: T) => void | Promise<void>;
-  disableEdit?: boolean | ((row: T) => boolean);
-  onEdit?: (row: T) => void | Promise<void>;
-  disableCustom?: boolean | ((row: T) => boolean);
-  onCustom?: (row: T) => void | Promise<void>;
+  canCreate?: boolean | ((row: T) => boolean);
+  onCreate?: () => void | Promise<void> | null;
+  canAdd?: boolean | ((row: T) => boolean);
+  onAdd?: () => void | Promise<void> | null;
+  canDelete?: boolean | ((row: T) => boolean);
+  onDelete?: (row: T) => void | Promise<void> | null;
+  canEdit?: boolean | ((row: T) => boolean);
+  onEdit?: (row: T) => void | Promise<void> | null;
+  canCustom?: boolean | ((row: T) => boolean);
+  onCustom?: (row: T) => void | Promise<void> | null;
   onCustomIcon?: React.ReactNode;
-  onCustomPermissions?: DataTablePermission[];
   pageSize?: number;
   onRowClick?: (row: T) => void;
   getRowId?: (row: T, index: number) => React.Key;
@@ -107,42 +98,137 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   isLoading = false,
   emptyText = 'No data',
   showBadge = false,
-  permissions = [],
   onCreate,
-  disableCreate = false,
+  canCreate = false,
   onAdd,
-  disableAdd = false,
+  canAdd = false,
   onDelete,
-  disableDelete = false,
+  canDelete = false,
   onEdit,
-  disableEdit = false,
+  canEdit = false,
   onCustom,
-  disableCustom = false,
+  canCustom = false,
   onCustomIcon,
-  onCustomPermissions = [],
   pageSize = 10,
   onRowClick,
   getRowId,
 }: DataTableProps<T>) => {
   const [page, setPage] = useState(0);
 
-  const canCreate = permissions.includes('Create') && Boolean(onCreate);
-  const canAdd = permissions.includes('Add') && Boolean(onAdd);
-  const canEdit = permissions.includes('Edit') && Boolean(onEdit);
-  const canDelete = permissions.includes('Delete') && Boolean(onDelete);
-  const canCustom =
-    Boolean(onCustom) &&
-    onCustomPermissions.every((permission) => permissions.includes(permission));
-
   const hasActions = canEdit || canDelete || canCustom;
+
+  const firstHeader = headers[0];
+
+  const sortedData = useMemo(() => {
+    if (!firstHeader || data.length <= 1) return data;
+
+    const isDateLike =
+      typeof firstHeader === 'string' &&
+      firstHeader.toLowerCase().includes('date');
+
+    const parseCustomDateToMs = (value: unknown): number | null => {
+      // Expected format: 'd/M/yyyy HH:mm'
+      if (value == null) return null;
+      const str = String(value).trim();
+      if (!str) return null;
+
+      const [datePart, timePart] = str.split(' ');
+      if (!datePart || !timePart) return null;
+
+      const [dStr, mStr, yStr] = datePart.split('/');
+      const [hhStr, mmStr] = timePart.split(':');
+
+      const day = Number(dStr);
+      const month = Number(mStr);
+      const year = Number(yStr);
+      const hour = Number(hhStr);
+      const minute = Number(mmStr);
+
+      if (
+        !Number.isFinite(day) ||
+        !Number.isFinite(month) ||
+        !Number.isFinite(year) ||
+        !Number.isFinite(hour) ||
+        !Number.isFinite(minute)
+      ) {
+        return null;
+      }
+
+      // JS Date months are 0-based
+      const dt = new Date(year, month - 1, day, hour, minute, 0, 0);
+      const ms = dt.getTime();
+
+      // Guard against invalid dates
+      if (!Number.isFinite(ms)) return null;
+      return ms;
+    };
+
+    const getSortableValue = (row: T) => {
+      const record = row as unknown as Record<string, unknown>;
+      const raw = record[firstHeader] ?? record[normalizeKey(firstHeader)];
+
+      if (raw == null) return null;
+
+      if (isDateLike) {
+        // raw is typically a formatted string like 'd/M/yyyy HH:mm'
+        if (raw instanceof Date) {
+          const ms = raw.getTime();
+          return Number.isFinite(ms) ? ms : null;
+        }
+
+        const ms = parseCustomDateToMs(raw);
+        return ms;
+      }
+
+      if (typeof raw === 'number') return raw;
+      if (typeof raw === 'boolean') return raw ? 1 : 0;
+
+      const s = String(raw).trim();
+      const n = Number(s);
+
+      // If it's a valid numeric string, sort numerically.
+      if (s !== '' && !Number.isNaN(n) && String(n) === s) return n;
+
+      return s.toLowerCase();
+    };
+
+    const withIndex = data.map((row, idx) => ({ row, idx }));
+
+    withIndex.sort((a, b) => {
+      const av = getSortableValue(a.row);
+      const bv = getSortableValue(b.row);
+
+      // Date sort: latest first (descending by ms)
+      if (isDateLike) {
+        const aMs = typeof av === 'number' ? av : -Infinity;
+        const bMs = typeof bv === 'number' ? bv : -Infinity;
+        if (aMs !== bMs) return bMs - aMs;
+        return a.idx - b.idx;
+      }
+
+      // Numeric sort
+      if (typeof av === 'number' && typeof bv === 'number') {
+        if (av !== bv) return av - bv;
+        return a.idx - b.idx;
+      }
+
+      const aStr = String(av ?? '');
+      const bStr = String(bv ?? '');
+
+      if (aStr !== bStr) return aStr.localeCompare(bStr);
+      return a.idx - b.idx;
+    });
+
+    return withIndex.map(({ row }) => row);
+  }, [data, firstHeader]);
 
   const visibleRows = useMemo(() => {
     if (pageSize <= 0) {
-      return data;
+      return sortedData;
     }
 
     const start = page * pageSize;
-    return data.slice(start, start + pageSize);
+    return sortedData.slice(start, start + pageSize);
   }, [data, page, pageSize]);
 
   const columnCount = headers.length + (hasActions ? 1 : 0);
@@ -164,7 +250,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             {title ? (
               showBadge ? (
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <Typography variant="h6" sx={{ color: '#38a14f' }}>
+                  <Typography variant="h6" sx={{ color: '#1b5e20' }}>
                     {title}
                   </Typography>
                   {data.length > 0 && (
@@ -193,7 +279,6 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                disabled={Boolean(disableCreate)}
                 onClick={() => onCreate?.()}
                 sx={{
                   backgroundColor: '#38a14f',
@@ -209,7 +294,6 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                disabled={Boolean(disableAdd)}
                 onClick={() => onAdd?.()}
                 sx={{
                   backgroundColor: '#38a14f',
@@ -259,18 +343,16 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                     ? getRowId(row, index)
                     : ((row.id as React.Key | undefined) ?? index);
 
-                  const isEditDisabled =
-                    typeof disableEdit === 'function'
-                      ? disableEdit(row)
-                      : disableEdit;
-                  const isDeleteDisabled =
-                    typeof disableDelete === 'function'
-                      ? disableDelete(row)
-                      : disableDelete;
-                  const isCustomDisabled =
-                    typeof disableCustom === 'function'
-                      ? disableCustom(row)
-                      : disableCustom;
+                  const showEdit =
+                    typeof canEdit === 'function' ? canEdit(row) : canEdit;
+                  const showDelete =
+                    typeof canDelete === 'function'
+                      ? canDelete(row)
+                      : canDelete;
+                  const showCustom =
+                    typeof canCustom === 'function'
+                      ? canCustom(row)
+                      : canCustom;
 
                   return (
                     <TableRow
@@ -304,12 +386,11 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                             justifyContent="flex-end"
                             flexWrap="nowrap"
                           >
-                            {canEdit && (
+                            {showEdit && (
                               <Tooltip title="Edit">
                                 <IconButton
                                   size="small"
                                   color="primary"
-                                  disabled={isEditDisabled}
                                   onClick={() => onEdit?.(row)}
                                   aria-label="edit row"
                                 >
@@ -318,12 +399,11 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               </Tooltip>
                             )}
 
-                            {canDelete && (
+                            {showDelete && (
                               <Tooltip title="Delete">
                                 <IconButton
                                   size="small"
                                   color="error"
-                                  disabled={isDeleteDisabled}
                                   onClick={() => onDelete?.(row)}
                                   aria-label="delete row"
                                 >
@@ -332,12 +412,11 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               </Tooltip>
                             )}
 
-                            {canCustom && (
+                            {showCustom && (
                               <Tooltip title="Custom action">
                                 <IconButton
                                   size="small"
                                   color="secondary"
-                                  disabled={isCustomDisabled}
                                   onClick={() => onCustom?.(row)}
                                   aria-label="custom row action"
                                 >

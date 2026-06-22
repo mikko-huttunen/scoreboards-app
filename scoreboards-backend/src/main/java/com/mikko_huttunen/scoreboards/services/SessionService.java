@@ -81,7 +81,7 @@ public class SessionService {
 
             //Verify participants exist and belong to the scoreboard
             allParticipantIds.add(currentUser.getId());
-            Set<String> scoreboardUserIds = userService.getUsersForScoreboard(scoreboardId)
+            Set<String> scoreboardUserIds = userService.getScoreboardMembers(scoreboardId)
                     .stream().map(User::getId).collect(Collectors.toSet());
             allParticipantIds.addAll(scoreboardUserIds);
 
@@ -253,10 +253,6 @@ public class SessionService {
             //Delete related result entries
             mongoDBService.deleteByQuery(
                     new Query(Criteria.where("sessionId").in(ids)), ResultEntry.class);
-
-            //Delete related results
-            mongoDBService.deleteByQuery(
-                    new Query(Criteria.where("sessionId").in(ids)), Result.class);
 
             logger.info("Successfully deleted sessions: {}", ids);
             return deletedSessions;

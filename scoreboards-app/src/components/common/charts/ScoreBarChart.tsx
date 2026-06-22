@@ -185,9 +185,7 @@ export const ScoreBarChart: React.FC<Props> = ({
           height: AVATAR_SIZE,
           fontSize: 14,
           bgcolor: '#38a14f',
-          border: isLeader
-            ? `2px solid ${HIGHLIGHT_COLOR}`
-            : '2px solid rgba(0,0,0,0.08)',
+          border: isLeader ? `2px solid ${HIGHLIGHT_COLOR}` : undefined,
           boxShadow: isLeader
             ? '0 0 8px rgba(255,179,0,0.65)'
             : '0 1px 3px rgba(0,0,0,0.18)',

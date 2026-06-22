@@ -21,18 +21,18 @@ import {
 import {
   SessionService,
   type CreateSessionData,
-} from '../../services/SessionService';
-import type { User } from '../../types/User';
-import type { PointCategory } from '../../types/PointCategory';
-import type { Session } from '../../types/Session';
-import { Session as SessionType } from '../../types/Session';
-import type { Scoreboard } from '../../types/Scoreboard';
+} from '../../services/SessionService.ts';
+import type { User } from '../../types/User.ts';
+import type { PointCategory } from '../../types/PointCategory.ts';
+import type { Session } from '../../types/Session.ts';
+import { Session as SessionType } from '../../types/Session.ts';
+import type { Scoreboard } from '../../types/Scoreboard.ts';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
 type SessionFormProps = {
   open: boolean;
   onClose: () => void;
   scoreboard: Scoreboard;
-  currentUser: User;
   users: User[];
   pointCategories?: PointCategory[];
   onSuccess?: (session: Session) => void;
@@ -42,7 +42,6 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   open,
   onClose,
   scoreboard,
-  currentUser,
   users,
   pointCategories,
   onSuccess,
@@ -56,9 +55,10 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useCurrentUser();
 
   useEffect(() => {
-    if (open && scoreboard && currentUser) {
+    if (open && scoreboard && user) {
       const loadPointCategories = async () => {
         try {
           setLoading(true);
@@ -87,7 +87,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       setSelectedPointCategories(new Set());
       setError(null);
     }
-  }, [open, scoreboard, currentUser, users, pointCategories]);
+  }, [open, scoreboard, user, users, pointCategories]);
 
   const handlePointCategoryToggle = (categoryId: string) => {
     setSelectedPointCategories((prev) => {
@@ -102,7 +102,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!currentUser) {
+    if (!user) {
       setError('User not authenticated');
       return;
     }
@@ -203,16 +203,16 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   )}
                   disabled={submitting}
                 >
-                  {users.map((user) => {
-                    const isCreator = user.id === currentUser.id;
-                    const isSelected = selectedParticipants.has(user.id);
+                  {users.map((u) => {
+                    const isCreator = u.id === user?.id;
+                    const isSelected = selectedParticipants.has(u.id);
                     return (
                       <MenuItem
-                        key={user.id}
-                        value={user.id}
+                        key={u.id}
+                        value={u.id}
                         disabled={isCreator && isSelected} // Disable if creator is already selected
                       >
-                        {user.name || user.email || 'Unknown User'}
+                        {u.name || u.email || 'Unknown User'}
                         {isCreator && ' (You)'}
                       </MenuItem>
                     );

@@ -39,7 +39,7 @@ public class ResultEntry extends Auditable {
     
     @Field("results")
     @NotNull(message = "Results cannot be null")
-    private Set<String> results = new HashSet<>(); // Result IDs
+    private Set<Result> results = new HashSet<>(); // Result IDs
 
     @Field("totalPoints")
     @NotNull(message = "Total points cannot be null")
@@ -81,11 +81,11 @@ public class ResultEntry extends Auditable {
         this.userId = userId;
     }
 
-    public Set<String> getResults() {
+    public Set<Result> getResults() {
         return results;
     }
 
-    public void setResults(Set<String> results) {
+    public void setResults(Set<Result> results) {
         this.results = results;
     }
 

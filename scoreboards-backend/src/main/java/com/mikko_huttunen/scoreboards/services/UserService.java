@@ -1,10 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mikko_huttunen.scoreboards.models.Invitation;
-import com.mikko_huttunen.scoreboards.models.Scoreboard;
-import com.mikko_huttunen.scoreboards.models.Session;
-import com.mikko_huttunen.scoreboards.models.User;
+import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
@@ -15,7 +12,6 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.MultiValueMap;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -59,12 +55,14 @@ public class UserService {
         String auth0UserId = authProvider.requireAuth0UserId();
         String email = "";
         String name = "";
+        String avatar = "";
 
         try {
             JsonNode auth0User = auth0ManagementService.getUser(auth0UserId);
             if (auth0User != null) {
                 email = auth0User.get("email").asText();
                 name = auth0User.get("name").asText();
+                avatar = auth0User.get("picture").asText();
             }
         } catch (Exception e) {
             logger.error("Failed to fetch user from Auth0 Management API for user {}: {}", auth0UserId, e.getMessage());
@@ -78,6 +76,7 @@ public class UserService {
         user.setAuth0Id(auth0UserId);
         user.setEmail(email.trim().toLowerCase());
         user.setName(name != null && !name.trim().isEmpty() ? name : email);
+        user.setAvatar(avatar);
         user.setCreated(now);
         user.setLastModified(now);
         user.setIsActive(true);
@@ -122,8 +121,11 @@ public class UserService {
      * @param scoreboardId The scoreboard ID
      * @return List of users associated with the scoreboard
      */
-    public List<User> getUsersForScoreboard(String scoreboardId) {
-        Query query = new Query(Criteria.where("scoreboards").in(scoreboardId));
+    public List<User> getScoreboardMembers(String scoreboardId) {
+        Scoreboard scoreboard = scoreboardService.getScoreboardById(scoreboardId).orElseThrow();
+        Set<String> userIds = scoreboard.getMembers().stream().map(
+                Membership::getUserId).collect(Collectors.toSet());
+        Query query = new Query(Criteria.where("_id").in(userIds));
         return mongoDBService.find(query, User.class);
     }
 

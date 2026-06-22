@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -17,14 +17,12 @@ import {
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigationSpacing } from '../navigation/Navigation';
 import { UserService } from '../../services/UserService';
-import type { User } from '../../types/User';
 import './Profile.css';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
 export const ProfileView: React.FC = () => {
   const { user: auth0User, logout } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -32,33 +30,9 @@ export const ProfileView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const userData = await UserService.getCurrentUser();
-        setUser(userData);
-        setUsername(userData.name || '');
-      } catch (err) {
-        console.error('Error fetching user:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load user profile'
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
+  const { user, isLoadingUser } = useCurrentUser();
 
   const avatarUrl = useMemo(() => {
-    if (avatarFile) {
-      return URL.createObjectURL(avatarFile);
-    }
-
     return auth0User?.picture ?? undefined;
   }, [avatarFile, user?.avatar, auth0User?.picture]);
 
@@ -74,8 +48,7 @@ export const ProfileView: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const updatedUser = await UserService.updateCurrentUser(username);
-      setUser(updatedUser);
+      await UserService.updateCurrentUser(username);
     } catch (err) {
       console.error('Error saving profile:', err);
       setError(err instanceof Error ? err.message : 'Failed to save profile');
@@ -99,7 +72,11 @@ export const ProfileView: React.FC = () => {
     }
   };
 
-  if (loading) {
+  useEffect(() => {
+    setUsername(user?.name || '');
+  }, [user]);
+
+  if (isLoadingUser) {
     return (
       <Box
         sx={{

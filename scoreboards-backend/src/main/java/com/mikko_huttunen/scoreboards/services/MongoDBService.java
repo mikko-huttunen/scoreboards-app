@@ -3,7 +3,6 @@ package com.mikko_huttunen.scoreboards.services;
 import com.mikko_huttunen.scoreboards.models.Auditable;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
-import com.mikko_huttunen.scoreboards.security.AccessControlValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.annotation.Id;
@@ -24,16 +23,13 @@ public class MongoDBService {
 
     private final MongoTemplate mongoTemplate;
     private final CurrentUserContext currentUserContext;
-    private final AccessControlValidator accessControlValidator;
 
     public MongoDBService(
             MongoTemplate mongoTemplate,
-            CurrentUserContext currentUserContext,
-            AccessControlValidator accessControlValidator
+            CurrentUserContext currentUserContext
     ) {
         this.mongoTemplate = mongoTemplate;
         this.currentUserContext = currentUserContext;
-        this.accessControlValidator = accessControlValidator;
     }
 
     @Transactional
@@ -60,7 +56,7 @@ public class MongoDBService {
                 document.setCreatedBy(currentUserContext.requireCurrentUser().getId());
                 document.setIsActive(true);
 
-                accessControlValidator.validateWriteAccess(document);
+                //accessControlValidator.validateWriteAccess(document);
             }
 
             Collection<T> savedDocuments = mongoTemplate.insertAll(documents);
@@ -94,7 +90,7 @@ public class MongoDBService {
                 return Optional.empty();
             }
 
-            accessControlValidator.validateReadAccess(document);
+            //accessControlValidator.validateReadAccess(document);
 
             return Optional.of(document);
         } catch (IllegalArgumentException e) {
@@ -123,7 +119,7 @@ public class MongoDBService {
 
             List<T> documents = mongoTemplate.find(query, documentClass);
 
-            accessControlValidator.validateReadAccess(documents);
+            //accessControlValidator.validateReadAccess(documents);
 
             return documents;
         } catch (IllegalArgumentException e) {
@@ -168,7 +164,7 @@ public class MongoDBService {
 
             T existingDocument = existingDocumentOpt.get();
 
-            accessControlValidator.validateWriteAccess(existingDocument);
+            //accessControlValidator.validateWriteAccess(existingDocument);
 
             updater.update(existingDocument);
 
@@ -212,7 +208,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                accessControlValidator.validateWriteAccess(document);
+                //accessControlValidator.validateWriteAccess(document);
                 updater.update(document);
                 document.setLastModified(now);
             }
@@ -263,7 +259,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                accessControlValidator.validateWriteAccess(document);
+                //accessControlValidator.validateWriteAccess(document);
                 updater.update(document);
                 document.setLastModified(now);
             }
@@ -314,7 +310,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                accessControlValidator.validateDeleteAccess(document);
+                //accessControlValidator.validateDeleteAccess(document);
                 document.setIsActive(false);
                 document.setLastModified(now);
             }
@@ -359,7 +355,7 @@ public class MongoDBService {
             }
 
             for (T document : documents) {
-                accessControlValidator.validateDeleteAccess(document);
+                //accessControlValidator.validateDeleteAccess(document);
 
                 document.setIsActive(false);
                 document.setLastModified(new Date());
@@ -407,6 +403,8 @@ public class MongoDBService {
         try {
             Field idField = getIdField(document.getClass());
             idField.setAccessible(true);
+            // Check if the ID field is already set before setting a new one
+            if (idField.get(document) != null) return;
             idField.set(document, UUID.randomUUID().toString());
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to assign document ID", e);

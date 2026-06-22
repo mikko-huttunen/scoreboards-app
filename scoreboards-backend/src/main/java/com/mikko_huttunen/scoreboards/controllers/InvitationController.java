@@ -1,9 +1,11 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
+import com.mikko_huttunen.scoreboards.dtos.CreateInvitationDTO;
 import com.mikko_huttunen.scoreboards.models.Invitation;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import com.mikko_huttunen.scoreboards.services.InvitationService;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,27 +36,34 @@ public class InvitationController {
     
     /**
      * Create a new invitation.
-     * @param request The request body containing receiverEmail and scoreboardId
+     * @param dto The DTO containing invitation data
      * @return ResponseEntity with created Invitation or error response
      */
     @PostMapping
-    public ResponseEntity<Invitation> createInvitation(@RequestBody Map<String, String> request) {
-        logger.info("POST /api/invitations - Creating new invitation with request: {}", request);
-        
+    public ResponseEntity<Invitation> createInvitation(@Valid @RequestBody CreateInvitationDTO dto) {
+        logger.info("POST /api/invitations - Creating new invitation with request: {}", dto);
+
         try {
-            String receiverEmail = request.get("receiverEmail");
-            String scoreboardId = request.get("scoreboardId");
-            
-            if (receiverEmail == null || receiverEmail.trim().isEmpty()) {
+            if (dto.getReceiverEmail() == null || dto.getReceiverEmail().trim().isEmpty()) {
                 logger.error("POST /api/invitations - Bad request: receiverEmail is required");
                 return ResponseEntity.badRequest().build();
             }
-            if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
+
+            if (dto.getScoreboardId() == null || dto.getScoreboardId().trim().isEmpty()) {
                 logger.error("POST /api/invitations - Bad request: scoreboardId is required");
                 return ResponseEntity.badRequest().build();
             }
-            
-            Invitation invitation = invitationService.createInvitation(receiverEmail, scoreboardId);
+
+            if (dto.getPermissions() == null) {
+                logger.error("POST /api/invitations - Bad request: permissions is required");
+                return ResponseEntity.badRequest().build();
+            }
+
+            Invitation invitation = invitationService.createInvitation(
+                    dto.getReceiverEmail(),
+                    dto.getScoreboardId(),
+                    dto.getPermissions()
+            );
             logger.info("POST /api/invitations - Successfully created invitation: {}", invitation);
             return ResponseEntity.status(HttpStatus.CREATED).body(invitation);
         } catch (IllegalArgumentException e) {

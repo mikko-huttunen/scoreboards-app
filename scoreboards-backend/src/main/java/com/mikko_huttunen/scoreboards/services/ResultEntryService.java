@@ -2,7 +2,6 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.UpdateResultDTO;
 import com.mikko_huttunen.scoreboards.models.*;
-import com.mikko_huttunen.scoreboards.repositories.ResultEntryRepository;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Service class for handling ResultEntry business logic.
@@ -24,15 +22,13 @@ public class ResultEntryService {
     
     private static final Logger logger = LoggerFactory.getLogger(ResultEntryService.class);
 
-    private final ResultService resultService;
     private final MongoDBService mongoDBService;
     private final CurrentUserContext currentUserContext;
     
     @Autowired
     public ResultEntryService(
-            ResultEntryRepository resultEntryRepository,
-            ResultService resultService, MongoDBService mongoDBService, CurrentUserContext currentUserContext) {
-        this.resultService = resultService;
+            MongoDBService mongoDBService,
+            CurrentUserContext currentUserContext) {
         this.mongoDBService = mongoDBService;
         this.currentUserContext = currentUserContext;
     }
@@ -89,6 +85,28 @@ public class ResultEntryService {
         } catch (Exception e) {
             logger.error("Error creating result entries: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to create result entries: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get all result entries associated with a specific scoreboard.
+     * @param scoreboardId The ID of the scoreboard.
+     * @return A list of result entries.
+     */
+    public List<ResultEntry> getResultEntriesByScoreboard(String scoreboardId) {
+        logger.info("Fetching result entries for scoreboard: {}", scoreboardId);
+
+        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
+            logger.warn("Invalid scoreboard ID provided: {}", scoreboardId);
+            throw new IllegalArgumentException("Scoreboard ID cannot be null or empty");
+        }
+
+        try {
+            Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
+            return mongoDBService.find(query, ResultEntry.class);
+        } catch (Exception e) {
+            logger.error("Error fetching result entries for scoreboard: {}", scoreboardId, e);
+            throw new RuntimeException("Failed to fetch result entries for scoreboard: " + scoreboardId, e);
         }
     }
 
@@ -170,7 +188,7 @@ public class ResultEntryService {
     /**
      * Update an existing result entry with results.
      * @param resultEntryId The result entry ID
-     * @param results List of updated results to associate with this entry
+     * @param results Set of updated results to associate with this entry
      * @return The updated result entry if found
      */
     @Transactional
@@ -178,7 +196,7 @@ public class ResultEntryService {
             String resultEntryId,
             String scoreboardId,
             String sessionId,
-            List<UpdateResultDTO> results) {
+            Set<Result> results) {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Updating result entry: {} by user: {}", resultEntryId, currentUser.getId());
         
@@ -203,27 +221,19 @@ public class ResultEntryService {
         }
         
         try {
-            List<Result> resultsToUpdate;
-            //Calculate total points from all results
-            List<Result> existingResults = resultService.getResultsByResultEntryId(resultEntryId);
-            if (!existingResults.isEmpty()) {
-                resultsToUpdate = resultService.updateResults(resultEntryId, existingResults, results);
-            } else {
-                resultsToUpdate = resultService.createResults(resultEntryId, scoreboardId, sessionId, results);
-            }
-
-            if (resultsToUpdate == null) {
+            ResultEntry resultEntry = getResultEntryById(resultEntryId);
+            if (resultEntry == null) {
                 logger.warn("Result entry {} not found or is inactive", resultEntryId);
                 return null;
             }
 
             double totalPoints = 0.0;
 
-            for (Result result : resultsToUpdate) {
+            for (Result result : results) {
                 try {
                     totalPoints += result.getPoints();
                 } catch (Exception e) {
-                    logger.error("Error calculating total points for result: {}", result.getId(), e);
+                    logger.error("Error calculating total points for resultEntry: {}", resultEntryId, e);
                     throw new RuntimeException("Failed to calculate total points", e);
                 }
             }
@@ -232,7 +242,7 @@ public class ResultEntryService {
             Optional<ResultEntry> updatedEntryOpt = mongoDBService.update(
                     resultEntryId, ResultEntry.class, entry -> {
                         entry.setIsPending(false);
-                        entry.setResults(resultsToUpdate.stream().map(Result::getId).collect(Collectors.toSet()));
+                        entry.setResults(results);
                         entry.setTotalPoints(finalTotalPoints);
                     });
 
@@ -270,10 +280,6 @@ public class ResultEntryService {
         }
         
         try {
-            //Delete results associated with this result entry
-            Query query = new Query(Criteria.where("resultEntryId").is(id));
-            mongoDBService.deleteByQuery(query, Result.class);
-
             //Delete result entry
             ResultEntry deleted = mongoDBService.deleteById(id, ResultEntry.class);
             if (deleted == null) {

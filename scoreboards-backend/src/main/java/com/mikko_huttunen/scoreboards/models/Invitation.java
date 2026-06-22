@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.models;
 
+import com.mikko_huttunen.scoreboards.enums.Permission;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
@@ -7,6 +8,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.util.Date;
+import java.util.Set;
 
 /**
  * Invitation entity representing an invitation document in MongoDB.
@@ -37,6 +39,10 @@ public class Invitation extends Auditable {
     @Field("scoreboardName")
     @NotBlank(message = "Scoreboard name cannot be blank")
     private String scoreboardName;
+
+    @Field("permissions")
+    @NotNull(message = "Permissions cannot be null")
+    private Set<Permission> permissions;
     
     @Field("isPending")
     @NotNull(message = "IsPending cannot be null")
@@ -89,6 +95,14 @@ public class Invitation extends Auditable {
         this.scoreboardName = scoreboardName;
     }
 
+    public Set<Permission> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(Set<Permission> permissions) {
+        this.permissions = permissions;
+    }
+
     public Boolean getIsPending() {
         return isPending;
     }
@@ -112,6 +126,7 @@ public class Invitation extends Auditable {
                 ", receiverId='" + receiverId + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", scoreboardName='" + scoreboardName + '\'' +
+                ", permissions=" + permissions +
                 ", isPending=" + isPending +
                 ", acceptedDate=" + acceptedDate +
                 ", created=" + getCreated() +

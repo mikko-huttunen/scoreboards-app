@@ -13,19 +13,18 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { ResultEntryService } from '../../services/ResultEntryService';
-import type { Session } from '../../types/Session';
-import type { PointCategory } from '../../types/PointCategory';
-import type { ResultEntry } from '../../types/ResultEntry';
-import type { User } from '../../types/User';
-import type { Result } from '../../types/Result';
+import { ResultEntryService } from '../../services/ResultEntryService.ts';
+import type { Session } from '../../types/Session.ts';
+import type { PointCategory } from '../../types/PointCategory.ts';
+import type { ResultEntry } from '../../types/ResultEntry.ts';
+import type { Result } from '../../types/Result.ts';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
 export type AddScoresProps = {
   open: boolean;
   onClose: () => void;
   session: Session;
   pointCategories: PointCategory[];
-  user: User;
 };
 
 export const AddScores: React.FC<AddScoresProps> = ({
@@ -33,7 +32,6 @@ export const AddScores: React.FC<AddScoresProps> = ({
   onClose,
   session,
   pointCategories: pointCategoriesProp,
-  user: user,
 }) => {
   const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
   const [scores, setScores] = useState<Map<string, number>>(new Map());
@@ -43,6 +41,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [resultEntry, setResultEntry] = useState<ResultEntry | null>(null);
+  const { user } = useCurrentUser();
 
   useEffect(() => {
     const loadData = async () => {
@@ -62,42 +61,36 @@ export const AddScores: React.FC<AddScoresProps> = ({
         );
         setPointCategories(filtered);
 
-        //Fetch result entries
+        // Only use the provided API call (no extra DB calls)
         const resultEntriesData =
           await ResultEntryService.getResultEntriesByUser();
 
         const resultEntryData = resultEntriesData.find(
           (re) => re.sessionId === session.id
         );
+
         if (!resultEntryData) {
+          setResultEntry(null);
+          setScores(new Map()); // start empty; user will fill scores
           setError('No result entry found for the session');
           setLoading(false);
           return;
         }
+
         setResultEntry(resultEntryData);
 
-        // Try to fetch existing results
-        let existingResults: Result[] = [];
-        if (resultEntry?.id) {
-          try {
-            existingResults =
-              await ResultEntryService.getResultsByResultEntryId(
-                resultEntry.id
-              );
-          } catch (err) {
-            // ignore
-          }
-        }
-
         const initial = new Map<string, number>();
-        if (existingResults.length) {
-          filtered.forEach((cat) => {
-            const found = existingResults.find(
-              (r: Result) => r.pointCategoryId === cat.id
-            );
-            initial.set(cat.id, found ? found.points : 0);
-          });
-        }
+
+        // resultEntryData.results is a Set<Result> now
+        const existingResultsArray = Array.from(resultEntryData.results ?? []);
+
+        filtered.forEach((cat) => {
+          const found = existingResultsArray.find(
+            (r) => r.pointCategoryId === cat.id
+          );
+          initial.set(cat.id, found ? found.points : 0);
+        });
+
         setScores(initial);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -107,7 +100,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
     };
 
     if (open) loadData();
-  }, [open, session]);
+  }, [open, session, pointCategoriesProp]);
 
   const handleScoreChange = (categoryId: string, value: string) => {
     const newScores = new Map(scores);
@@ -153,15 +146,19 @@ export const AddScores: React.FC<AddScoresProps> = ({
       return;
     }
 
+    if (!resultEntry) {
+      setError('No result entry loaded for this session');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const resultsData = pointCategories.map((cat) => ({
+      const resultsData: Result[] = pointCategories.map((cat) => ({
         pointCategoryId: cat.id,
         points: scores.get(cat.id) || 0,
       }));
       const totalPoints = resultsData.reduce((s, r) => s + r.points, 0);
 
-      if (!resultEntry) return;
       await ResultEntryService.updateResultEntry(resultEntry.id, {
         scoreboardId: session.scoreboardId,
         sessionId: session.id,
@@ -246,7 +243,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
         <Button
           onClick={() => handleSubmit()}
           variant="contained"
-          disabled={submitting || success}
+          disabled={submitting || success || !resultEntry}
           sx={{ backgroundColor: '#38a14f', color: '#fff' }}
         >
           {submitting ? (

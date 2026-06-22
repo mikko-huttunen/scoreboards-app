@@ -1,49 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Stack,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Tooltip,
-} from '@mui/material';
-import { useDateFormat } from '../../utils/useDateFormat';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
-import StarIcon from '@mui/icons-material/Star';
-import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-import { useNavigate } from 'react-router-dom';
+import { Box, Stack, CircularProgress, Alert } from '@mui/material';
 import type { Scoreboard } from '../../types/Scoreboard';
 import type { Invitation } from '../../types/Invitation';
 import { useNavigationSpacing } from '../navigation/Navigation';
 import { ScoreboardsService } from '../../services/ScoreboardService';
 import { InvitationService } from '../../services/InvitationService';
-import { UserService } from '../../services/UserService';
-import type { User } from '../../types/User';
 import { ScoreboardsList } from './ScoreboardsList.tsx';
-import { SentInvitationsList } from './SentInvitationsList.tsx';
-import { ReceivedInvitationsList } from './ReceivedInvitationsList.tsx';
-import { ConfirmDialog } from '../common/ConfirmDialog.tsx';
+import { ReceivedInvitationsList } from '../invitations/ReceivedInvitationsList.tsx';
+import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
 export const ScoreboardsView: React.FC = () => {
   const navigationSpacing = useNavigationSpacing();
-  const [user, setUser] = useState<User | null>(null);
   const [scoreboards, setScoreboards] = useState<Scoreboard[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<Invitation[]>(
     []
@@ -63,17 +31,16 @@ export const ScoreboardsView: React.FC = () => {
   const [leaving, setLeaving] = useState(false);
   const [processingInvitation, setProcessingInvitation] =
     useState<boolean>(false);
+  const { user } = useCurrentUser();
 
   useEffect(() => {
+    if (!user) return;
+
     const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
-        setLoading(true);
-        setError(null);
-
-        //Fetch user
-        const userData = await UserService.getCurrentUser();
-        setUser(userData);
-
         // Fetch scoreboards
         const scoreboardsData =
           await ScoreboardsService.getScoreboardsByCurrentUser();
@@ -83,7 +50,7 @@ export const ScoreboardsView: React.FC = () => {
         const fetchedInvitations = await InvitationService.getInvitations();
         setPendingInvitations(
           fetchedInvitations.filter(
-            (inv) => inv.isPending && inv.receiverId === userData.id
+            (inv) => inv.isPending && inv.receiverId === user.id
           )
         );
       } catch (err) {
@@ -95,7 +62,7 @@ export const ScoreboardsView: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [user]);
 
   const handleDeleteScoreboardClick = (scoreboard: Scoreboard) => {
     setSelectedScoreboard(scoreboard);

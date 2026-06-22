@@ -34,12 +34,5 @@ public interface UserRepository extends MongoRepository<User, String> {
      * @return Optional containing the user if found and active
      */
     Optional<User> findByIdAndIsActiveTrue(String id);
-
-    /**
-     * Find all users who have joined a specific scoreboard (active users only).
-     * @param scoreboardId The scoreboard ID
-     * @return List of users who have joined the scoreboard
-     */
-    List<User> findByScoreboardsContainingAndIsActiveTrue(String scoreboardId);
 }
 

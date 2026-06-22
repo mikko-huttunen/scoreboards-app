@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { Invitation } from '../types/Invitation';
 import apiClient from '../api/Interceptor';
+import { PERMISSIONS } from '../constants.ts';
 
 const API_BASE_URL = '/api/invitations';
 
@@ -12,16 +13,19 @@ export class InvitationService {
    * Create a new invitation.
    * @param receiverEmail Email of the user to invite
    * @param scoreboardId ID of the scoreboard
+   * @param permissions Permissions assigned for the user to invite
    * @returns Promise resolving to the created invitation
    */
   static async createInvitation(
     receiverEmail: string,
-    scoreboardId: string
+    scoreboardId: string,
+    permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][]
   ): Promise<Invitation> {
     try {
       const response = await apiClient.post<Invitation>(API_BASE_URL, {
         receiverEmail,
         scoreboardId,
+        permissions,
       });
       return response.data;
     } catch (error) {
@@ -34,7 +38,7 @@ export class InvitationService {
 
   /**
    * Get all pending invitations for the current user.
-   * @returns Promise resolving to array of pending invitations
+   * @returns Promise resolving to an array of pending invitations
    */
   static async getInvitations(): Promise<Invitation[]> {
     try {

@@ -1,7 +1,9 @@
+import type { Membership } from './Membership.ts';
+
 export type Scoreboard = {
   id: string;
   name: string;
-  users: Set<string>;
+  members: Set<Membership>;
   pointCategories: Set<string>;
   created: Date;
   lastModified: Date;
@@ -13,7 +15,7 @@ export const Scoreboard = {
   create: (data: Scoreboard): Scoreboard => ({
     id: data.id ?? '',
     name: data.name ?? '',
-    users: data.users ?? new Set(),
+    members: data.members ?? new Set(),
     pointCategories: data.pointCategories ?? new Set(),
     created: data.created ?? new Date(),
     lastModified: data.lastModified ?? new Date(),

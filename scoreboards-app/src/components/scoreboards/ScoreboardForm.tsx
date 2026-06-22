@@ -409,7 +409,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 )}
               </Button>
               <Button
-                onClick={() => navigate('/scoreboards')}
+                onClick={() => navigate(`/scoreboards/${scoreboardId}`)}
                 disabled={submitting}
                 variant="outlined"
               >

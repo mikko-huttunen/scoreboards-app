@@ -3,6 +3,7 @@ import './main.css';
 import App from './App';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { BrowserRouter } from 'react-router-dom';
+import { CurrentUserProvider } from './contexts/CurrentUserContext.tsx';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -19,8 +20,10 @@ root.render(
     useRefreshTokens={true}
     cacheLocation="localstorage"
   >
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <CurrentUserProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </CurrentUserProvider>
   </Auth0Provider>
 );

@@ -11,6 +11,7 @@ import ProtectedRoute from './components/authentication/ProtectedRoute';
 import { useAuth0 } from '@auth0/auth0-react';
 import { setupAxiosInterceptors } from './api/Interceptor';
 import { Navigation } from './components/navigation/Navigation.tsx';
+import { SessionResultsView } from './components/sessions/SessionResultsView.tsx';
 
 function App() {
   const { getAccessTokenSilently } = useAuth0();
@@ -72,6 +73,11 @@ function App() {
               <EditScoreboard />
             </ProtectedRoute>
           }
+        />
+
+        <Route
+          path="/scoreboards/:scoreboardId/session/:sessionId/results"
+          element={<SessionResultsView />}
         />
 
         <Route path="*" element={<Navigate to="/" />} />

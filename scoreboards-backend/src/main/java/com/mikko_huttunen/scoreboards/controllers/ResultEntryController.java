@@ -6,7 +6,6 @@ import com.mikko_huttunen.scoreboards.dtos.UpdateResultEntryDTO;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import com.mikko_huttunen.scoreboards.services.ResultEntryService;
-import com.mikko_huttunen.scoreboards.services.ResultService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * REST controller for ResultEntry operations.
@@ -29,40 +29,34 @@ public class ResultEntryController {
     private static final Logger logger = LoggerFactory.getLogger(ResultEntryController.class);
     
     private final ResultEntryService resultEntryService;
-    private final ResultService resultService;
     private final CurrentUserContext currentUserContext;
     
     @Autowired
-    public ResultEntryController(ResultEntryService resultEntryService, ResultService resultService, CurrentUserContext currentUserContext) {
+    public ResultEntryController(
+            ResultEntryService resultEntryService,
+            CurrentUserContext currentUserContext) {
         this.resultEntryService = resultEntryService;
-        this.resultService = resultService;
         this.currentUserContext = currentUserContext;
     }
-    
+
     /**
-     * Get all active result entries for a specific session.
-     * @param sessionId The session ID
+     * Get all result entries for a specific scoreboard.
+     * @param scoreboardId The scoreboard ID
      * @return ResponseEntity containing a list of result entries
      */
-    @GetMapping("/session/{sessionId}")
-    public ResponseEntity<List<ResultEntry>> getResultEntriesBySession(@PathVariable String sessionId) {
-        logger.info("GET /api/result-entries/session/{} - Fetching result entries", sessionId);
-        
-        if (sessionId == null || sessionId.trim().isEmpty()) {
-            logger.warn("GET /api/result-entries/session/{} - Invalid session ID", sessionId);
+    @GetMapping("/scoreboard/{scoreboardId}")
+    public ResponseEntity<List<ResultEntry>> getResultEntriesByScoreboard(@PathVariable String scoreboardId) {
+        logger.info("GET /api/result-entries/scoreboard/{} - Fetching result entries", scoreboardId);
+
+        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
+            logger.warn("GET /api/result-entries/scoreboard/{} - Invalid scoreboard ID", scoreboardId);
             return ResponseEntity.badRequest().build();
         }
-        
+
         try {
-            List<ResultEntry> entries = resultEntryService.getResultEntriesBySession(sessionId);
-            logger.info("GET /api/result-entries/session/{} - Found {} result entries", sessionId, entries.size());
-            return ResponseEntity.ok(entries);
-        } catch (IllegalArgumentException e) {
-            logger.warn("GET /api/result-entries/session/{} - Invalid request: {}", sessionId, e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.ok(resultEntryService.getResultEntriesByScoreboard(scoreboardId));
         } catch (Exception e) {
-            logger.error("GET /api/result-entries/session/{} - Error fetching result entries: {}", 
-                    sessionId, e.getMessage(), e);
+            logger.error("GET /api/result-entries/scoreboard/{} - Error fetching result entries", scoreboardId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -114,33 +108,6 @@ public class ResultEntryController {
             }
         } catch (Exception e) {
             logger.error("GET /api/result-entries/{} - Error fetching result entry: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-    
-    /**
-     * Get all results for a specific result entry.
-     * @param id The result entry ID
-     * @return ResponseEntity containing a list of results
-     */
-    @GetMapping("/{id}/results")
-    public ResponseEntity<List<Result>> getResultsByResultEntry(@PathVariable String id) {
-        logger.info("GET /api/result-entries/{}/results - Fetching results", id);
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("GET /api/result-entries/{}/results - Invalid result entry ID", id);
-            return ResponseEntity.badRequest().build();
-        }
-        
-        try {
-            List<Result> resultEntries = resultService.getResultsByResultEntryId(id);
-            logger.info("GET /api/result-entries/{}/results - Found {} results", id, resultEntries.size());
-            return ResponseEntity.ok(resultEntries);
-        } catch (IllegalArgumentException e) {
-            logger.warn("GET /api/result-entries/{}/results - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("GET /api/result-entries/{}/results - Error fetching results: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

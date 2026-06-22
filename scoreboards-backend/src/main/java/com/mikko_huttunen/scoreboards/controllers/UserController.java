@@ -112,11 +112,11 @@ public class UserController {
      * GET /api/users/scoreboard/{scoreboardId}
      */
     @GetMapping("/scoreboard/{scoreboardId}")
-    public ResponseEntity<List<User>> getUsersForScoreboard(@PathVariable String scoreboardId) {
+    public ResponseEntity<List<User>> getScoreboardMembers(@PathVariable String scoreboardId) {
         logger.info("GET /api/users/scoreboard/{} - Fetching users for scoreboard", scoreboardId);
         
         try {
-            List<User> users = userService.getUsersForScoreboard(scoreboardId);
+            List<User> users = userService.getScoreboardMembers(scoreboardId);
             logger.info("GET /api/users/scoreboard/{} - Successfully retrieved {} users", scoreboardId, users.size());
             return ResponseEntity.ok(users);
         } catch (Exception e) {

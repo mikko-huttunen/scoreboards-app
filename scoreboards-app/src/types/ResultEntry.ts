@@ -1,10 +1,12 @@
+import type { Result } from './Result.ts';
+
 export type ResultEntry = {
   id: string;
   scoreboardId: string;
   sessionId: string;
   userId: string;
   isPending: boolean;
-  results: Set<string>;
+  results: Set<Result>;
   totalPoints: number;
   created: Date;
   lastModified: Date;

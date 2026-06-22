@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import type { Invitation } from '../../types/Invitation.ts';
 import { DataTable } from '../common/table/DataTable.tsx';
-import { useDateFormat } from '../../utils/useDateFormat';
+import { useDateFormat } from '../../utils/Utils.ts';
 
 type SentInvitationsListProps = {
   invitations: Invitation[];
@@ -32,10 +32,9 @@ export const SentInvitationsList: React.FC<SentInvitationsListProps> = ({
       title={'Sent Invitations'}
       headers={['Receiver', 'Date Sent']}
       data={data}
-      permissions={['Delete']}
-      disableDelete={processingInvitation}
       pageSize={10}
       onDelete={(row) => onDeleteInvitation(row.invitation)}
+      canDelete={!processingInvitation}
     />
   );
 };

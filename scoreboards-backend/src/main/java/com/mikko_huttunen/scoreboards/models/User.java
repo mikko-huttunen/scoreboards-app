@@ -3,14 +3,11 @@ package com.mikko_huttunen.scoreboards.models;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -39,10 +36,10 @@ public class User extends Auditable {
     
     @Field("avatar")
     private String avatar;
-    
-    @Field("scoreboards")
-    @NotNull(message = "Scoreboards cannot be null")
-    private Set<String> scoreboards = new HashSet<>();
+
+    @Field("memberships")
+    @NotBlank(message = "Memberships cannot be blank")
+    private Set<Membership> memberships = new HashSet<>();
 
     public String getId() {
         return id;
@@ -80,14 +77,6 @@ public class User extends Auditable {
         this.avatar = avatar;
     }
 
-    public Set<String> getScoreboards() {
-        return scoreboards;
-    }
-
-    public void setScoreboards(Set<String> scoreboards) {
-        this.scoreboards = scoreboards;
-    }
-
     @Override
     public String toString() {
         return "User{" +
@@ -95,7 +84,6 @@ public class User extends Auditable {
                 ", name='" + name + '\'' +
                 ", email='" + email + '\'' +
                 ", avatar='" + avatar + '\'' +
-                ", scoreboards=" + scoreboards +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

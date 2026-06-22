@@ -1,3 +1,4 @@
+/*
 package com.mikko_huttunen.scoreboards.security;
 
 import com.mikko_huttunen.scoreboards.models.*;
@@ -6,11 +7,13 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class AccessControlValidator {
 
     private final CurrentUserContext currentUserContext;
+    private User currentUser;
 
     public AccessControlValidator(CurrentUserContext currentUserContext) {
         this.currentUserContext = currentUserContext;
@@ -37,10 +40,10 @@ public class AccessControlValidator {
             throw new IllegalArgumentException("Document cannot be null");
         }
 
-        User currentUser = currentUserContext.requireCurrentUser();
+        currentUser = currentUserContext.requireCurrentUser();
 
-        if (document instanceof User user) {
-            validateUserAccess(currentUser, user);
+        if (document instanceof User requestedUser) {
+            validateUserAccess(currentUser, requestedUser, requireCreator);
             return;
         }
 
@@ -50,22 +53,17 @@ public class AccessControlValidator {
         }
 
         if (document instanceof PointCategory pointCategory) {
-            validateScoreboardIdAccess(currentUser, pointCategory.getScoreboardId());
+            validatePointCategoryAccess(pointCategory);
             return;
         }
 
         if (document instanceof Session session) {
-            validateSessionAccess(currentUser, session);
+            validateSessionAccess(currentUser, session, requireCreator);
             return;
         }
 
         if (document instanceof ResultEntry resultEntry) {
-            validateScoreboardIdAccess(currentUser, resultEntry.getScoreboardId());
-            return;
-        }
-
-        if (document instanceof Result result) {
-            validateScoreboardIdAccess(currentUser, result.getScoreboardId());
+            validateResultEntryAccess(currentUser, resultEntry);
             return;
         }
 
@@ -77,81 +75,80 @@ public class AccessControlValidator {
         throw new IllegalArgumentException("Unsupported MongoDB document type: " + document.getClass().getSimpleName());
     }
 
-    private void validateUserAccess(User currentUser, User requestedUser) {
-        if (Objects.equals(currentUser.getId(), requestedUser.getId())) {
-            return;
+    private void validateUserAccess(User currentUser, User requestedUser, boolean requireCreator) {
+        boolean isCurrentUser = Objects.equals(currentUser.getId(), requestedUser.getId());
+        if (requireCreator) {
+            if (isCurrentUser) return;
+            throw new IllegalArgumentException("User is not authorized to access this user");
         }
 
-        Set<String> currentUserScoreboards = currentUser.getScoreboards();
-        Set<String> requestedUserScoreboards = requestedUser.getScoreboards();
+        if (isCurrentUser) return;
 
-        if (currentUserScoreboards == null || requestedUserScoreboards == null) {
-            throw new IllegalArgumentException("User is not authorized to access this user document");
-        }
+        Set<String> currentUserScoreboardIds = currentUser.getMemberships().stream()
+                .map(Membership::getScoreboardId).collect(Collectors.toSet());
+        Set<String> requestedUserScoreboardIds = requestedUser.getMemberships().stream()
+                .map(Membership::getScoreboardId).collect(Collectors.toSet());
 
-        boolean shareAnyScoreboard = requestedUserScoreboards.stream()
-                .anyMatch(currentUserScoreboards::contains);
+        boolean shareAnyScoreboards = currentUserScoreboardIds.stream().anyMatch(requestedUserScoreboardIds::contains);
 
-        if (!shareAnyScoreboard) {
-            throw new IllegalArgumentException("User is not authorized to access this user document");
-        }
+        if (shareAnyScoreboards) return;
+        throw new IllegalArgumentException("User is not authorized to access this user");
     }
 
     private void validateScoreboardAccess(User currentUser, Scoreboard scoreboard, boolean requireCreator) {
+        boolean isCreator = isCreator(scoreboard.getCreatedBy());
         if (requireCreator) {
-            if (!Objects.equals(scoreboard.getCreatedBy(), currentUser.getId())) {
-                throw new IllegalArgumentException("User is not authorized to access this scoreboard");
-            }
-            return;
-        }
-
-        if (currentUser.getScoreboards().contains(scoreboard.getId())) {
-            return;
-        }
-
-        if (scoreboard.getUsers() == null || !scoreboard.getUsers().contains(currentUser.getId())) {
+            if (isCreator) return;
             throw new IllegalArgumentException("User is not authorized to access this scoreboard");
         }
+
+        if (isCreator) return;
+        if (hasMembership(currentUser, scoreboard.getId())) return;
+        throw new IllegalArgumentException("User is not authorized to access this scoreboard");
     }
 
-    private void validateScoreboardIdAccess(User currentUser, String scoreboardId) {
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Document does not contain a valid scoreboard ID");
-        }
-
-        if (currentUser.getScoreboards() == null || !currentUser.getScoreboards().contains(scoreboardId)) {
-            throw new IllegalArgumentException("User is not authorized to access this document");
-        }
+    private void validatePointCategoryAccess(PointCategory pointCategory) {
+        if (isCreator(pointCategory.getCreatedBy())) return;
+        throw new IllegalArgumentException("User is not authorized to access this point category");
     }
 
-    private void validateSessionAccess(User currentUser, Session session) {
-        boolean isCreator = Objects.equals(session.getCreatedBy(), currentUser.getId());
+    private void validateSessionAccess(User currentUser, Session session, boolean requireCreator) {
+        if (requireCreator) {
+            if (isCreator(session.getCreatedBy())) return;
+            throw new IllegalArgumentException("User is not authorized to access this session");
+        }
 
-        boolean hasScoreboardAccess = currentUser.getScoreboards() != null
-                && currentUser.getScoreboards().contains(session.getScoreboardId());
+        if (hasMembership(currentUser, session.getScoreboardId())) {
+            boolean isParticipant = session.getParticipants().contains(currentUser.getId());
 
-        boolean isParticipant = session.getParticipants() != null
-                && session.getParticipants().contains(currentUser.getId());
-
-        if (isCreator || hasScoreboardAccess || isParticipant) {
-            return;
+            if (isParticipant) return;
         }
 
         throw new IllegalArgumentException("User is not authorized to access this session");
     }
 
+    private void validateResultEntryAccess(User currentUser, ResultEntry resultEntry) {
+        if (isCreator(resultEntry.getCreatedBy())) return;
+        if (hasMembership(currentUser, resultEntry.getScoreboardId())) return;
+        throw new IllegalArgumentException("User is not authorized to access this result entry");
+    }
+
     private void validateInvitationAccess(User currentUser, Invitation invitation) {
-        boolean isCreator = Objects.equals(invitation.getCreatedBy(), currentUser.getId());
+        if (isCreator(invitation.getCreatedBy()) && hasMembership(currentUser, invitation.getScoreboardId())) return;
 
         boolean isReceiver = Objects.equals(invitation.getReceiverId(), currentUser.getId());
-
-        boolean hasScoreboardAccess = currentUser.getScoreboards() != null
-                && currentUser.getScoreboards().contains(invitation.getScoreboardId());
-
-        if (isCreator || isReceiver || hasScoreboardAccess) {
-            return;
-        }
+        if (isReceiver) return;
 
         throw new IllegalArgumentException("User is not authorized to access this invitation");
     }
+
+    private boolean hasMembership(User currentUser, String scoreboardId) {
+        return currentUser.getMemberships().stream().anyMatch(ms ->
+                Objects.equals(ms.getScoreboardId(), scoreboardId));
+    }
+
+    private boolean isCreator(String createdById) {
+        return Objects.equals(createdById, currentUser.getId());
+    }
 }
+ */

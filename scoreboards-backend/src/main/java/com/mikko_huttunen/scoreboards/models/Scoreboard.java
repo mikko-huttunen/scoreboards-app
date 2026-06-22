@@ -6,9 +6,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -25,9 +23,9 @@ public class Scoreboard extends Auditable {
     @NotBlank(message = "Scoreboard name cannot be blank")
     private String name;
 
-    @Field("users")
-    @NotBlank(message = "Users cannot be blank")
-    private Set<String> users = new HashSet<>();
+    @Field("members")
+    @NotBlank(message = "Members cannot be blank")
+    private Set<Membership> members = new HashSet<>();
     
     @Field("pointCategories")
     @NotNull(message = "Point categories cannot be null")
@@ -49,12 +47,12 @@ public class Scoreboard extends Auditable {
         this.name = name;
     }
 
-    public Set<String> getUsers() {
-        return users;
+    public Set<Membership> getMembers() {
+        return members;
     }
 
-    public void setUsers(Set<String> users) {
-        this.users = users;
+    public void setMembers(Set<Membership> members) {
+        this.members = members;
     }
 
     public Set<String> getPointCategories() {
@@ -70,7 +68,7 @@ public class Scoreboard extends Auditable {
         return "Scoreboard{" +
                 "id='" + id + '\'' +
                 ", name='" + name + '\'' +
-                ", users='" + users + '\'' +
+                ", members='" + members + '\'' +
                 ", pointCategories=" + pointCategories +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +

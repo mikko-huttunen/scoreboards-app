@@ -20,17 +20,20 @@ import { ScoreboardsService } from '../../services/ScoreboardService';
 import { UserService } from '../../services/UserService';
 import { InvitationService } from '../../services/InvitationService';
 import { PointCategoryService } from '../../services/PointCategoryService';
-import { SessionForm } from './SessionForm';
+import { SessionForm } from '../sessions/SessionForm.tsx';
 import { SessionService } from '../../services/SessionService';
-import { SessionDetailsModal } from './SessionDetailsModal';
-import AddScores from './AddScores';
+import { SessionDetailsModal } from '../sessions/SessionDetailsModal.tsx';
+import AddScores from '../sessions/AddScores.tsx';
 import { Leaderboard } from './Leaderboard.tsx';
-import { Sessions } from './Sessions.tsx';
-import { ConfirmDialog } from '../common/ConfirmDialog.tsx';
-import { PendingSessions } from './PendingSessions.tsx';
-import { InviteUserModal } from './InviteUserModal.tsx';
-import { ScoreboardUsers } from './ScoreboardUsers.tsx';
-import { SentInvitationsList } from './SentInvitationsList.tsx';
+import { Sessions } from '../sessions/Sessions.tsx';
+import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
+import { PendingSessions } from '../sessions/PendingSessions.tsx';
+import { InviteUserModal } from '../invitations/InviteUserModal.tsx';
+import { ScoreboardMembers } from './ScoreboardMembers.tsx';
+import { SentInvitationsList } from '../invitations/SentInvitationsList.tsx';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { ResultEntryService } from '../../services/ResultEntryService.ts';
+import type { ResultEntry } from '../../types/ResultEntry.ts';
 
 export type ScoreboardsViewProps = {
   sessions?: Session[];
@@ -49,6 +52,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   const [sentInvitations, setSentInvitations] = useState<Invitation[]>([]);
   const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [resultEntries, setResultEntries] = useState<ResultEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -61,9 +65,8 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   const [removingUser, setRemovingUser] = useState(false);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
   const [pendingSessions, setPendingSessions] = useState<Session[]>([]);
-  const [cancellingSession, setCancellingSession] = useState<string | null>(
-    null
-  );
+  const [cancellingSession, setCancellingSession] = useState<boolean>(false);
+  const [deletingSession, setDeletingSession] = useState<boolean>(false);
   const [finishingSession, setFinishingSession] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
@@ -77,11 +80,18 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   const [deleteInvitationDialogOpen, setDeleteInvitationDialogOpen] =
     useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  //const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [sessionToCancel, setSessionToCancel] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sessionIdToCancel, setSessionIdToCancel] = useState<string | null>(
+    null
+  );
+  const [sessionIdToDelete, setSessionIdToDelete] = useState<string | null>(
+    null
+  );
+  const { user } = useCurrentUser();
 
   useEffect(() => {
     if (!scoreboardId) {
@@ -89,6 +99,8 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       setLoading(false);
       return;
     }
+
+    if (!user) return;
 
     const fetchData = async () => {
       try {
@@ -106,14 +118,6 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
         }
         setScoreboard(scoreboardData);
 
-        const userData = await UserService.getCurrentUser();
-        if (!userData) {
-          setError('User not authenticated');
-          setLoading(false);
-          return;
-        }
-        setCurrentUser(userData);
-
         // Fetch users for scoreboard
         const usersData = await UserService.getUsersForScoreboard(scoreboardId);
         setUsers(usersData);
@@ -130,16 +134,19 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
           scoreboardData.id
         );
         setSessions(sessionsData.filter((s) => !s.isPending));
-        setPendingSessions(sessionsData.filter((s) => s.isPending));
+        setPendingSessions(
+          sessionsData.filter(
+            (s) => s.isPending && Array.from(s.participants).includes(user?.id)
+          )
+        );
 
         // Fetch sent invitations (only for the creator)
-        if (scoreboardData.createdBy === userData?.id) {
+        if (scoreboardData.createdBy === user?.id) {
           const invitations = await InvitationService.getInvitations();
           setSentInvitations(
             invitations.filter(
               (inv) =>
-                inv.scoreboardId === scoreboardId &&
-                inv.createdBy === userData.id
+                inv.scoreboardId === scoreboardId && inv.createdBy === user.id
             )
           );
         }
@@ -155,21 +162,36 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     };
 
     fetchData();
-  }, [scoreboardId]);
+  }, [scoreboardId, user]);
+
+  useEffect(() => {
+    if (!scoreboard || !user || !sessions || loading) {
+      return;
+    }
+
+    const fetchResultEntries = async () => {
+      // Fetch result entries
+      const resultEntries =
+        await ResultEntryService.getResultEntriesByScoreboard(scoreboard.id);
+      setResultEntries(resultEntries);
+    };
+
+    fetchResultEntries();
+  }, [scoreboard, user, sessions, loading]);
 
   // Check access after scoreboard and users are loaded
   useEffect(() => {
-    if (!scoreboard || !currentUser || loading) {
+    if (!scoreboard || !user || loading) {
       setHasAccess(null);
       return;
     }
 
     // Check if user is the creator
-    const isCreator = scoreboard.createdBy === currentUser.id;
+    const isCreator = scoreboard.createdBy === user.id;
     setIsOwner(isCreator);
 
     // Check if user is in the users list (either as creator or joined user)
-    const isInUsersList = users.some((u) => u.id === currentUser.id);
+    const isInUsersList = users.some((u) => u.id === user.id);
 
     const userHasAccess = isCreator || isInUsersList;
     setHasAccess(userHasAccess);
@@ -181,7 +203,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       );
       navigate('/scoreboards');
     }
-  }, [scoreboard, users, currentUser, loading]);
+  }, [scoreboard, users, user, loading]);
 
   const handleAddScores = (sessionId: string) => {
     const session = pendingSessions.find((s) => s.id === sessionId);
@@ -206,6 +228,11 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       // Remove from pending sessions
       setPendingSessions(pendingSessions.filter((s) => s.id !== sessionId));
 
+      if (finishedSession) {
+        navigate(`/scoreboards/${scoreboardId}/sessions/${finishedSession.id}`);
+      }
+
+      /*
       // Add finished session to Latest Sessions table
       if (finishedSession) {
         const convertedFinishedSession = Session.create({
@@ -224,6 +251,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
         });
         setSessions([convertedFinishedSession, ...sessions]);
       }
+      */
     } catch (err) {
       console.error('Error finishing session:', err);
       setError(err instanceof Error ? err.message : 'Failed to finish session');
@@ -233,25 +261,25 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   };
 
   const handleCancelSessionClick = (sessionId: string) => {
-    setSessionToCancel(sessionId);
+    setSessionIdToCancel(sessionId);
     setCancelDialogOpen(true);
   };
 
   const handleCancelSession = async () => {
-    if (!sessionToCancel) return;
+    if (!sessionIdToCancel) return;
     try {
-      setCancellingSession(sessionToCancel);
-      await SessionService.deleteSession(sessionToCancel);
+      setCancellingSession(true);
+      await SessionService.deleteSession(sessionIdToCancel);
       setPendingSessions(
-        pendingSessions.filter((s) => s.id !== sessionToCancel)
+        pendingSessions.filter((s) => s.id !== sessionIdToCancel)
       );
       setCancelDialogOpen(false);
-      setSessionToCancel(null);
+      setSessionIdToCancel(null);
     } catch (err) {
       console.error('Error cancelling session:', err);
       setError(err instanceof Error ? err.message : 'Failed to cancel session');
     } finally {
-      setCancellingSession(null);
+      setCancellingSession(false);
     }
   };
 
@@ -288,6 +316,28 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     };
     await fetchPendingSessions();
     setSessionFormOpen(false);
+  };
+
+  const handleDeleteSessionClick = (sessionId: string) => {
+    setSessionIdToDelete(sessionId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteSessionConfirm = async () => {
+    if (!sessionIdToDelete) return;
+
+    try {
+      setDeletingSession(true);
+      await SessionService.deleteSession(sessionIdToDelete);
+      setSessions(sessions.filter((s) => s.id !== sessionIdToDelete));
+      setDeleteDialogOpen(false);
+      setSessionIdToDelete(null);
+    } catch (err) {
+      console.error('Error deleting session:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete session');
+    } finally {
+      setDeletingSession(false);
+    }
   };
 
   const handleOpenInviteModal = () => {
@@ -336,14 +386,14 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     // Check if user has pending sessions
     const userPendingSessions = pendingSessions.filter((s: Session) => {
       // Check if user is the creator (creators can't leave, but check anyway)
-      if (s.createdBy === currentUser?.id) {
+      if (s.createdBy === user?.id) {
         return true;
       }
       // Check if user is a participant in the session
       // Participants are stored as Set<string> (user IDs) in the frontend
       if (s.participants) {
         const participantsArray = Array.from(s.participants);
-        return participantsArray.some((p: string) => p === currentUser?.id);
+        return participantsArray.some((p: string) => p === user?.id);
       }
       return false;
     });
@@ -557,6 +607,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                   sessions={sessions}
                   users={users}
                   pointCategories={pointCategories}
+                  resultEntries={resultEntries}
                   emptyText="No scores recorded yet"
                   chartTitle="Leaderboard"
                 />
@@ -567,6 +618,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
             {pendingSessions.length > 0 && (
               <PendingSessions
                 pendingSessions={pendingSessions}
+                scoreboard={scoreboard}
                 onAddScores={(sessionId) => handleAddScores(sessionId)}
                 onCancelSession={(sessionId) =>
                   handleCancelSessionClick(sessionId)
@@ -577,14 +629,16 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
             {/* Sessions Section */}
             <Sessions
               sessions={sessions}
-              users={users}
+              scoreboard={scoreboard}
               onCreateSession={() => setSessionFormOpen(true)}
               onSessionClick={(session) => handleSessionClick(session)}
+              onDeleteSession={(sessionId) =>
+                handleDeleteSessionClick(sessionId)
+              }
             />
 
-            <ScoreboardUsers
+            <ScoreboardMembers
               scoreboard={scoreboard}
-              currentUser={currentUser}
               users={users}
               handleOpenInviteModal={handleOpenInviteModal}
               handleRemoveUserClick={(user) => handleRemoveUserClick(user)}
@@ -602,13 +656,12 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
         </Stack>
       </Box>
 
-      {sessionForAddScores && pointCategories && currentUser && (
+      {sessionForAddScores && pointCategories && (
         <AddScores
           open={addScoresOpen}
           onClose={handleCloseAddScores}
           session={sessionForAddScores}
           pointCategories={pointCategories}
-          user={currentUser}
         />
       )}
 
@@ -624,12 +677,11 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       )}
 
       {/* Session Form */}
-      {scoreboard && currentUser && (
+      {scoreboard && (
         <SessionForm
           open={sessionFormOpen}
           onClose={() => setSessionFormOpen(false)}
           scoreboard={scoreboard}
-          currentUser={currentUser}
           users={users}
           pointCategories={pointCategories}
           onSuccess={handleSessionCreated}
@@ -694,16 +746,32 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       <ConfirmDialog
         open={cancelDialogOpen}
         onCancel={() => {
-          if (cancellingSession === null) setCancelDialogOpen(false);
+          if (!cancellingSession) setCancelDialogOpen(false);
         }}
         title="Cancel Session"
         text={`Are you sure you want to cancel this session? This will
            permanently delete the session and all associated data. This action
            cannot be undone.`}
         confirmLabel="Cancel Session"
-        loading={cancellingSession !== null}
-        confirmDisabled={cancellingSession !== null}
+        loading={cancellingSession}
+        confirmDisabled={cancellingSession}
         onConfirm={handleCancelSession}
+      />
+
+      {/* Delete Session Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onCancel={() => {
+          if (!deletingSession) setDeleteDialogOpen(false);
+        }}
+        title="Delete Session"
+        text={`Are you sure you want to delete this session? This will
+           permanently delete the session and all associated data. This action
+           cannot be undone.`}
+        confirmLabel="Delete Session"
+        loading={deletingSession}
+        confirmDisabled={deletingSession}
+        onConfirm={handleDeleteSessionConfirm}
       />
 
       {/* Session Details Modal */}
@@ -712,6 +780,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
           open={sessionModalOpen}
           onClose={() => setSessionModalOpen(false)}
           session={selectedSession}
+          resultEntries={resultEntries}
           users={users}
           pointCategories={pointCategories}
         />
