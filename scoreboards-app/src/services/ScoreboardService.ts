@@ -77,7 +77,7 @@ export class ScoreboardsService {
     }
   }
 
-  static async getUsersForScoreboard(scoreboardId: string): Promise<User[]> {
+  static async getScoreboardUsers(scoreboardId: string): Promise<User[]> {
     try {
       const response = await apiClient.get<User[]>(
         `${API_BASE_URL}/${scoreboardId}/users`

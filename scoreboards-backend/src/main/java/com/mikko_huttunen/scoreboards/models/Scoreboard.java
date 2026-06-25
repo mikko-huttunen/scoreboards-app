@@ -25,7 +25,7 @@ public class Scoreboard extends Auditable {
 
     @Field("members")
     @NotBlank(message = "Members cannot be blank")
-    private Set<Membership> members = new HashSet<>();
+    private Set<Membership> memberships = new HashSet<>();
     
     @Field("pointCategories")
     @NotNull(message = "Point categories cannot be null")
@@ -47,12 +47,12 @@ public class Scoreboard extends Auditable {
         this.name = name;
     }
 
-    public Set<Membership> getMembers() {
-        return members;
+    public Set<Membership> getMemberships() {
+        return memberships;
     }
 
-    public void setMembers(Set<Membership> members) {
-        this.members = members;
+    public void setMemberships(Set<Membership> members) {
+        this.memberships = members;
     }
 
     public Set<String> getPointCategories() {
@@ -68,7 +68,7 @@ public class Scoreboard extends Auditable {
         return "Scoreboard{" +
                 "id='" + id + '\'' +
                 ", name='" + name + '\'' +
-                ", members='" + members + '\'' +
+                ", memberships='" + memberships + '\'' +
                 ", pointCategories=" + pointCategories +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +

@@ -32,7 +32,6 @@ export const InviteUserModal = ({
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [sessionsPermission, setSessionsPermission] = useState(false);
-  const [usersPermission, setUsersPermission] = useState(false);
 
   const handleSendInvitation = async () => {
     if (!scoreboardId || !inviteEmail.trim()) {
@@ -47,7 +46,6 @@ export const InviteUserModal = ({
 
       const permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][] = [];
       if (sessionsPermission) permissions.push(PERMISSIONS.SESSIONS);
-      if (usersPermission) permissions.push(PERMISSIONS.MEMBERS);
 
       const createdInvitation = await InvitationService.createInvitation(
         inviteEmail.trim(),
@@ -58,7 +56,6 @@ export const InviteUserModal = ({
       setInviteSuccess(true);
       setInviteEmail('');
       setSessionsPermission(false);
-      setUsersPermission(false);
       setTimeout(() => {
         onClose(createdInvitation);
       }, 1500);
@@ -107,23 +104,7 @@ export const InviteUserModal = ({
               label="Sessions permission"
             />
             <Typography variant="body2" color="text.secondary" sx={{ pl: 1 }}>
-              User can create, edit and delete sessions
-            </Typography>
-          </Stack>
-          <Stack spacing={0.5}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={usersPermission}
-                  onChange={(e) => setUsersPermission(e.target.checked)}
-                  disabled={inviteLoading}
-                />
-              }
-              label="Users permission"
-            />
-            <Typography variant="body2" color="text.secondary" sx={{ pl: 1 }}>
-              User can invite new users and remove existing users of the
-              scoreboard
+              User can create new and delete their sessions
             </Typography>
           </Stack>
         </Stack>

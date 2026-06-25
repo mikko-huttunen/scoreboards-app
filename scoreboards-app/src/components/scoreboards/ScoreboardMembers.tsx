@@ -22,12 +22,12 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
 }) => {
   const { user } = useCurrentUser();
   const currentUserHasPermissions = hasMembersPermission(
-    scoreboard.members,
+    scoreboard.memberships,
     user?.id
   );
 
   const canDelete = (rowUser: User) => {
-    if (isOwner(scoreboard.members, rowUser.id)) return false;
+    if (isOwner(scoreboard.memberships, rowUser.id)) return false;
 
     const userIsSelf = rowUser.id === user?.id;
     if (userIsSelf) return false;

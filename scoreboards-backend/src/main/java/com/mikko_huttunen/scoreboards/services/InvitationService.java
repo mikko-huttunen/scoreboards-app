@@ -29,7 +29,6 @@ public class InvitationService {
     private static final Logger logger = LoggerFactory.getLogger(InvitationService.class);
 
     private final MongoDBService mongoDBService;
-    private final UserService userService;
     private final ScoreboardService scoreboardService;
     private final CurrentUserContext currentUserContext;
     private final UserRepository userRepository;
@@ -40,7 +39,6 @@ public class InvitationService {
                              ScoreboardService scoreboardService,
                              CurrentUserContext currentUserContext, UserRepository userRepository) {
         this.mongoDBService = mongoDBService;
-        this.userService = userService;
         this.scoreboardService = scoreboardService;
         this.currentUserContext = currentUserContext;
         this.userRepository = userRepository;
@@ -88,7 +86,7 @@ public class InvitationService {
             }
             
             // Check if user is already a member (creator or joined)
-            if (scoreboard.getMembers().stream().map(Membership::getUserId)
+            if (scoreboard.getMemberships().stream().map(Membership::getUserId)
                     .anyMatch(userId -> userId.equals(receiver.getId()))) {
                 logger.error("User {} is already a member of the scoreboard {}", receiver.getId(), scoreboardId);
                 throw new IllegalArgumentException("User is already a member of this scoreboard");
@@ -142,7 +140,7 @@ public class InvitationService {
             Query query = new Query(new Criteria().orOperator(
                     where("receiverId").is(userId),
                     where("createdBy").is(userId)));
-            List<Invitation> invitations = mongoDBService.find(query, Invitation.class);
+            List<Invitation> invitations = mongoDBService.find(query, Invitation.class, false);
             logger.info("Successfully fetched {} invitations for user: {}", invitations.size(), userId);
             return invitations;
         } catch (Exception e) {
@@ -165,7 +163,7 @@ public class InvitationService {
         }
         
         try {
-            Optional<Invitation> invitation = mongoDBService.findById(invitationId, Invitation.class);
+            Optional<Invitation> invitation = mongoDBService.findById(invitationId, Invitation.class, false);
             if (invitation.isPresent()) {
                 logger.info("Successfully fetched invitation with ID: {}", invitationId);
             } else {
@@ -205,7 +203,26 @@ public class InvitationService {
 
             String userToAddId = invitation.getReceiverId();
 
-            //Verify scoreboard still exists
+            User user = currentUserContext.requireCurrentUser();
+
+            Membership membership = new Membership();
+            membership.setScoreboardId(invitation.getScoreboardId());
+            membership.setUserId(invitation.getReceiverId());
+            membership.setPermissions(invitation.getPermissions());
+
+            Set<Membership> userMemberships = user.getMemberships();
+            boolean userHasMembership = userMemberships.stream().anyMatch(ms ->
+                    ms.getScoreboardId().equals(invitation.getScoreboardId()));
+
+            if (userHasMembership) {
+                logger.error("User {} already has a membership to the scoreboard {}", user.getId(), invitation.getScoreboardId());
+                deleteInvitations(Set.of(invitationId));
+                throw new IllegalArgumentException("User is already a member of this scoreboard");
+            }
+
+            mongoDBService.update(user.getId(), User.class, u -> u.getMemberships().add(membership));
+            logger.info("Added membership for user: {} to user: {}", userToAddId, invitation.getScoreboardId());
+
             Optional<Scoreboard> scoreboardOpt = scoreboardService.getScoreboardById(invitation.getScoreboardId());
             if (scoreboardOpt.isEmpty()) {
                 logger.error("Scoreboard {} no longer exists", invitation.getScoreboardId());
@@ -215,25 +232,18 @@ public class InvitationService {
 
             Scoreboard scoreboard = scoreboardOpt.get();
 
-            User user = currentUserContext.requireCurrentUser();
+            Set<Membership> scoreboardMemberships = scoreboard.getMemberships();
+            boolean scoreboardHasMembership = scoreboardMemberships.stream().anyMatch(ms ->
+                    ms.getUserId().equals(user.getId()));
 
-            //Add membership to scoreboard
-            Set<Membership> members = scoreboard.getMembers();
-            if (members.stream().map(Membership::getUserId).noneMatch(user.getId()::equals)) {
-                Membership member = new Membership();
-                member.setUserId(user.getId());
-                member.setPermissions(invitation.getPermissions());
-
-                members.add(member);
-
-                mongoDBService.update(scoreboard.getId(), Scoreboard.class, sb ->
-                        sb.setMembers(members));
-                logger.info("Added user {} to the members of the scoreboard {}", userToAddId, invitation.getScoreboardId());
-            } else {
-                logger.info("User {} is already a member of the scoreboard {}", userToAddId, invitation.getScoreboardId());
+            if (scoreboardHasMembership) {
+                logger.error("Scoreboard {} already has a membership for the user {}", scoreboard.getId(), user.getId());
                 deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("User has already joined this scoreboard");
+                throw new IllegalArgumentException("User is already a member of this scoreboard");
             }
+
+            mongoDBService.update(scoreboard.getId(), Scoreboard.class, sb -> sb.getMemberships().add(membership));
+            logger.info("Added membership to scoreboard: {} for user {}", invitation.getScoreboardId(), userToAddId);
 
             //Delete invitation after it's accepted
             Invitation deleted = deleteInvitations(Set.of(invitationId)).getFirst();

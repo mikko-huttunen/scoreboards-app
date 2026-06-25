@@ -62,18 +62,4 @@ export class UserService {
       throw new Error(`Failed to delete user: ${error}`);
     }
   }
-
-  static async getUsersForScoreboard(scoreboardId: string): Promise<User[]> {
-    try {
-      const response = await apiClient.get<User[]>(
-        `${API_BASE_URL}/scoreboard/${scoreboardId}`
-      );
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch users: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch users: ${error}`);
-    }
-  }
 }

@@ -103,7 +103,7 @@ public class ResultEntryService {
 
         try {
             Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-            return mongoDBService.find(query, ResultEntry.class);
+            return mongoDBService.find(query, ResultEntry.class, false);
         } catch (Exception e) {
             logger.error("Error fetching result entries for scoreboard: {}", scoreboardId, e);
             throw new RuntimeException("Failed to fetch result entries for scoreboard: " + scoreboardId, e);
@@ -125,7 +125,7 @@ public class ResultEntryService {
         
         try {
             Query query = new Query(Criteria.where("sessionId").is(sessionId));
-            List<ResultEntry> entries = mongoDBService.find(query, ResultEntry.class);
+            List<ResultEntry> entries = mongoDBService.find(query, ResultEntry.class, false);
             logger.info("Found {} active result entries for session: {}", entries.size(), sessionId);
             return entries;
         } catch (Exception e) {
@@ -149,7 +149,7 @@ public class ResultEntryService {
         
         try {
             Query query = new Query(Criteria.where("userId").is(userId));
-            List<ResultEntry> entries = mongoDBService.find(query, ResultEntry.class);
+            List<ResultEntry> entries = mongoDBService.find(query, ResultEntry.class, false);
             logger.info("Found {} active result entries for user: {}", entries.size(), userId);
             return entries;
         } catch (Exception e) {
@@ -172,7 +172,7 @@ public class ResultEntryService {
         }
         
         try {
-            Optional<ResultEntry> entry = mongoDBService.findById(id, ResultEntry.class);
+            Optional<ResultEntry> entry = mongoDBService.findById(id, ResultEntry.class, false);
             if (entry.isEmpty()) {
                 logger.warn("Result entry with ID {} not found or not active", id);
                 return null;

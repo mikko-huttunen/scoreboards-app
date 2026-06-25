@@ -119,7 +119,8 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
         setScoreboard(scoreboardData);
 
         // Fetch users for scoreboard
-        const usersData = await UserService.getUsersForScoreboard(scoreboardId);
+        const usersData =
+          await ScoreboardsService.getScoreboardUsers(scoreboardId);
         setUsers(usersData);
 
         // Fetch point categories

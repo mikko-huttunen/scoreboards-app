@@ -2,6 +2,7 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.models.Auditable;
 import com.mikko_huttunen.scoreboards.models.User;
+import com.mikko_huttunen.scoreboards.security.AccessControlValidator;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,13 +24,15 @@ public class MongoDBService {
 
     private final MongoTemplate mongoTemplate;
     private final CurrentUserContext currentUserContext;
+    private final AccessControlValidator accessControlValidator;
 
     public MongoDBService(
             MongoTemplate mongoTemplate,
-            CurrentUserContext currentUserContext
+            CurrentUserContext currentUserContext, AccessControlValidator accessControlValidator
     ) {
         this.mongoTemplate = mongoTemplate;
         this.currentUserContext = currentUserContext;
+        this.accessControlValidator = accessControlValidator;
     }
 
     @Transactional
@@ -56,7 +59,7 @@ public class MongoDBService {
                 document.setCreatedBy(currentUserContext.requireCurrentUser().getId());
                 document.setIsActive(true);
 
-                //accessControlValidator.validateWriteAccess(document);
+                accessControlValidator.validateWriteAccess(document);
             }
 
             Collection<T> savedDocuments = mongoTemplate.insertAll(documents);
@@ -79,6 +82,10 @@ public class MongoDBService {
     }
 
     public <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass, boolean includeDeleted) {
+        return findById(id, documentClass, includeDeleted, true);
+    }
+
+    private  <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass, boolean includeDeleted, boolean validateAccess) {
         validateId(id);
 
         try {
@@ -90,7 +97,9 @@ public class MongoDBService {
                 return Optional.empty();
             }
 
-            //accessControlValidator.validateReadAccess(document);
+            if (validateAccess) {
+                accessControlValidator.validateReadAccess(document);
+            }
 
             return Optional.of(document);
         } catch (IllegalArgumentException e) {
@@ -100,16 +109,11 @@ public class MongoDBService {
             throw new RuntimeException("Failed to fetch document with ID: " + id, e);
         }
     }
-
-    public <T extends Auditable> Optional<T> findById(String id, Class<T> documentClass) {
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("Attempted to fetch document with null or empty ID");
-            return Optional.empty();
-        }
-        return findById(id, documentClass, false);
+    public <T extends Auditable> List<T> find(Query query, Class<T> documentClass, boolean includeDeleted) {
+        return find(query, documentClass, includeDeleted, true);
     }
 
-    public <T extends Auditable> List<T> find(Query query, Class<T> documentClass, boolean includeDeleted) {
+    private <T extends Auditable> List<T> find(Query query, Class<T> documentClass, boolean includeDeleted, boolean validateAccess) {
         if (query == null) {
             query = new Query();
         }
@@ -119,7 +123,9 @@ public class MongoDBService {
 
             List<T> documents = mongoTemplate.find(query, documentClass);
 
-            //accessControlValidator.validateReadAccess(documents);
+            if (validateAccess) {
+                accessControlValidator.validateReadAccess(documents);
+            }
 
             return documents;
         } catch (IllegalArgumentException e) {
@@ -130,21 +136,10 @@ public class MongoDBService {
         }
     }
 
-    public <T extends Auditable> List<T> find(Query query, Class<T> documentClass) {
-        if (query == null) {
-            query = new Query();
-        }
-        return find(query, documentClass, false);
-    }
-
     public <T extends Auditable> List<T> findByType(Class<T> documentClass, boolean includeDeleted) {
         Query query = new Query();
         query.addCriteria(Criteria.where("isActive").is(!includeDeleted));
-        return find(new Query(), documentClass);
-    }
-
-    public <T extends Auditable> List<T> findByType(Class<T> documentClass) {
-        return findByType(documentClass, false);
+        return find(new Query(), documentClass, includeDeleted);
     }
 
     @Transactional
@@ -156,7 +151,7 @@ public class MongoDBService {
         }
 
         try {
-            Optional<T> existingDocumentOpt = findById(id, documentClass);
+            Optional<T> existingDocumentOpt = findById(id, documentClass, false);
 
             if (existingDocumentOpt.isEmpty()) {
                 return Optional.empty();
@@ -164,7 +159,7 @@ public class MongoDBService {
 
             T existingDocument = existingDocumentOpt.get();
 
-            //accessControlValidator.validateWriteAccess(existingDocument);
+            accessControlValidator.validateWriteAccess(existingDocument);
 
             updater.update(existingDocument);
 
@@ -200,7 +195,7 @@ public class MongoDBService {
 
         try {
             Query query = new Query(Criteria.where("_id").in(ids));
-            List<T> documents = find(query, documentClass);
+            List<T> documents = find(query, documentClass, false, false);
 
             if (documents.isEmpty()) {
                 return List.of();
@@ -208,7 +203,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                //accessControlValidator.validateWriteAccess(document);
+                accessControlValidator.validateWriteAccess(document);
                 updater.update(document);
                 document.setLastModified(now);
             }
@@ -251,7 +246,7 @@ public class MongoDBService {
         }
 
         try {
-            List<T> documents = find(query, documentClass);
+            List<T> documents = find(query, documentClass, false, false);
 
             if (documents.isEmpty()) {
                 return List.of();
@@ -259,7 +254,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                //accessControlValidator.validateWriteAccess(document);
+                accessControlValidator.validateWriteAccess(document);
                 updater.update(document);
                 document.setLastModified(now);
             }
@@ -302,7 +297,7 @@ public class MongoDBService {
         }
 
         try {
-            List<T> documents = find(query, documentClass);
+            List<T> documents = find(query, documentClass, false, false);
 
             if (documents.isEmpty()) {
                 return List.of();
@@ -310,7 +305,7 @@ public class MongoDBService {
 
             Date now = new Date();
             for (T document : documents) {
-                //accessControlValidator.validateDeleteAccess(document);
+                accessControlValidator.validateDeleteAccess(document);
                 document.setIsActive(false);
                 document.setLastModified(now);
             }
@@ -348,14 +343,14 @@ public class MongoDBService {
 
         try {
             Query query = new Query(Criteria.where("_id").in(ids));
-            List<T> documents = find(query, documentClass);
+            List<T> documents = find(query, documentClass, false, false);
 
             if (documents.isEmpty()) {
                 return List.of();
             }
 
             for (T document : documents) {
-                //accessControlValidator.validateDeleteAccess(document);
+                accessControlValidator.validateDeleteAccess(document);
 
                 document.setIsActive(false);
                 document.setLastModified(new Date());

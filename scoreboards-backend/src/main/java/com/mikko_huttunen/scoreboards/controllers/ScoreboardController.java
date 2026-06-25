@@ -2,6 +2,7 @@ package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
+import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.services.ScoreboardService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -64,14 +65,10 @@ public class ScoreboardController {
     public ResponseEntity<List<Scoreboard>> getScoreboardsByCurrentUser() {
         logger.info("GET /api/scoreboards - Fetching scoreboards for user");
 
-        try {
-            List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
-            logger.info("GET /api/scoreboards - Successfully retrieved {} scoreboards for user", scoreboards.size());
-            return ResponseEntity.ok(scoreboards);
-        } catch (Exception e) {
-            logger.error("GET /api/scoreboards - Error fetching scoreboards: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
+        logger.info("GET /api/scoreboards - Successfully retrieved {} scoreboards for user", scoreboards.size());
+        return ResponseEntity.status(HttpStatus.OK).body(scoreboards);
+
     }
 
     /**
@@ -95,6 +92,25 @@ public class ScoreboardController {
             }
         } catch (Exception e) {
             logger.error("GET /api/scoreboards/{} - Error fetching scoreboard: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Get all members for a scoreboard.
+     * @param scoreboardId The ID of the scoreboard
+     * @return ResponseEntity containing a list of users
+     */
+    @GetMapping("/{scoreboardId}/users")
+    public ResponseEntity<List<User>> getScoreboardUsers(@PathVariable String scoreboardId) {
+        logger.info("GET /api/scoreboard/{}/users - Fetching users for scoreboard", scoreboardId);
+
+        try {
+            List<User> users = scoreboardService.getScoreboardUsers(scoreboardId);
+            logger.info("GET /api/scoreboards/{}/users - Successfully retrieved {} users", scoreboardId, users.size());
+            return ResponseEntity.ok(users);
+        } catch (Exception e) {
+            logger.error("GET /api/scoreboards/{}/users - Error fetching users: {}", scoreboardId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

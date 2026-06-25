@@ -8,7 +8,6 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigationSpacing } from '../navigation/Navigation';
 import { ScoreboardForm } from './ScoreboardForm';
 import { ScoreboardsService } from '../../services/ScoreboardService';
@@ -18,7 +17,6 @@ import type { Scoreboard } from '../../types/Scoreboard';
 export const EditScoreboard: React.FC = () => {
   const navigate = useNavigate();
   const { scoreboardId } = useParams<{ scoreboardId: string }>();
-  const { getAccessTokenSilently } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
   const [scoreboard, setScoreboard] = useState<Scoreboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +50,7 @@ export const EditScoreboard: React.FC = () => {
     };
 
     loadScoreboard();
-  }, [scoreboardId, getAccessTokenSilently]);
+  }, [scoreboardId]);
 
   if (loading) {
     return (

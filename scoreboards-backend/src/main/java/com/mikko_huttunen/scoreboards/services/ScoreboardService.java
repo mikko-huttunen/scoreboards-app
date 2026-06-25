@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.Constants.Types;
 import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.enums.Permission;
@@ -26,7 +27,6 @@ public class ScoreboardService {
     
     private static final Logger logger = LoggerFactory.getLogger(ScoreboardService.class);
 
-    private final AuthProvider authProvider;
     private final MongoDBService mongoDBService;
     private final CurrentUserContext currentUserContext;
     private final PointCategoryService pointCategoryService;
@@ -36,7 +36,6 @@ public class ScoreboardService {
             AuthProvider authProvider,
             MongoDBService mongoDBService,
             CurrentUserContext currentUserContext, PointCategoryService pointCategoryService) {
-        this.authProvider = authProvider;
         this.mongoDBService = mongoDBService;
         this.currentUserContext = currentUserContext;
         this.pointCategoryService = pointCategoryService;
@@ -66,18 +65,21 @@ public class ScoreboardService {
 
         try {
             User user = currentUserContext.requireCurrentUser();
+            UUID scoreboardId = UUID.randomUUID();
 
             //Create membership
             Membership membership = new Membership();
+            membership.setScoreboardId(scoreboardId.toString());
             membership.setUserId(user.getId());
             membership.setPermissions(Set.of(Permission.OWNER));
 
             // Create the scoreboard
             Scoreboard scoreboard = new Scoreboard();
-            scoreboard.setId(UUID.randomUUID().toString());
+            scoreboard.setType(Types.SCOREBOARD);
+            scoreboard.setId(scoreboardId.toString());
             scoreboard.setName(dto.getName().trim());
             scoreboard.setPointCategories(new HashSet<>());
-            scoreboard.setMembers(Set.of(membership));
+            scoreboard.setMemberships(Set.of(membership));
 
             List<PointCategory> createdPointCategories = pointCategoryService.createPointCategories(
                     dto.getPointCategories(), scoreboard.getId());
@@ -85,6 +87,9 @@ public class ScoreboardService {
                     PointCategory::getId).collect(Collectors.toSet());
 
             Scoreboard createdScoreboard = mongoDBService.create(scoreboard);
+
+            //Add membership to the user
+            mongoDBService.update(user.getId(), User.class, u -> u.getMemberships().add(membership));
 
             if (createdScoreboard == null) {
                 logger.error("Failed to create scoreboard with point categories: {}", pointCategoryIds);
@@ -105,25 +110,10 @@ public class ScoreboardService {
      * @return List of scoreboards the user has access to (created or joined)
      */
     public List<Scoreboard> getScoreboardsByUser() {
-        String auth0UserId = authProvider.requireAuth0UserId();
-        Query userQuery = new Query(Criteria.where("auth0Id").is(auth0UserId));
+        User user = currentUserContext.requireCurrentUser();
 
-        Optional<User> user = mongoDBService.find(userQuery, User.class).stream().findFirst();
-        if (user.isEmpty()) {
-            logger.warn("User with Auth0 User ID {} not found", auth0UserId);
-            return List.of();
-        }
-
-        Query scoreboardQuery = new Query(Criteria.where("members.userId").is(user.get().getId()));
-        return mongoDBService.find(scoreboardQuery, Scoreboard.class);
-    }
-    
-    /**
-     * Fetch all active scoreboards.
-     * @return List of all active scoreboards
-     */
-    public List<Scoreboard> getAllScoreboards() {
-        return mongoDBService.findByType(Scoreboard.class);
+        Query scoreboardQuery = new Query(Criteria.where("memberships.userId").is(user.getId()));
+        return mongoDBService.find(scoreboardQuery, Scoreboard.class, false);
     }
     
     /**
@@ -132,7 +122,20 @@ public class ScoreboardService {
      * @return Optional containing the scoreboard if found and active
      */
     public Optional<Scoreboard> getScoreboardById(String id) {
-        return mongoDBService.findById(id, Scoreboard.class);
+        return mongoDBService.findById(id, Scoreboard.class, false);
+    }
+
+    /**
+     * Get all users for a scoreboard.
+     * @param scoreboardId The scoreboard ID
+     * @return List of users associated with the scoreboard
+     */
+    public List<User> getScoreboardUsers(String scoreboardId) {
+        Scoreboard scoreboard = getScoreboardById(scoreboardId).orElseThrow();
+        Set<String> userIds = scoreboard.getMemberships().stream().map(
+                Membership::getUserId).collect(Collectors.toSet());
+        Query query = new Query(Criteria.where("_id").in(userIds));
+        return mongoDBService.find(query, User.class, false);
     }
     
     /**
@@ -246,10 +249,14 @@ public class ScoreboardService {
         try {
             User user = currentUserContext.requireCurrentUser();
 
-            //Remove membership from user
-            mongoDBService.update(scoreboardId, Scoreboard.class, scoreboard -> scoreboard.getMembers()
+            //Remove membership from scoreboard
+            mongoDBService.update(scoreboardId, Scoreboard.class, scoreboard -> scoreboard.getMemberships()
                     .removeIf(ms -> ms.getUserId().equals(user.getId())));
             logger.info("Successfully removed user {} from scoreboard {}", user.getId(), scoreboardId);
+
+            //Remove membership from user
+            mongoDBService.update(user.getId(), User.class, userToUpdate -> userToUpdate.getMemberships()
+                    .removeIf(ms -> ms.getScoreboardId().equals(scoreboardId)));
 
             return true;
         } catch (Exception e) {
@@ -274,15 +281,20 @@ public class ScoreboardService {
                 throw new IllegalArgumentException("Cannot remove yourself from a scoreboard");
             }
 
-            //Remove membership from user
+            //Remove membership from scoreboard
             mongoDBService.update(scoreboardId, Scoreboard.class, scoreboard -> {
                 if (scoreboard.getCreatedBy().equals(currentUser.getId())) {
-                    scoreboard.getMembers().removeIf(ms -> ms.getUserId().equals(userId));
+                    scoreboard.getMemberships().removeIf(ms -> ms.getUserId().equals(userId));
                 } else {
                     logger.error("User {} is not the creator of scoreboard {}", currentUser.getId(), scoreboardId);
                     throw new IllegalArgumentException("Only the creator can remove users from a scoreboard");
                 }
             });
+
+            //Remove membership from user
+            mongoDBService.update(userId, User.class, userToUpdate ->
+                    userToUpdate.getMemberships().removeIf(ms ->
+                            ms.getScoreboardId().equals(scoreboardId)));
 
             return true;
         } catch (IllegalArgumentException e) {

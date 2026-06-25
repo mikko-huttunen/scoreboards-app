@@ -6,11 +6,11 @@ import type { Session } from '../../types/Session.ts';
 import type { PointCategory } from '../../types/PointCategory.ts';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
 import { SessionService } from '../../services/SessionService.ts';
-import { UserService } from '../../services/UserService.ts';
 import { PointCategoryService } from '../../services/PointCategoryService.ts';
 import { ResultEntryService } from '../../services/ResultEntryService.ts';
 import { ResultBarChart } from '../common/charts/ResultBarChart.tsx';
 import { useNavigationSpacing } from '../navigation/Navigation';
+import { ScoreboardsService } from '../../services/ScoreboardService.ts';
 
 export const SessionResultsView: React.FC = () => {
   const navigationSpacing = useNavigationSpacing();
@@ -41,7 +41,7 @@ export const SessionResultsView: React.FC = () => {
         setSession(s);
 
         const usersForBoard =
-          await UserService.getUsersForScoreboard(scoreboardId);
+          await ScoreboardsService.getScoreboardUsers(scoreboardId);
         setUsers(usersForBoard);
 
         const categoriesForBoard =

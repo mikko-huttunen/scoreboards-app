@@ -30,7 +30,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         id: session.id,
         Date: format_date(session.created),
         'Created By': session.createdByName,
-        hasPermissions: hasSessionsPermission(scoreboard.members, user?.id),
+        hasPermissions: hasSessionsPermission(scoreboard.memberships, user?.id),
         session,
       })),
     [pendingSessions]

@@ -35,8 +35,8 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
           id: scoreboard.id,
           Name: scoreboard.name,
           scoreboard,
-          canDelete: isOwner(scoreboard.members, user?.id),
-          canLeave: !isOwner(scoreboard.members, user?.id),
+          canDelete: isOwner(scoreboard.memberships, user?.id),
+          canLeave: !isOwner(scoreboard.memberships, user?.id),
         };
       }),
     [scoreboards]

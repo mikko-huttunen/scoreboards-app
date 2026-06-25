@@ -14,7 +14,9 @@ import org.springframework.data.mongodb.core.mapping.Field;
  * Provides common fields for tracking creation, modification, and soft deletion.
  */
 public abstract class Auditable implements Serializable {
-    
+    @Field("type")
+    private String type;
+
     @CreatedDate
     @Field("created")
     private Date created;
@@ -30,6 +32,10 @@ public abstract class Auditable implements Serializable {
     @Field("isActive")
     @NotNull(message = "IsActive cannot be null")
     private Boolean isActive = true;
+
+    public String getType() { return type; }
+
+    public void setType(String type) { this.type = type; }
 
     public Date getCreated() {
         return created;

@@ -5,19 +5,14 @@ import { ScoreboardsView } from './components/scoreboards/ScoreboardsView.tsx';
 import { CreateScoreboard } from './components/scoreboards/CreateScoreboard';
 import { ScoreboardView } from './components/scoreboards/ScoreboardView';
 import { EditScoreboard } from './components/scoreboards/EditScoreboard';
-import { useAccessTokenManager } from './hooks/useAccessTokenManager';
 import { RootRedirect } from './components/authentication/RootRedirect';
 import ProtectedRoute from './components/authentication/ProtectedRoute';
-import { useAuth0 } from '@auth0/auth0-react';
-import { setupAxiosInterceptors } from './api/Interceptor';
+import { useAxiosInterceptors } from './api/Interceptor';
 import { Navigation } from './components/navigation/Navigation.tsx';
 import { SessionResultsView } from './components/sessions/SessionResultsView.tsx';
 
 function App() {
-  const { getAccessTokenSilently } = useAuth0();
-
-  useAccessTokenManager();
-  setupAxiosInterceptors(getAccessTokenSilently);
+  useAxiosInterceptors();
 
   const location = useLocation();
   const pathsWithNoNavigation = ['/login', '/'];
@@ -77,7 +72,11 @@ function App() {
 
         <Route
           path="/scoreboards/:scoreboardId/session/:sessionId/results"
-          element={<SessionResultsView />}
+          element={
+            <ProtectedRoute>
+              <SessionResultsView />
+            </ProtectedRoute>
+          }
         />
 
         <Route path="*" element={<Navigate to="/" />} />

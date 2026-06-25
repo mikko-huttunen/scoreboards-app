@@ -82,7 +82,7 @@ public class PointCategoryService {
         
         try {
             Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId));
-            List<PointCategory> pointCategories = mongoDBService.find(query, PointCategory.class);
+            List<PointCategory> pointCategories = mongoDBService.find(query, PointCategory.class, false);
             logger.info("Found {} point categories for scoreboard: {}", pointCategories.size(), scoreboardId);
             return pointCategories;
         } catch (Exception e) {
@@ -105,7 +105,7 @@ public class PointCategoryService {
         }
         
         try {
-            Optional<PointCategory> pointCategory = mongoDBService.findById(id, PointCategory.class);
+            Optional<PointCategory> pointCategory = mongoDBService.findById(id, PointCategory.class, false);
             if (pointCategory.isEmpty()) {
                 logger.warn("Point category with ID {} not found or not active", id);
                 return null;

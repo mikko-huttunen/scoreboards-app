@@ -24,18 +24,18 @@ public class SessionService {
 
     private final ResultEntryService resultEntryService;
     private final CurrentUserContext currentUserContext;
-    private final UserService userService;
+    private final ScoreboardService scoreboardService;
     private final MongoDBService mongoDBService;
     
     @Autowired
     public SessionService(
             ResultEntryService resultEntryService,
             CurrentUserContext currentUserContext,
-            UserService userService,
+            ScoreboardService scoreboardService,
             MongoDBService mongoDBService) {
         this.resultEntryService = resultEntryService;
         this.currentUserContext = currentUserContext;
-        this.userService = userService;
+        this.scoreboardService = scoreboardService;
         this.mongoDBService = mongoDBService;
     }
 
@@ -81,7 +81,7 @@ public class SessionService {
 
             //Verify participants exist and belong to the scoreboard
             allParticipantIds.add(currentUser.getId());
-            Set<String> scoreboardUserIds = userService.getScoreboardMembers(scoreboardId)
+            Set<String> scoreboardUserIds = scoreboardService.getScoreboardUsers(scoreboardId)
                     .stream().map(User::getId).collect(Collectors.toSet());
             allParticipantIds.addAll(scoreboardUserIds);
 
@@ -145,7 +145,7 @@ public class SessionService {
 
         try {
             Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-            List<Session> sessions = mongoDBService.find(query, Session.class);
+            List<Session> sessions = mongoDBService.find(query, Session.class, false);
 
             logger.info("Found {} sessions for scoreboard ID: {}", sessions.size(), scoreboardId);
             return sessions;
@@ -169,7 +169,7 @@ public class SessionService {
         }
         
         try {
-            Optional<Session> session = mongoDBService.findById(id, Session.class);
+            Optional<Session> session = mongoDBService.findById(id, Session.class, false);
             if (session.isPresent()) {
                 logger.info("Found active session with ID: {}", id);
             } else {
@@ -208,20 +208,20 @@ public class SessionService {
         }
         
         try {
-            Optional<Session> updatedScoreboard = mongoDBService.update(id, Session.class, session -> {
+            Optional<Session> updatedSession = mongoDBService.update(id, Session.class, session -> {
                 if (isPending != null) session.setIsPending(isPending);
                 if (participantIds != null) session.setParticipants(participantIds);
                 if (pointCategoryIds != null) session.setPointCategories(pointCategoryIds);
                 if (resultEntryIds != null) session.setResultEntries(resultEntryIds);
             });
 
-            if (updatedScoreboard.isEmpty()) {
+            if (updatedSession.isEmpty()) {
                 logger.warn("Session {} not found or is inactive", id);
                 return null;
             }
 
             logger.info("Successfully updated session: {}", id);
-            return updatedScoreboard.get();
+            return updatedSession.get();
         } catch (IllegalArgumentException e) {
             logger.error("Validation error updating session: {}", e.getMessage());
             throw e;
@@ -291,7 +291,7 @@ public class SessionService {
 
             // Get all result entries for this session
             Query query = new Query(Criteria.where("sessionId").is(id));
-            List<ResultEntry> resultEntryEntries = mongoDBService.find(query, ResultEntry.class);
+            List<ResultEntry> resultEntryEntries = mongoDBService.find(query, ResultEntry.class, false);
 
             // Get all participant IDs (including creator)
             List<String> allParticipantIds = new ArrayList<>();

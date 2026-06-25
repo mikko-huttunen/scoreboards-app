@@ -26,7 +26,10 @@ export const Sessions: React.FC<SessionsProps> = ({
   const navigate = useNavigate();
   const { format_date } = useDateFormat();
   const { user } = useCurrentUser();
-  const hasPermissions = hasSessionsPermission(scoreboard.members, user?.id);
+  const hasPermissions = hasSessionsPermission(
+    scoreboard.memberships,
+    user?.id
+  );
 
   const goToSessionResults = (sessionId: string) => {
     navigate(`/scoreboards/${scoreboard.id}/session/${sessionId}/results`);

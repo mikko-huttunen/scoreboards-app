@@ -27,7 +27,7 @@ export function CurrentUserProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated } = useAuth0();
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
@@ -45,9 +45,6 @@ export function CurrentUserProvider({
     setUserError(null);
 
     try {
-      // Ensure token is available (helps on first login)
-      await getAccessTokenSilently();
-
       const fetched = await UserService.getCurrentUser();
       setUser(fetched);
     } catch (e) {
@@ -56,7 +53,7 @@ export function CurrentUserProvider({
     } finally {
       setIsLoadingUser(false);
     }
-  }, [getAccessTokenSilently, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     // Only fetch once auth state flips to authenticated

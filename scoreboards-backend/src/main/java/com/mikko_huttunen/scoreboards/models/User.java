@@ -30,6 +30,7 @@ public class User extends Auditable {
     private String name;
     
     @Field("email")
+    @JsonIgnore
     @NotBlank(message = "Email cannot be blank")
     @Email(message = "Email must be a valid email address")
     private String email;
@@ -38,6 +39,7 @@ public class User extends Auditable {
     private String avatar;
 
     @Field("memberships")
+    @JsonIgnore
     @NotBlank(message = "Memberships cannot be blank")
     private Set<Membership> memberships = new HashSet<>();
 
@@ -77,6 +79,14 @@ public class User extends Auditable {
         this.avatar = avatar;
     }
 
+    public Set<Membership> getMemberships() {
+        return memberships;
+    }
+
+    public void setMemberships(Set<Membership> memberships) {
+        this.memberships = memberships;
+    }
+
     @Override
     public String toString() {
         return "User{" +
@@ -84,6 +94,7 @@ public class User extends Auditable {
                 ", name='" + name + '\'' +
                 ", email='" + email + '\'' +
                 ", avatar='" + avatar + '\'' +
+                ", memberships=" + memberships +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

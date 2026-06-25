@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mikko_huttunen.scoreboards.Constants.Types;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
@@ -51,27 +52,20 @@ public class UserService {
      * Create a user on the first login.
      * @return The created user
      */
+    @Transactional
     public User createUser() {
         String auth0UserId = authProvider.requireAuth0UserId();
-        String email = "";
-        String name = "";
-        String avatar = "";
 
-        try {
-            JsonNode auth0User = auth0ManagementService.getUser(auth0UserId);
-            if (auth0User != null) {
-                email = auth0User.get("email").asText();
-                name = auth0User.get("name").asText();
-                avatar = auth0User.get("picture").asText();
-            }
-        } catch (Exception e) {
-            logger.error("Failed to fetch user from Auth0 Management API for user {}: {}", auth0UserId, e.getMessage());
-            return null;
-        }
+        JsonNode auth0User = auth0ManagementService.getUser(auth0UserId);
+
+        String email = auth0User.get("email").asText();
+        String name = auth0User.get("name").asText();
+        String avatar = auth0User.get("picture").asText();
 
         Date now = new Date();
 
         User user = new User();
+        user.setType(Types.USER);
         user.setId(UUID.randomUUID().toString());
         user.setAuth0Id(auth0UserId);
         user.setEmail(email.trim().toLowerCase());
@@ -94,39 +88,7 @@ public class UserService {
         String auth0UserId = authProvider.requireAuth0UserId();
         Query query = new Query(Criteria.where("auth0Id").is(auth0UserId));
 
-        return mongoDBService.find(query, User.class).stream().findFirst();
-    }
-
-    /**
-     * Get user by ID.
-     * @param id The user ID
-     * @return Optional containing the user if found and active
-     */
-    public Optional<User> getUserById(String id) {
-        return mongoDBService.findById(id, User.class);
-    }
-
-    /**
-     * Get user by email.
-     * @param email The user email
-     * @return Optional containing the user if found and active
-     */
-    public User getUserByEmail(String email) {
-        Query query = new Query(Criteria.where("email").is(email.trim().toLowerCase()));
-        return mongoDBService.find(query, User.class).stream().findFirst().orElse(null);
-    }
-
-    /**
-     * Get all users for a scoreboard (creator and joined users).
-     * @param scoreboardId The scoreboard ID
-     * @return List of users associated with the scoreboard
-     */
-    public List<User> getScoreboardMembers(String scoreboardId) {
-        Scoreboard scoreboard = scoreboardService.getScoreboardById(scoreboardId).orElseThrow();
-        Set<String> userIds = scoreboard.getMembers().stream().map(
-                Membership::getUserId).collect(Collectors.toSet());
-        Query query = new Query(Criteria.where("_id").in(userIds));
-        return mongoDBService.find(query, User.class);
+        return mongoDBService.find(query, User.class, false).stream().findFirst();
     }
 
     /**
@@ -137,52 +99,36 @@ public class UserService {
     @Transactional
     public User updateUser(Map <String, String> userData) {
         User user = currentUserContext.requireCurrentUser();
+        String name = userData.get("name");
 
-        try {
-            String name = userData.get("name");
-            if (name == null) {
-                logger.warn("When updating user {}: name was null. Skipping update.", user.getId());
-                throw new IllegalArgumentException("Name cannot be null");
+        auth0ManagementService.updateUser(user.getAuth0Id(), name);
+
+        Optional<User> updatedUserOpt = mongoDBService.update(user.getId(), User.class, userToUpdate ->
+                userToUpdate.setName(name));
+
+        User updatedUser = updatedUserOpt.orElseThrow(() -> new RuntimeException("Failed to update user"));
+
+        //Update username in all sessions and invitations created by the user
+        Query sessionQuery = new Query(Criteria.where("createdBy").is(user.getId()));
+
+        mongoDBService.updateByQuery(sessionQuery, Session.class, session ->
+                session.setCreatedByName(updatedUser.getName()));
+
+        Query invitationQuery = new Query(new Criteria().orOperator(
+                where("createdBy").is(user.getId()),
+                where("receiverId").is(user.getId())
+        ));
+
+        mongoDBService.updateByQuery(invitationQuery, Invitation.class, invitation -> {
+            if (invitation.getReceiverId().equals(user.getId())) {
+                invitation.setReceiverName(updatedUser.getName());
             }
-
-            //Update Auth0 user
-            auth0ManagementService.updateUser(user.getAuth0Id(), name);
-
-            //Update user in database
-            Optional<User> updatedUserOpt = mongoDBService.update(user.getId(), User.class, userToUpdate ->
-                    userToUpdate.setName(name));
-            if (updatedUserOpt.isEmpty()) {
-                logger.warn("User {} not found or not active", user.getId());
-                throw new IllegalArgumentException("User not found or not active");
+            if (invitation.getCreatedBy().equals(user.getId())) {
+                invitation.setCreatedByName(updatedUser.getName());
             }
+        });
 
-            User updatedUser = updatedUserOpt.get();
-
-            //Update username in all sessions and invitations created by the user
-            Query sessionQuery = new Query(Criteria.where("createdBy").is(user.getId()));
-
-            mongoDBService.updateByQuery(sessionQuery, Session.class, session ->
-                    session.setCreatedByName(updatedUser.getName()));
-
-            Query invitationQuery = new Query(new Criteria().orOperator(
-                    where("createdBy").is(user.getId()),
-                    where("receiverId").is(user.getId())
-            ));
-
-            mongoDBService.updateByQuery(invitationQuery, Invitation.class, invitation -> {
-                if (invitation.getReceiverId().equals(user.getId())) {
-                    invitation.setReceiverName(updatedUser.getName());
-                }
-                if (invitation.getCreatedBy().equals(user.getId())) {
-                    invitation.setCreatedByName(updatedUser.getName());
-                }
-            });
-
-            return updatedUser;
-        } catch (Exception e) {
-            logger.error("Error updating user {}: {}", user.getId(), e.getMessage(), e);
-            throw new RuntimeException("Failed to update user: " + user.getId(), e);
-        }
+        return updatedUser;
     }
 
     /**

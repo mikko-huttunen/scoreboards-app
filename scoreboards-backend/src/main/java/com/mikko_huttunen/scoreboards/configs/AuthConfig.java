@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.configs;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,9 +41,29 @@ public class AuthConfig {
         return http
             .csrf(csrf -> csrf.disable()) // Disable CSRF for API endpoints
             .authorizeHttpRequests((authorize) -> authorize
-                    .requestMatchers("/api/public").permitAll()
                     .anyRequest().authenticated()
             )
+                .exceptionHandling(ex -> ex
+                        // Handles 401 (Authentication Failure)
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+                            response.getWriter().write(
+                                    "{\"error\": " +
+                                            "\"Unauthorized\", " +
+                                            "\"message\": \"" + authException.getMessage() +
+                                        "\"}");
+                        })
+                        // Handles 403 (Authorization Failure)
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json");
+                            response.getWriter().write(
+                                    "{\"error\": " +
+                                            "\"Forbidden\", " +
+                                            "\"message\": \"" + accessDeniedException.getMessage() +
+                                        "\"}");
+                        }))
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .oauth2ResourceServer(oauth2 -> oauth2
                     .jwt(jwt -> jwt

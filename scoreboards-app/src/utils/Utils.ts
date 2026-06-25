@@ -27,26 +27,26 @@ export const useDateFormat = () => {
 };
 
 export const isOwner = (
-  members: Set<Membership>,
+  memberships: Set<Membership>,
   userId: string | undefined
 ): boolean => {
   if (!userId) return false;
 
-  const userPermissions = Array.from(members).find(
-    (member) => member.userId === userId
+  const userPermissions = Array.from(memberships).find(
+    (ms) => ms.userId === userId
   )?.permissions;
 
   return userPermissions?.includes('OWNER') || false;
 };
 
 export const hasMembersPermission = (
-  members: Set<Membership>,
+  memberships: Set<Membership>,
   userId: string | undefined
 ): boolean => {
   if (!userId) return false;
 
-  const userPermissions = Array.from(members).find(
-    (member) => member.userId === userId
+  const userPermissions = Array.from(memberships).find(
+    (ms) => ms.userId === userId
   )?.permissions;
 
   if (userPermissions?.includes('OWNER')) return true;
@@ -55,14 +55,14 @@ export const hasMembersPermission = (
 };
 
 export const hasSessionsPermission = (
-  members: Set<Membership>,
+  memberships: Set<Membership>,
   userId: string | undefined
 ): boolean => {
   if (!userId) return false;
-  if (!members || members.size === 0) return false;
+  if (!memberships || memberships.size === 0) return false;
 
-  const userPermissions = Array.from(members).find(
-    (member) => member.userId === userId
+  const userPermissions = Array.from(memberships).find(
+    (ms) => ms.userId === userId
   )?.permissions;
 
   if (userPermissions?.includes('OWNER')) return true;

@@ -1,7 +1,8 @@
-/*
 package com.mikko_huttunen.scoreboards.security;
 
+import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
@@ -43,12 +44,12 @@ public class AccessControlValidator {
         currentUser = currentUserContext.requireCurrentUser();
 
         if (document instanceof User requestedUser) {
-            validateUserAccess(currentUser, requestedUser, requireCreator);
+            validateUserAccess(requestedUser, requireCreator);
             return;
         }
 
         if (document instanceof Scoreboard scoreboard) {
-            validateScoreboardAccess(currentUser, scoreboard, requireCreator);
+            validateScoreboardAccess(scoreboard, requireCreator);
             return;
         }
 
@@ -58,28 +59,28 @@ public class AccessControlValidator {
         }
 
         if (document instanceof Session session) {
-            validateSessionAccess(currentUser, session, requireCreator);
+            validateSessionAccess(session, requireCreator);
             return;
         }
 
         if (document instanceof ResultEntry resultEntry) {
-            validateResultEntryAccess(currentUser, resultEntry);
+            validateResultEntryAccess(resultEntry, requireCreator);
             return;
         }
 
         if (document instanceof Invitation invitation) {
-            validateInvitationAccess(currentUser, invitation);
+            validateInvitationAccess(invitation);
             return;
         }
 
         throw new IllegalArgumentException("Unsupported MongoDB document type: " + document.getClass().getSimpleName());
     }
 
-    private void validateUserAccess(User currentUser, User requestedUser, boolean requireCreator) {
+    private void validateUserAccess(User requestedUser, boolean requireCreator) {
         boolean isCurrentUser = Objects.equals(currentUser.getId(), requestedUser.getId());
         if (requireCreator) {
             if (isCurrentUser) return;
-            throw new IllegalArgumentException("User is not authorized to access this user");
+            throw new AccessDeniedException("User is not authorized to access this user");
         }
 
         if (isCurrentUser) return;
@@ -92,63 +93,81 @@ public class AccessControlValidator {
         boolean shareAnyScoreboards = currentUserScoreboardIds.stream().anyMatch(requestedUserScoreboardIds::contains);
 
         if (shareAnyScoreboards) return;
-        throw new IllegalArgumentException("User is not authorized to access this user");
+        throw new AccessDeniedException("User is not authorized to access this user");
     }
 
-    private void validateScoreboardAccess(User currentUser, Scoreboard scoreboard, boolean requireCreator) {
+    private void validateScoreboardAccess(Scoreboard scoreboard, boolean requireCreator) {
         boolean isCreator = isCreator(scoreboard.getCreatedBy());
         if (requireCreator) {
             if (isCreator) return;
-            throw new IllegalArgumentException("User is not authorized to access this scoreboard");
+            throw new AccessDeniedException("User is not authorized to access this scoreboard");
         }
 
         if (isCreator) return;
-        if (hasMembership(currentUser, scoreboard.getId())) return;
-        throw new IllegalArgumentException("User is not authorized to access this scoreboard");
+        if (hasMembership(scoreboard.getId())) return;
+        throw new AccessDeniedException("User is not authorized to access this scoreboard");
     }
 
     private void validatePointCategoryAccess(PointCategory pointCategory) {
         if (isCreator(pointCategory.getCreatedBy())) return;
-        throw new IllegalArgumentException("User is not authorized to access this point category");
+        if (hasMembership(pointCategory.getScoreboardId())) return;
+        throw new AccessDeniedException("User is not authorized to access this point category");
     }
 
-    private void validateSessionAccess(User currentUser, Session session, boolean requireCreator) {
+    private void validateSessionAccess(Session session, boolean requireCreator) {
+        boolean hasPermission = hasPermission(session.getScoreboardId(), Permission.SESSIONS);
         if (requireCreator) {
             if (isCreator(session.getCreatedBy())) return;
-            throw new IllegalArgumentException("User is not authorized to access this session");
+            if (hasPermission) return;
+            throw new AccessDeniedException("User is not authorized to access this session");
         }
 
-        if (hasMembership(currentUser, session.getScoreboardId())) {
+        if (hasPermission) return;
+        if (hasMembership(session.getScoreboardId())) {
             boolean isParticipant = session.getParticipants().contains(currentUser.getId());
-
             if (isParticipant) return;
         }
 
-        throw new IllegalArgumentException("User is not authorized to access this session");
+        throw new AccessDeniedException("User is not authorized to access this session");
     }
 
-    private void validateResultEntryAccess(User currentUser, ResultEntry resultEntry) {
-        if (isCreator(resultEntry.getCreatedBy())) return;
-        if (hasMembership(currentUser, resultEntry.getScoreboardId())) return;
-        throw new IllegalArgumentException("User is not authorized to access this result entry");
+    private void validateResultEntryAccess(ResultEntry resultEntry, boolean requireCreator) {
+        boolean isCreator = isCreator(resultEntry.getCreatedBy());
+        boolean hasPermission = hasPermission(resultEntry.getScoreboardId(), Permission.SESSIONS);
+        boolean isUser = Objects.equals(resultEntry.getUserId(), currentUser.getId());
+        if (requireCreator) {
+            if (isCreator) return;
+            if (hasPermission) return;
+            if (isUser) return;
+            throw new AccessDeniedException("User is not authorized to access this result entry");
+        }
+
+        if (isUser || hasPermission || isCreator) return;
+
+        throw new AccessDeniedException("User is not authorized to access this result entry");
     }
 
-    private void validateInvitationAccess(User currentUser, Invitation invitation) {
-        if (isCreator(invitation.getCreatedBy()) && hasMembership(currentUser, invitation.getScoreboardId())) return;
+    private void validateInvitationAccess(Invitation invitation) {
+        if (isCreator(invitation.getCreatedBy()) && hasMembership(invitation.getScoreboardId())) return;
 
         boolean isReceiver = Objects.equals(invitation.getReceiverId(), currentUser.getId());
         if (isReceiver) return;
 
-        throw new IllegalArgumentException("User is not authorized to access this invitation");
+        throw new AccessDeniedException("User is not authorized to access this invitation");
     }
 
-    private boolean hasMembership(User currentUser, String scoreboardId) {
+    private boolean hasMembership(String scoreboardId) {
         return currentUser.getMemberships().stream().anyMatch(ms ->
                 Objects.equals(ms.getScoreboardId(), scoreboardId));
+    }
+
+    private boolean hasPermission(String scoreboardId, Permission permission) {
+        return currentUser.getMemberships().stream().anyMatch(ms ->
+                Objects.equals(ms.getScoreboardId(), scoreboardId) &&
+                        (ms.getPermissions().contains(permission)) || ms.getPermissions().contains(Permission.OWNER));
     }
 
     private boolean isCreator(String createdById) {
         return Objects.equals(createdById, currentUser.getId());
     }
 }
- */
