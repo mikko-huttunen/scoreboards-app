@@ -1,5 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Avatar, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import {
+  Avatar,
+  Box,
+  Button,
+  Paper,
+  Stack,
+  Typography,
+  useMediaQuery,
+} from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -65,6 +73,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   const [revealedSegmentCount, setRevealedSegmentCount] = useState<number>(0);
   const [selectedCategoryIdForLegend, setSelectedCategoryIdForLegend] =
     useState<string | null>(null);
+  const isMobile = useMediaQuery('(max-width:899.99px)');
 
   const segmentRevealDelayMs = 2000;
 
@@ -531,7 +540,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
             <Box
               sx={{
                 width: '100%',
-                height: 430,
+                height: isMobile ? 430 : 900,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -551,7 +560,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
           ) : (
             <ResponsiveContainer
               width="100%"
-              height={450}
+              height={isMobile ? 430 : 900}
               style={{ marginBottom: -20 }}
             >
               {/* ... existing BarChart rendering stays exactly as-is ... */}

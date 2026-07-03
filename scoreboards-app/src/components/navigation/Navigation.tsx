@@ -9,14 +9,11 @@ import {
   ListItemIcon,
   ListItemText,
   useMediaQuery,
-  IconButton,
   Stack,
   Box,
 } from '@mui/material';
 import SportsScoreIcon from '@mui/icons-material/SportsScore';
 import PersonIcon from '@mui/icons-material/Person';
-import MenuIcon from '@mui/icons-material/Menu';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { useLocation, useNavigate } from 'react-router-dom';
 import logo from '../../resources/scoreboards_logo_black.png';
 
@@ -28,7 +25,7 @@ const DrawerContext = createContext<{
 export const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isDesktop = useMediaQuery('(min-width:900px)');
+  const isDesktop = useMediaQuery('(min-width:1000px)');
   const [drawerOpen, setDrawerOpen] = useState(true);
   const drawerWidth = 220;
 
@@ -36,23 +33,6 @@ export const Navigation: React.FC = () => {
     <DrawerContext.Provider value={{ drawerOpen, setDrawerOpen }}>
       {isDesktop ? (
         <>
-          {!drawerOpen && (
-            <IconButton
-              onClick={() => setDrawerOpen(true)}
-              sx={{
-                position: 'fixed',
-                top: 16,
-                left: 16,
-                zIndex: 1300,
-                backgroundColor: '#ffffff',
-                boxShadow: 2,
-                '&:hover': { backgroundColor: '#f5f5f5' },
-              }}
-              aria-label="open navigation"
-            >
-              <MenuIcon />
-            </IconButton>
-          )}
           <Drawer
             variant="persistent"
             anchor="left"
@@ -80,17 +60,6 @@ export const Navigation: React.FC = () => {
                   objectFit: 'contain',
                 }}
               />
-              <IconButton
-                onClick={() => setDrawerOpen(false)}
-                size="medium"
-                aria-label="close navigation"
-                sx={{
-                  alignSelf: 'center',
-                  ml: 1,
-                }}
-              >
-                <ChevronLeftIcon />
-              </IconButton>
             </Stack>
             <List>
               <ListItemButton
@@ -175,7 +144,7 @@ export const Navigation: React.FC = () => {
 };
 
 export const useNavigationSpacing = () => {
-  const isDesktop = useMediaQuery('(min-width:900px)');
+  const isDesktop = useMediaQuery('(min-width:1000px)');
   const drawerWidth = 220;
   const drawerContext = useContext(DrawerContext);
   const drawerOpen = drawerContext?.drawerOpen ?? true;

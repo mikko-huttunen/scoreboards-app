@@ -2,23 +2,38 @@ package com.mikko_huttunen.scoreboards.models;
 
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import jakarta.validation.constraints.NotNull;
-import net.minidev.json.annotate.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.util.Set;
 
 /**
- * Membership entity representing a scoreboard-member relationship in the Scoreboard entity.
+ * Membership entity representing a scoreboard-user relationship document in MongoDB.
+ * Extends Auditable to include creation, modification, and soft deletion tracking.
  */
-public class Membership {
+@Document("Membership")
+public class Membership extends Auditable {
+
+    @Id
+    private String id;
+
+    @Field("scoreboardId")
     @JsonIgnore
     @NotNull(message = "Scoreboard ID cannot be null")
     private String scoreboardId;
 
+    @Field("userId")
     @NotNull(message = "User ID cannot be null")
     private String userId;
 
     @NotNull(message = "Permissions cannot be null")
     private Set<Permission> permissions;
+
+    public String getId() { return id; }
+
+    public void setId(String id) { this.id = id; }
 
     public String getScoreboardId() { return scoreboardId; }
 
@@ -43,9 +58,14 @@ public class Membership {
     @Override
     public String toString() {
         return "ScoreboardMember{" +
-                ", scoreboardId='" + scoreboardId + '\'' +
+                "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", userId='" + userId + '\'' +
                 ", permissions=" + permissions +
+                ", created=" + getCreated() +
+                ", lastModified=" + getLastModified() +
+                ", createdBy='" + getCreatedBy() + '\'' +
+                ", isActive=" + getIsActive() +
                 '}';
     }
 }

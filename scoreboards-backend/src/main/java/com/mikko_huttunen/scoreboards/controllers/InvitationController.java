@@ -41,38 +41,15 @@ public class InvitationController {
      */
     @PostMapping
     public ResponseEntity<Invitation> createInvitation(@Valid @RequestBody CreateInvitationDTO dto) {
-        logger.info("POST /api/invitations - Creating new invitation with request: {}", dto);
+        logger.info("POST /api/invitations - Creating new invitation");
 
-        try {
-            if (dto.getReceiverEmail() == null || dto.getReceiverEmail().trim().isEmpty()) {
-                logger.error("POST /api/invitations - Bad request: receiverEmail is required");
-                return ResponseEntity.badRequest().build();
-            }
+        Invitation invitation = invitationService.createInvitation(
+                dto.getReceiverEmail(),
+                dto.getScoreboardId(),
+                dto.getPermissions()
+        );
 
-            if (dto.getScoreboardId() == null || dto.getScoreboardId().trim().isEmpty()) {
-                logger.error("POST /api/invitations - Bad request: scoreboardId is required");
-                return ResponseEntity.badRequest().build();
-            }
-
-            if (dto.getPermissions() == null) {
-                logger.error("POST /api/invitations - Bad request: permissions is required");
-                return ResponseEntity.badRequest().build();
-            }
-
-            Invitation invitation = invitationService.createInvitation(
-                    dto.getReceiverEmail(),
-                    dto.getScoreboardId(),
-                    dto.getPermissions()
-            );
-            logger.info("POST /api/invitations - Successfully created invitation: {}", invitation);
-            return ResponseEntity.status(HttpStatus.CREATED).body(invitation);
-        } catch (IllegalArgumentException e) {
-            logger.error("POST /api/invitations - Validation error: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("POST /api/invitations - Failed to create invitation: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(invitation);
     }
     
     /**
@@ -81,17 +58,12 @@ public class InvitationController {
      */
     @GetMapping
     public ResponseEntity<List<Invitation>> getInvitations() {
-        logger.info("GET /api/invitations - Fetching pending invitations for user");
+        logger.info("GET /api/invitations - Fetching invitations for user");
         User user = currentUserContext.requireCurrentUser();
-        
-        try {
-            List<Invitation> invitations = invitationService.getInvitationsByUserId(user.getId());
-            logger.info("GET /api/invitations - Successfully retrieved {} pending invitations", invitations.size());
-            return ResponseEntity.ok(invitations);
-        } catch (Exception e) {
-            logger.error("GET /api/invitations - Error fetching pending invitations: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        List<Invitation> invitations = invitationService.getInvitationsByUserId(user.getId());
+
+        return ResponseEntity.status(HttpStatus.OK).body(invitations);
     }
     
     /**
@@ -102,20 +74,10 @@ public class InvitationController {
     @GetMapping("/{id}")
     public ResponseEntity<Invitation> getInvitationById(@PathVariable String id) {
         logger.info("GET /api/invitations/{} - Fetching invitation", id);
-        
-        try {
-            Optional<Invitation> invitation = invitationService.getInvitationById(id);
-            if (invitation.isPresent()) {
-                logger.info("GET /api/invitations/{} - Successfully retrieved invitation", id);
-                return ResponseEntity.ok(invitation.get());
-            } else {
-                logger.warn("GET /api/invitations/{} - Invitation not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (Exception e) {
-            logger.error("GET /api/invitations/{} - Error fetching invitation: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Invitation invitation = invitationService.getInvitationById(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(invitation);
     }
     
     /**
@@ -126,18 +88,10 @@ public class InvitationController {
     @PostMapping("/{id}/accept")
     public ResponseEntity<Invitation> acceptInvitation(@PathVariable String id) {
         logger.info("PUT /api/invitations/{}/accept - Accepting invitation", id);
-        
-        try {
-            Invitation invitation = invitationService.acceptInvitation(id);
-            logger.info("PUT /api/invitations/{}/accept - Successfully accepted invitation", id);
-            return ResponseEntity.ok(invitation);
-        } catch (IllegalArgumentException e) {
-            logger.error("PUT /api/invitations/{}/accept - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("PUT /api/invitations/{}/accept - Error accepting invitation: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Invitation invitation = invitationService.acceptInvitation(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(invitation);
     }
     
     /**
@@ -148,22 +102,10 @@ public class InvitationController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Invitation> deleteInvitation(@PathVariable String id) {
         logger.info("DELETE /api/invitations/{} - Deleting invitation", id);
-        
-        try {
-            Invitation deleted = invitationService.deleteInvitations(Set.of(id)).getFirst();
-            if (deleted == null) {
-                logger.warn("DELETE /api/invitations/{} - Invitation not found", id);
-                return ResponseEntity.notFound().build();
-            }
-            logger.info("DELETE /api/invitations/{} - Successfully deleted invitation", id);
-            return ResponseEntity.ok(deleted);
-        } catch (IllegalArgumentException e) {
-            logger.error("DELETE /api/invitations/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("DELETE /api/invitations/{} - Error deleting invitation: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Invitation deleted = invitationService.deleteInvitations(Set.of(id)).getFirst();
+
+        return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }
 }
 

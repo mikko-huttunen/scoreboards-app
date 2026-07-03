@@ -2,8 +2,9 @@ package com.mikko_huttunen.scoreboards.models;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -22,25 +23,23 @@ public class User extends Auditable {
 
     @Field("auth0Id")
     @JsonIgnore
-    @NotBlank(message = "Auth0 ID cannot be blank")
+    @NotNull(message = "Auth0 ID cannot be null")
     private String auth0Id;
 
     @Field("name")
-    @NotBlank(message = "Name cannot be blank")
+    @NotNull(message = "Name cannot be null")
     private String name;
     
     @Field("email")
     @JsonIgnore
-    @NotBlank(message = "Email cannot be blank")
+    @NotNull(message = "Email cannot be null")
     @Email(message = "Email must be a valid email address")
     private String email;
     
     @Field("avatar")
     private String avatar;
 
-    @Field("memberships")
     @JsonIgnore
-    @NotBlank(message = "Memberships cannot be blank")
     private Set<Membership> memberships = new HashSet<>();
 
     public String getId() {
@@ -79,22 +78,17 @@ public class User extends Auditable {
         this.avatar = avatar;
     }
 
-    public Set<Membership> getMemberships() {
-        return memberships;
-    }
+    public Set<Membership> getMemberships() { return memberships; }
 
-    public void setMemberships(Set<Membership> memberships) {
-        this.memberships = memberships;
-    }
+    public void setMemberships(Set<Membership> memberships) { this.memberships = memberships; }
 
     @Override
     public String toString() {
         return "User{" +
                 "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", name='" + name + '\'' +
-                ", email='" + email + '\'' +
                 ", avatar='" + avatar + '\'' +
-                ", memberships=" + memberships +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

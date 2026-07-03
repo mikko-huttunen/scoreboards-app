@@ -53,6 +53,11 @@ public class AccessControlValidator {
             return;
         }
 
+        if (document instanceof Membership membership) {
+            validateMembershipAccess(membership);
+            return;
+        }
+
         if (document instanceof PointCategory pointCategory) {
             validatePointCategoryAccess(pointCategory);
             return;
@@ -108,6 +113,15 @@ public class AccessControlValidator {
         throw new AccessDeniedException("User is not authorized to access this scoreboard");
     }
 
+    private void validateMembershipAccess(Membership membership) {
+        boolean isCreator = isCreator(membership.getCreatedBy());
+        if (isCreator) return;
+        boolean hasPermission = hasPermission(membership.getScoreboardId(), Permission.OWNER);
+        if (hasPermission) return;
+        if (hasMembership(membership.getScoreboardId())) return;
+        throw new AccessDeniedException("User is not authorized to access this scoreboard");
+    }
+
     private void validatePointCategoryAccess(PointCategory pointCategory) {
         if (isCreator(pointCategory.getCreatedBy())) return;
         if (hasMembership(pointCategory.getScoreboardId())) return;
@@ -142,7 +156,9 @@ public class AccessControlValidator {
             throw new AccessDeniedException("User is not authorized to access this result entry");
         }
 
-        if (isUser || hasPermission || isCreator) return;
+        boolean isMember = hasMembership(resultEntry.getScoreboardId());
+
+        if (isMember || isUser || hasPermission || isCreator) return;
 
         throw new AccessDeniedException("User is not authorized to access this result entry");
     }

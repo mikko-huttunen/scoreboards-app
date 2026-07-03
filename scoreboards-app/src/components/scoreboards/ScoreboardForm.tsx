@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Stack,
   Typography,
@@ -7,7 +7,6 @@ import {
   Paper,
   IconButton,
   Alert,
-  CircularProgress,
   Box,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -17,101 +16,75 @@ import {
   type ScoreboardData,
   ScoreboardsService,
 } from '../../services/ScoreboardService';
-import { PointCategoryService } from '../../services/PointCategoryService';
 import type { Scoreboard } from '../../types/Scoreboard';
 import './ScoreboardForm.css';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 type PointCategoryFormData = {
-  id?: string; // ID if it's an existing category
+  id?: string;
   name: string;
   color: string;
 };
 
 type ScoreboardFormProps = {
-  scoreboardId?: string;
-  initialName?: string;
+  scoreboard?: Scoreboard | null;
+  pointCategories?: PointCategoryFormData[] | null;
+
   onSuccess?: (scoreboard: Scoreboard) => void;
 };
 
 export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
-  scoreboardId,
-  initialName = '',
+  scoreboard,
+  pointCategories,
   onSuccess,
 }) => {
   const navigate = useNavigate();
-  const isEditing = !!scoreboardId;
+  const isEditing = !!scoreboard;
 
-  const [name, setName] = useState(initialName);
-  const [pointCategories, setPointCategories] = useState<
+  const [name, setName] = useState('');
+  const [pointCategoryForms, setPointCategoryForms] = useState<
     PointCategoryFormData[]
   >([{ name: '', color: '#38a14f' }]);
+
   const [errors, setErrors] = useState<{
     name?: string;
     pointCategories?: string;
   }>({});
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(isEditing);
+  const { showErrorMessage, showSuccessMessage } = useMessageSnackbar();
 
   useEffect(() => {
-    if (isEditing && scoreboardId) {
-      const loadScoreboard = async () => {
-        try {
-          setLoading(true);
-          const [scoreboard, categories] = await Promise.all([
-            ScoreboardsService.getScoreboardById(scoreboardId),
-            PointCategoryService.getPointCategoriesByScoreboard(scoreboardId),
-          ]);
-          if (scoreboard) {
-            setName(scoreboard.name);
-            // Load existing point categories
-            if (categories && categories.length > 0) {
-              setPointCategories(
-                categories.map((cat) => ({
-                  id: cat.id,
-                  name: cat.name,
-                  color: cat.color,
-                }))
-              );
-            } else {
-              // If no categories exist, start with one empty category
-              setPointCategories([{ name: '', color: '#38a14f' }]);
-            }
-          }
-        } catch (error) {
-          console.error('Error loading scoreboard:', error);
-          setSubmitError('Failed to load scoreboard');
-        } finally {
-          setLoading(false);
-        }
-      };
-      loadScoreboard();
-    }
-  }, [scoreboardId, isEditing]);
+    setName(scoreboard?.name ?? '');
+
+    setPointCategoryForms(
+      pointCategories && pointCategories.length > 0
+        ? pointCategories
+        : [{ name: '', color: '#38a14f' }]
+    );
+
+    setErrors({});
+  }, [scoreboard, pointCategories]);
 
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
-    if (errors.name) {
-      setErrors({ ...errors, name: undefined });
-    }
+    if (errors.name) setErrors({ ...errors, name: undefined });
   };
 
   const handleAddPointCategory = () => {
-    if (pointCategories.length >= 20) {
-      return;
-    }
-    setPointCategories([...pointCategories, { name: '', color: '#38a14f' }]);
+    if (pointCategoryForms.length >= 20) return;
+    setPointCategoryForms([
+      ...pointCategoryForms,
+      { name: '', color: '#38a14f' },
+    ]);
   };
 
   const handleRemovePointCategory = (index: number) => {
-    if (pointCategories.length <= 1) {
-      return;
-    }
-    const updated = pointCategories.filter((_, i) => i !== index);
-    setPointCategories(updated);
-    if (errors.pointCategories) {
+    if (pointCategoryForms.length <= 1) return;
+    const updated = pointCategoryForms.filter((_, i) => i !== index);
+    setPointCategoryForms(updated);
+    if (errors.pointCategories)
       setErrors({ ...errors, pointCategories: undefined });
-    }
   };
 
   const handlePointCategoryChange = (
@@ -119,22 +92,19 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
     field: keyof PointCategoryFormData,
     value: string
   ) => {
-    const updated = [...pointCategories];
+    const updated = [...pointCategoryForms];
     updated[index] = { ...updated[index], [field]: value };
-    setPointCategories(updated);
-    if (errors.pointCategories) {
+    setPointCategoryForms(updated);
+    if (errors.pointCategories)
       setErrors({ ...errors, pointCategories: undefined });
-    }
   };
 
   const validateForm = (): boolean => {
     const newErrors: { name?: string; pointCategories?: string } = {};
 
-    if (!name.trim()) {
-      newErrors.name = 'Scoreboard name is required';
-    }
+    if (!name.trim()) newErrors.name = 'Scoreboard name is required';
 
-    const validCategories = pointCategories.filter(
+    const validCategories = pointCategoryForms.filter(
       (cat) => cat.name.trim() && cat.color.trim()
     );
 
@@ -143,7 +113,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
         'At least one point category with a name and color is required';
     }
 
-    const invalidCategories = pointCategories.filter(
+    const invalidCategories = pointCategoryForms.filter(
       (cat) =>
         (cat.name.trim() && !cat.color.trim()) ||
         (!cat.name.trim() && cat.color.trim())
@@ -154,8 +124,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
         'All point categories must have both a name and color';
     }
 
-    // Check if any category is missing a name
-    const categoriesMissingName = pointCategories.filter(
+    const categoriesMissingName = pointCategoryForms.filter(
       (cat) => !cat.name.trim() && cat.color.trim()
     );
 
@@ -169,86 +138,52 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSubmitError(null);
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setSubmitting(true);
 
     try {
-      if (isEditing && scoreboardId) {
-        const scoreboardToUpdate: ScoreboardData = {
-          name: name.trim(),
-          pointCategories: pointCategories,
-        };
+      const validCategories = pointCategoryForms
+        .filter((cat) => cat.name.trim() && cat.color.trim())
+        .map((cat) => ({
+          id: cat.id,
+          name: cat.name.trim(),
+          color: cat.color.trim(),
+        }));
 
-        // Update existing scoreboard
+      const payload: ScoreboardData = {
+        name: name.trim(),
+        pointCategories: validCategories,
+      };
+
+      if (isEditing && scoreboard) {
         const updated = await ScoreboardsService.updateScoreboard(
-          scoreboardId,
-          scoreboardToUpdate
+          scoreboard.id,
+          payload
         );
+
+        showSuccessMessage('Scoreboard updated');
         if (updated) {
-          if (onSuccess) {
-            onSuccess(updated);
-          } else {
-            navigate(`/scoreboards/${scoreboardId}`);
-          }
+          onSuccess
+            ? onSuccess(updated)
+            : navigate(`/scoreboards/${updated.id}`);
         }
       } else {
-        // Create new scoreboard
-        // Filter out empty categories
-        const validCategories = pointCategories
-          .filter((cat) => cat.name.trim() && cat.color.trim())
-          .map((cat) => ({
-            name: cat.name.trim(),
-            color: cat.color.trim(),
-          }));
-
-        const scoreboardToCreate: ScoreboardData = {
-          name: name.trim(),
-          pointCategories: validCategories,
-        };
-
-        const createdScoreboard =
-          await ScoreboardsService.createScoreboard(scoreboardToCreate);
-
-        if (onSuccess) {
-          onSuccess(createdScoreboard);
-        } else {
-          navigate(`/scoreboards`);
-        }
+        const created = await ScoreboardsService.createScoreboard(payload);
+        showSuccessMessage('Scoreboard created');
+        onSuccess ? onSuccess(created) : navigate('/scoreboards');
       }
     } catch (error) {
-      console.error(
-        `Error ${isEditing ? 'updating' : 'creating'} scoreboard:`,
-        error
-      );
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : `Failed to ${isEditing ? 'update' : 'create'} scoreboard. Please try again.`
+      showErrorMessage(
+        isEditing
+          ? 'Failed to update scoreboard'
+          : 'Failed to create scoreboard'
       );
     } finally {
       setSubmitting(false);
     }
   };
-
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          py: 4,
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
@@ -290,7 +225,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
               )}
 
               <Stack spacing={2}>
-                {pointCategories.map((category, index) => (
+                {pointCategoryForms.map((category, index) => (
                   <Paper
                     key={index}
                     elevation={0}
@@ -316,6 +251,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                         disabled={submitting}
                         size="small"
                       />
+
                       <Box
                         sx={{
                           display: 'flex',
@@ -341,9 +277,12 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                           disabled={submitting}
                           className="color-input"
                         />
+
                         <IconButton
                           onClick={() => handleRemovePointCategory(index)}
-                          disabled={pointCategories.length <= 1 || submitting}
+                          disabled={
+                            pointCategoryForms.length <= 1 || submitting
+                          }
                           color="error"
                           size="small"
                         >
@@ -354,10 +293,11 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                   </Paper>
                 ))}
               </Stack>
+
               <Button
                 startIcon={<AddIcon />}
                 onClick={handleAddPointCategory}
-                disabled={pointCategories.length >= 20 || submitting}
+                disabled={pointCategoryForms.length >= 20 || submitting}
                 size="small"
                 sx={{
                   backgroundColor: '#38a14f',
@@ -369,11 +309,10 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
               </Button>
 
               <Typography variant="caption" sx={{ color: '#666' }}>
-                {pointCategories.length} of 20 categories (minimum 1 required)
+                {pointCategoryForms.length} of 20 categories (minimum 1
+                required)
               </Typography>
             </Stack>
-
-            {submitError && <Alert severity="error">{submitError}</Alert>}
 
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -387,10 +326,10 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 disabled={
                   submitting ||
                   !name.trim() ||
-                  pointCategories.filter(
+                  pointCategoryForms.filter(
                     (cat) => cat.name.trim() && cat.color.trim()
                   ).length === 0 ||
-                  pointCategories.some(
+                  pointCategoryForms.some(
                     (cat) => cat.color.trim() && !cat.name.trim()
                   )
                 }
@@ -401,15 +340,22 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 }}
               >
                 {submitting ? (
-                  <CircularProgress size={24} sx={{ color: '#ffffff' }} />
+                  <LoadingSpinner size={24} />
                 ) : isEditing ? (
                   'Update Scoreboard'
                 ) : (
                   'Create Scoreboard'
                 )}
               </Button>
+
               <Button
-                onClick={() => navigate(`/scoreboards/${scoreboardId}`)}
+                onClick={() =>
+                  navigate(
+                    isEditing && scoreboard
+                      ? `/scoreboards/${scoreboard.id}`
+                      : '/scoreboards'
+                  )
+                }
                 disabled={submitting}
                 variant="outlined"
               >

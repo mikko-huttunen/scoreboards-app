@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useState } from 'react';
-import { Box, CircularProgress, Paper, Stack, Typography } from '@mui/material';
+import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import type { User } from '../../types/User.ts';
 import type { Session } from '../../types/Session.ts';
@@ -10,7 +10,8 @@ import { PointCategoryService } from '../../services/PointCategoryService.ts';
 import { ResultEntryService } from '../../services/ResultEntryService.ts';
 import { ResultBarChart } from '../common/charts/ResultBarChart.tsx';
 import { useNavigationSpacing } from '../navigation/Navigation';
-import { ScoreboardsService } from '../../services/ScoreboardService.ts';
+import { UserService } from '../../services/UserService.ts';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 export const SessionResultsView: React.FC = () => {
   const navigationSpacing = useNavigationSpacing();
@@ -41,7 +42,7 @@ export const SessionResultsView: React.FC = () => {
         setSession(s);
 
         const usersForBoard =
-          await ScoreboardsService.getScoreboardUsers(scoreboardId);
+          await UserService.getScoreboardUsers(scoreboardId);
         setUsers(usersForBoard);
 
         const categoriesForBoard =
@@ -107,7 +108,7 @@ export const SessionResultsView: React.FC = () => {
           spacing={2}
           alignItems="flex-start"
           sx={{
-            width: 'min(1200px, 100%)',
+            width: '100%',
             minHeight: 0,
             // Extra guard: ensure content never slips under the desktop drawer.
             pl: navigationSpacing.pl,
@@ -124,7 +125,7 @@ export const SessionResultsView: React.FC = () => {
                 justifyContent: 'center',
               }}
             >
-              <CircularProgress />
+              <LoadingSpinner />
             </Box>
           ) : error || !session ? (
             <Paper sx={{ p: 3, width: '100%', maxWidth: 720 }}>

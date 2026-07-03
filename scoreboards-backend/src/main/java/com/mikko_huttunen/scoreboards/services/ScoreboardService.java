@@ -1,11 +1,9 @@
 package com.mikko_huttunen.scoreboards.services;
 
-import com.mikko_huttunen.scoreboards.Constants.Types;
 import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.*;
-import com.mikko_huttunen.scoreboards.security.AuthProvider;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,16 +25,16 @@ public class ScoreboardService {
     
     private static final Logger logger = LoggerFactory.getLogger(ScoreboardService.class);
 
-    private final MongoDBService mongoDBService;
+    private final QueryService queryService;
     private final CurrentUserContext currentUserContext;
     private final PointCategoryService pointCategoryService;
 
     @Autowired
     public ScoreboardService(
-            AuthProvider authProvider,
-            MongoDBService mongoDBService,
-            CurrentUserContext currentUserContext, PointCategoryService pointCategoryService) {
-        this.mongoDBService = mongoDBService;
+            QueryService queryService,
+            CurrentUserContext currentUserContext,
+            PointCategoryService pointCategoryService) {
+        this.queryService = queryService;
         this.currentUserContext = currentUserContext;
         this.pointCategoryService = pointCategoryService;
     }
@@ -48,61 +46,29 @@ public class ScoreboardService {
      */
     @Transactional
     public Scoreboard createScoreboard(ScoreboardDTO dto) {
-        if (dto == null) {
-            logger.error("Attempted to create scoreboard with null DTO");
-            throw new IllegalArgumentException("DTO cannot be null");
-        }
+        User user = currentUserContext.requireCurrentUser();
+        logger.info("Creating new scoreboard by user: {}", user.getId());
 
-        if (dto.getName() == null || dto.getName().trim().isEmpty()) {
-            logger.error("Attempted to create scoreboard with null or empty name");
-            throw new IllegalArgumentException("Scoreboard name cannot be null or empty");
-        }
+        UUID scoreboardId = UUID.randomUUID();
 
-        if (dto.getPointCategories() == null || dto.getPointCategories().isEmpty()) {
-            logger.error("Attempted to create scoreboard with no point categories");
-            throw new IllegalArgumentException("At least one point category is required");
-        }
+        Membership membership = new Membership();
+        membership.setScoreboardId(scoreboardId.toString());
+        membership.setUserId(user.getId());
+        membership.setPermissions(Set.of(Permission.OWNER));
 
-        try {
-            User user = currentUserContext.requireCurrentUser();
-            UUID scoreboardId = UUID.randomUUID();
+        queryService.create(membership);
 
-            //Create membership
-            Membership membership = new Membership();
-            membership.setScoreboardId(scoreboardId.toString());
-            membership.setUserId(user.getId());
-            membership.setPermissions(Set.of(Permission.OWNER));
+        pointCategoryService.createPointCategories(
+                dto.getPointCategories(), scoreboardId.toString());
 
-            // Create the scoreboard
-            Scoreboard scoreboard = new Scoreboard();
-            scoreboard.setType(Types.SCOREBOARD);
-            scoreboard.setId(scoreboardId.toString());
-            scoreboard.setName(dto.getName().trim());
-            scoreboard.setPointCategories(new HashSet<>());
-            scoreboard.setMemberships(Set.of(membership));
+        Scoreboard scoreboard = new Scoreboard();
+        scoreboard.setId(scoreboardId.toString());
+        scoreboard.setName(dto.getName().trim());
 
-            List<PointCategory> createdPointCategories = pointCategoryService.createPointCategories(
-                    dto.getPointCategories(), scoreboard.getId());
-            Set<String> pointCategoryIds = createdPointCategories.stream().map(
-                    PointCategory::getId).collect(Collectors.toSet());
+        Scoreboard createdScoreboard = queryService.create(scoreboard);
 
-            Scoreboard createdScoreboard = mongoDBService.create(scoreboard);
-
-            //Add membership to the user
-            mongoDBService.update(user.getId(), User.class, u -> u.getMemberships().add(membership));
-
-            if (createdScoreboard == null) {
-                logger.error("Failed to create scoreboard with point categories: {}", pointCategoryIds);
-                throw new RuntimeException("Failed to create scoreboard");
-            }
-
-            logger.info("Successfully created scoreboard with point categories: {}", pointCategoryIds);
-
-            return createdScoreboard;
-        } catch (Exception e) {
-            logger.error("Error creating scoreboard: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create scoreboard", e);
-        }
+        logger.info("Successfully created scoreboard with ID: {}", createdScoreboard.getId());
+        return createdScoreboard;
     }
 
     /**
@@ -111,65 +77,81 @@ public class ScoreboardService {
      */
     public List<Scoreboard> getScoreboardsByUser() {
         User user = currentUserContext.requireCurrentUser();
+        logger.info("Fetching scoreboards for user: {}", user.getId());
 
-        Query scoreboardQuery = new Query(Criteria.where("memberships.userId").is(user.getId()));
-        return mongoDBService.find(scoreboardQuery, Scoreboard.class, false);
+        Set<String> scoreboardIds = user.getMemberships().stream()
+                .map(Membership::getScoreboardId).collect(Collectors.toSet());
+
+        Query query = new Query(Criteria.where("_id").in(scoreboardIds));
+        List<Scoreboard> scoreboards = queryService.find(query, Scoreboard.class, false);
+
+        scoreboards.forEach(s ->
+                s.setMemberships(user.getMemberships().stream().filter(m ->
+                        m.getScoreboardId().equals(s.getId())).toList()));
+
+        logger.info("Found {} scoreboards for user: {}", scoreboards.size(), user.getId());
+        return scoreboards;
+    }
+
+    /**
+     * Fetch a scoreboard with related data.
+     * @param scoreboardId The scoreboard ID
+     * @return The scoreboard with related data
+     */
+    public Scoreboard getScoreboardWithData(String scoreboardId) {
+        logger.info("Fetching scoreboard: {} with data", scoreboardId);
+
+        Optional<Scoreboard> scoreboardOpt = queryService.fetchScoreboardWithData(scoreboardId);
+        Scoreboard scoreboard = scoreboardOpt.orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
+
+        logger.info("Found scoreboard with ID: {} with data", scoreboard.getId());
+        return scoreboard;
     }
     
     /**
      * Fetch a scoreboard by ID.
-     * @param id The scoreboard ID
-     * @return Optional containing the scoreboard if found and active
-     */
-    public Optional<Scoreboard> getScoreboardById(String id) {
-        return mongoDBService.findById(id, Scoreboard.class, false);
-    }
-
-    /**
-     * Get all users for a scoreboard.
      * @param scoreboardId The scoreboard ID
-     * @return List of users associated with the scoreboard
+     * @return The scoreboard if found
      */
-    public List<User> getScoreboardUsers(String scoreboardId) {
-        Scoreboard scoreboard = getScoreboardById(scoreboardId).orElseThrow();
-        Set<String> userIds = scoreboard.getMemberships().stream().map(
-                Membership::getUserId).collect(Collectors.toSet());
-        Query query = new Query(Criteria.where("_id").in(userIds));
-        return mongoDBService.find(query, User.class, false);
+    public Scoreboard getScoreboardById(String scoreboardId) {
+        logger.info("Fetching scoreboard by ID: {}", scoreboardId);
+
+        Optional<Scoreboard> scoreboardOpt = queryService.findById(scoreboardId, Scoreboard.class, false);
+        Scoreboard scoreboard = scoreboardOpt.orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
+
+        Query membershipQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
+        List<Membership> memberships = queryService.find(membershipQuery, Membership.class, false);
+        scoreboard.setMemberships(memberships);
+
+        logger.info("Found scoreboard with ID: {}", scoreboard.getId());
+        return scoreboard;
     }
     
     /**
      * Update an existing scoreboard.
-     * @param id The ID of the scoreboard to update
-     * @param updatedScoreboard The updated scoreboard data
-     * @return Optional containing the updated scoreboard if found and updated successfully
+     * @param scoreboardId The ID of the scoreboard to update
+     * @param updatedScoreboardData The updated scoreboard data
+     * @return The updated scoreboard if found and updated successfully
      */
     @Transactional
-    public Optional<Scoreboard> updateScoreboard(String id, ScoreboardDTO updatedScoreboard) {
-        if (updatedScoreboard == null) {
-            throw new IllegalArgumentException("Updated scoreboard cannot be null");
-        }
+    public Scoreboard updateScoreboard(String scoreboardId, ScoreboardDTO updatedScoreboardData) {
+        logger.info("Updating scoreboard with ID: {}", scoreboardId);
 
-        Optional<Scoreboard> existingScoreboardOpt = getScoreboardById(id);
-        if (existingScoreboardOpt.isEmpty()) {
-            return Optional.empty();
-        }
-
-        Scoreboard existingScoreboard = existingScoreboardOpt.get();
+        List<PointCategory> existingPointCategories =
+                pointCategoryService.getPointCategoriesByScoreboardId(scoreboardId);
 
         List<PointCategoryDTO> pointCategoriesToUpdate = new ArrayList<>();
         List<PointCategoryDTO> pointCategoriesToCreate = new ArrayList<>();
 
-        Set<String> existingPointCategoryIds = existingScoreboard.getPointCategories();
-        Set<String> currentPointCategoryIds = updatedScoreboard.getPointCategories().stream()
+        Set<String> existingPointCategoryIds = existingPointCategories.stream()
+                .map(PointCategory::getId).collect(Collectors.toSet());
+        Set<String> currentPointCategoryIds = updatedScoreboardData.getPointCategories().stream()
                 .map(PointCategoryDTO::getId).collect(Collectors.toSet());
         Set<String> pointCategoriesToDelete = existingPointCategoryIds.stream()
                 .filter(pcId -> !currentPointCategoryIds.contains(pcId))
                 .collect(Collectors.toSet());
 
-        pointCategoryService.deletePointCategories(pointCategoriesToDelete);
-
-        updatedScoreboard.getPointCategories().forEach(updatedCategory -> {
+        updatedScoreboardData.getPointCategories().forEach(updatedCategory -> {
             if (updatedCategory.getId() == null || updatedCategory.getId().trim().isEmpty()) {
                 pointCategoriesToCreate.add(updatedCategory);
             }
@@ -178,32 +160,32 @@ public class ScoreboardService {
             }
         });
 
-        Set<String> updatedPointCategoryIds = new HashSet<>();
-
         if (!pointCategoriesToCreate.isEmpty()) {
-            List<PointCategory> newPointCategories = pointCategoryService.createPointCategories(
-                    pointCategoriesToCreate, existingScoreboard.getId());
-            Set<String> pointCategoryIds = newPointCategories.stream()
-                    .map(PointCategory::getId).collect(Collectors.toSet());
-            updatedPointCategoryIds.addAll(pointCategoryIds);
+            pointCategoryService.createPointCategories(pointCategoriesToCreate, scoreboardId);
         }
 
         if (!pointCategoriesToUpdate.isEmpty()) {
-            List<PointCategory> updatedPointCategories = pointCategoryService.updatePointCategories(
-                    pointCategoriesToUpdate, existingScoreboard.getId());
-            Set<String> pointCategoryIds = updatedPointCategories.stream()
-                    .map(PointCategory::getId).collect(Collectors.toSet());
-            updatedPointCategoryIds.addAll(pointCategoryIds);
+            pointCategoryService.updatePointCategories(pointCategoriesToUpdate, scoreboardId);
         }
 
         if (!pointCategoriesToDelete.isEmpty()) {
             pointCategoryService.deletePointCategories(pointCategoriesToDelete);
         }
 
-        return mongoDBService.update(id, Scoreboard.class, sb -> {
-            sb.setName(updatedScoreboard.getName().trim());
-            sb.setPointCategories(updatedPointCategoryIds);
+        Optional<Scoreboard> updatedScoreboardOpt = queryService.updateById(scoreboardId, Scoreboard.class, sb -> {
+            sb.setName(updatedScoreboardData.getName().trim());
         });
+
+        Scoreboard updatedScoreboard = updatedScoreboardOpt.orElseThrow(() ->
+                new IllegalArgumentException("Scoreboard not found"));
+
+        //Update scoreboard name in invitations
+        Query invitationQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
+        queryService.update(invitationQuery, Invitation.class, invitation ->
+                invitation.setScoreboardName(updatedScoreboard.getName()));
+
+        logger.info("Successfully updated scoreboard with ID: {}", updatedScoreboard.getId());
+        return updatedScoreboard;
     }
     
     /**
@@ -213,56 +195,53 @@ public class ScoreboardService {
      */
     @Transactional
     public List<Scoreboard> deleteScoreboards(Set<String> ids) {
-        try {
-            List<Scoreboard> deletedScoreboards = mongoDBService.deleteAll(ids, Scoreboard.class);
+        logger.info("Deleting scoreboards with IDs: {}", ids);
+        List<Scoreboard> deletedScoreboards = queryService.deleteAll(ids, Scoreboard.class);
 
-            deletedScoreboards.forEach(deleted -> {
-                String id = deleted.getId();
+        deletedScoreboards.forEach(deleted -> {
+            String id = deleted.getId();
 
-                //Delete active invitations
-                Query invitationQuery = new Query(Criteria.where("scoreboardId").is(id));
-                mongoDBService.deleteByQuery(invitationQuery, Invitation.class);
+            //Delete active invitations
+            Query invitationQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(invitationQuery, Invitation.class);
 
-                //Delete all related sessions
-                Query sessionQuery = new Query(Criteria.where("scoreboardId").is(id));
-                mongoDBService.deleteByQuery(sessionQuery, Session.class);
+            //Delete all related sessions
+            Query sessionQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(sessionQuery, Session.class);
 
-                //Delete all related point categories
-                Query pointCategoryQuery = new Query(Criteria.where("scoreboardId").is(id));
-                mongoDBService.deleteByQuery(pointCategoryQuery, PointCategory.class);
+            //Delete all related point categories
+            Query pointCategoryQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(pointCategoryQuery, PointCategory.class);
 
-                //Delete related result entries
-                Query resultEntryQuery = new Query(Criteria.where("scoreboardId").is(id));
-                mongoDBService.deleteByQuery(resultEntryQuery, ResultEntry.class);
-            });
+            //Delete related result entries
+            Query resultEntryQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(resultEntryQuery, ResultEntry.class);
+        });
 
-            logger.info("Successfully deleted scoreboards with IDs: {}", ids);
-            return deletedScoreboards;
-        } catch (Exception e) {
-            logger.error("Error deleting scoreboards with IDs {}: {}", ids, e.getMessage(), e);
-            throw new RuntimeException("Failed to delete scoreboards with IDs: " + ids, e);
-        }
+        logger.info("Successfully deleted scoreboards with IDs: {}", ids);
+        return deletedScoreboards;
     }
 
+    /**
+     * Handle user leaving a scoreboard.
+     * @param scoreboardId The scoreboard ID to leave from
+     * @return true if the user was successfully removed, false otherwise
+     */
     @Transactional
     public boolean leaveScoreboard(String scoreboardId) {
-        try {
-            User user = currentUserContext.requireCurrentUser();
+        User user = currentUserContext.requireCurrentUser();
+        logger.info("User: {} is leaving the scoreboard: {}", user.getId(), scoreboardId);
 
-            //Remove membership from scoreboard
-            mongoDBService.update(scoreboardId, Scoreboard.class, scoreboard -> scoreboard.getMemberships()
-                    .removeIf(ms -> ms.getUserId().equals(user.getId())));
-            logger.info("Successfully removed user {} from scoreboard {}", user.getId(), scoreboardId);
+        //Remove membership from scoreboard
+        queryService.updateById(scoreboardId, Scoreboard.class, scoreboard -> scoreboard.getMemberships()
+                .removeIf(ms -> ms.getUserId().equals(user.getId())));
 
-            //Remove membership from user
-            mongoDBService.update(user.getId(), User.class, userToUpdate -> userToUpdate.getMemberships()
-                    .removeIf(ms -> ms.getScoreboardId().equals(scoreboardId)));
+        //Remove membership from user
+        queryService.updateById(user.getId(), User.class, userToUpdate -> userToUpdate.getMemberships()
+                .removeIf(ms -> ms.getScoreboardId().equals(scoreboardId)));
 
-            return true;
-        } catch (Exception e) {
-            logger.error("Error leaving scoreboard with ID {}: {}", scoreboardId, e.getMessage(), e);
-            throw new RuntimeException("Failed to leave scoreboard with ID: " + scoreboardId, e);
-        }
+        logger.info("User: {} successfully left the scoreboard: {}", user.getId(), scoreboardId);
+        return true;
     }
     
     /**
@@ -273,37 +252,31 @@ public class ScoreboardService {
      */
     @Transactional
     public boolean removeUserFromScoreboard(String scoreboardId, String userId) {
-        try {
-            User currentUser = currentUserContext.requireCurrentUser();
+        User currentUser = currentUserContext.requireCurrentUser();
+        logger.info("Removing user {} from scoreboard {}", userId, scoreboardId);
 
-            if (currentUser.getId().equals(userId)) {
-                logger.error("Creator {} cannot remove themselves from scoreboard {}", currentUser.getId(), scoreboardId);
-                throw new IllegalArgumentException("Cannot remove yourself from a scoreboard");
-            }
-
-            //Remove membership from scoreboard
-            mongoDBService.update(scoreboardId, Scoreboard.class, scoreboard -> {
-                if (scoreboard.getCreatedBy().equals(currentUser.getId())) {
-                    scoreboard.getMemberships().removeIf(ms -> ms.getUserId().equals(userId));
-                } else {
-                    logger.error("User {} is not the creator of scoreboard {}", currentUser.getId(), scoreboardId);
-                    throw new IllegalArgumentException("Only the creator can remove users from a scoreboard");
-                }
-            });
-
-            //Remove membership from user
-            mongoDBService.update(userId, User.class, userToUpdate ->
-                    userToUpdate.getMemberships().removeIf(ms ->
-                            ms.getScoreboardId().equals(scoreboardId)));
-
-            return true;
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error removing user: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error removing user {} from scoreboard {}: {}", userId, scoreboardId, e.getMessage(), e);
-            throw new RuntimeException("Failed to remove user from scoreboard: " + e.getMessage(), e);
+        if (currentUser.getId().equals(userId)) {
+            logger.error("Creator {} cannot remove themselves from scoreboard {}", currentUser.getId(), scoreboardId);
+            throw new IllegalArgumentException("Cannot remove yourself from a scoreboard");
         }
+
+        //Remove membership from scoreboard
+        queryService.updateById(scoreboardId, Scoreboard.class, scoreboard -> {
+            if (scoreboard.getCreatedBy().equals(currentUser.getId())) {
+                scoreboard.getMemberships().removeIf(ms -> ms.getUserId().equals(userId));
+            } else {
+                logger.error("User {} is not the creator of scoreboard {}", currentUser.getId(), scoreboardId);
+                throw new IllegalArgumentException("Only the creator can remove users from a scoreboard");
+            }
+        });
+
+        //Remove membership from user
+        queryService.updateById(userId, User.class, userToUpdate ->
+                userToUpdate.getMemberships().removeIf(ms ->
+                        ms.getScoreboardId().equals(scoreboardId)));
+
+        logger.info("Successfully removed user {} from scoreboard {}", userId, scoreboardId);
+        return true;
     }
 }
 

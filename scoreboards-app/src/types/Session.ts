@@ -1,5 +1,6 @@
 export type Session = {
   id: string;
+  type: string;
   scoreboardId: string;
   scoreboardName: string;
   createdByName: string;
@@ -15,17 +16,18 @@ export type Session = {
 
 export const Session = {
   create: (data: Session): Session => ({
-    id: data.id ?? '',
-    scoreboardId: data.scoreboardId ?? '',
-    scoreboardName: data.scoreboardName ?? '',
-    createdByName: data.createdByName ?? '',
-    isPending: data.isPending ?? false,
-    participants: data.participants ?? new Set(),
-    pointCategories: data.pointCategories ?? new Set(),
-    resultEntries: data.resultEntries ?? new Set(),
-    created: data.created ?? new Date(),
-    lastModified: data.lastModified ?? new Date(),
-    createdBy: data.createdBy ?? '',
-    isActive: data.isActive ?? true,
+    id: data.id,
+    type: data.type,
+    scoreboardId: data.scoreboardId,
+    scoreboardName: data.scoreboardName,
+    createdByName: data.createdByName,
+    isPending: data.isPending,
+    participants: data.participants,
+    pointCategories: data.pointCategories,
+    resultEntries: data.resultEntries,
+    created: data.created,
+    lastModified: data.lastModified,
+    createdBy: data.createdBy,
+    isActive: data.isActive,
   }),
 };

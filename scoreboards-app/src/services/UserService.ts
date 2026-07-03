@@ -25,6 +25,20 @@ export class UserService {
     }
   }
 
+  static async getScoreboardUsers(scoreboardId: string): Promise<User[]> {
+    try {
+      const response = await apiClient.get<User[]>(
+        `${API_BASE_URL}/${scoreboardId}/users`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`Failed to fetch users: ${error.message}`);
+      }
+      throw new Error(`Failed to fetch users: ${error}`);
+    }
+  }
+
   static async updateCurrentUser(name?: string): Promise<User> {
     const formData = new FormData();
     if (name !== undefined) {
@@ -51,7 +65,7 @@ export class UserService {
     }
   }
 
-  static async deleteCurrentUser(): Promise<boolean> {
+  static async deleteCurrentUser(): Promise<User> {
     try {
       const response = await apiClient.delete(`${API_BASE_URL}/user`);
       return response.data;

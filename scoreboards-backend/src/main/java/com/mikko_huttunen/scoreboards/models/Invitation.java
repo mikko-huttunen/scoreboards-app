@@ -1,7 +1,6 @@
 package com.mikko_huttunen.scoreboards.models;
 
 import com.mikko_huttunen.scoreboards.enums.Permission;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -21,32 +20,27 @@ public class Invitation extends Auditable {
     private String id;
     
     @Field("receiverId")
-    @NotBlank(message = "Receiver ID cannot be blank")
+    @NotNull(message = "Receiver ID cannot be null")
     private String receiverId;
 
     @Field("receiverName")
-    @NotBlank(message = "Receiver name cannot be blank")
+    @NotNull(message = "Receiver name cannot be null")
     private String receiverName;
 
-    @Field("createdByName")
-    @NotBlank(message = "Created by name cannot be blank")
-    private String createdByName;
+    @Field("inviterName")
+    @NotNull(message = "Inviter name cannot be null")
+    private String inviterName;
     
     @Field("scoreboardId")
-    @NotBlank(message = "Scoreboard ID cannot be blank")
+    @NotNull(message = "Scoreboard ID cannot be null")
     private String scoreboardId;
     
     @Field("scoreboardName")
-    @NotBlank(message = "Scoreboard name cannot be blank")
+    @NotNull(message = "Scoreboard name cannot be null")
     private String scoreboardName;
 
     @Field("permissions")
-    @NotNull(message = "Permissions cannot be null")
     private Set<Permission> permissions;
-    
-    @Field("isPending")
-    @NotNull(message = "IsPending cannot be null")
-    private Boolean isPending = true;
     
     @Field("acceptedDate")
     private Date acceptedDate;
@@ -71,12 +65,12 @@ public class Invitation extends Auditable {
 
     public void setReceiverName(String receiverName) { this.receiverName = receiverName; }
 
-    public String getCreatedByName() {
-        return createdByName;
+    public String getInviterName() {
+        return inviterName;
     }
 
-    public void setCreatedByName(String senderName) {
-        this.createdByName = senderName;
+    public void setInviterName(String inviterName) {
+        this.inviterName = inviterName;
     }
 
     public String getScoreboardId() {
@@ -103,14 +97,6 @@ public class Invitation extends Auditable {
         this.permissions = permissions;
     }
 
-    public Boolean getIsPending() {
-        return isPending;
-    }
-
-    public void setIsPending(Boolean isPending) {
-        this.isPending = isPending;
-    }
-
     public Date getAcceptedDate() {
         return acceptedDate;
     }
@@ -123,11 +109,13 @@ public class Invitation extends Auditable {
     public String toString() {
         return "Invitation{" +
                 "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", receiverId='" + receiverId + '\'' +
+                ", receiverName='" + receiverName + '\'' +
+                ", inviterName='" + inviterName + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", scoreboardName='" + scoreboardName + '\'' +
                 ", permissions=" + permissions +
-                ", isPending=" + isPending +
                 ", acceptedDate=" + acceptedDate +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +

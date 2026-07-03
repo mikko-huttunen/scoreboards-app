@@ -10,12 +10,14 @@ type ScoreboardsListProps = {
   scoreboards: Scoreboard[];
   onDelete: (scoreboard: Scoreboard) => void;
   onLeave: (scoreboard: Scoreboard) => void;
+  isLoading: boolean;
 };
 
 export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
   scoreboards,
   onDelete,
   onLeave,
+  isLoading,
 }) => {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
@@ -56,6 +58,8 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
       onCustom={(row) => onLeave(row.scoreboard)}
       canCustom={(row) => row.canLeave}
       onCustomIcon={<ExitToAppIcon />}
+      customTooltip={'Leave'}
+      isLoading={isLoading}
     />
   );
 };

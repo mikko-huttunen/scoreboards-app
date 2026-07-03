@@ -65,6 +65,7 @@ public class PointCategory extends Auditable {
     public String toString() {
         return "PointCategory{" +
                 "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", name='" + name + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", color='" + color + '\'' +

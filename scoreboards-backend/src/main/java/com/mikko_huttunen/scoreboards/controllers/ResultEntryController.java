@@ -48,17 +48,9 @@ public class ResultEntryController {
     public ResponseEntity<List<ResultEntry>> getResultEntriesByScoreboard(@PathVariable String scoreboardId) {
         logger.info("GET /api/result-entries/scoreboard/{} - Fetching result entries", scoreboardId);
 
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            logger.warn("GET /api/result-entries/scoreboard/{} - Invalid scoreboard ID", scoreboardId);
-            return ResponseEntity.badRequest().build();
-        }
+        List<ResultEntry> resultEntries = resultEntryService.getResultEntriesByScoreboard(scoreboardId);
 
-        try {
-            return ResponseEntity.ok(resultEntryService.getResultEntriesByScoreboard(scoreboardId));
-        } catch (Exception e) {
-            logger.error("GET /api/result-entries/scoreboard/{} - Error fetching result entries", scoreboardId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(resultEntries);
     }
     
     /**
@@ -68,19 +60,11 @@ public class ResultEntryController {
     @GetMapping("/user")
     public ResponseEntity<List<ResultEntry>> getResultEntriesByUser() {
         User user = currentUserContext.requireCurrentUser();
-        logger.info("GET /api/result-entries/user - Fetching result entries for user: {}", user.getId());
-        
-        try {
-            List<ResultEntry> entries = resultEntryService.getResultEntriesByUser(user.getId());
-            logger.info("GET /api/result-entries/user - Found {} result entries", entries.size());
-            return ResponseEntity.ok(entries);
-        } catch (IllegalArgumentException e) {
-            logger.warn("GET /api/result-entries/user - Invalid request: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("GET /api/result-entries/user - Error fetching result entries: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        logger.info("GET /api/result-entries/user - Fetching result entries for current user");
+
+        List<ResultEntry> entries = resultEntryService.getResultEntriesByUser(user.getId());
+
+        return ResponseEntity.status(HttpStatus.OK).body(entries);
     }
     
     /**
@@ -91,25 +75,10 @@ public class ResultEntryController {
     @GetMapping("/{id}")
     public ResponseEntity<ResultEntry> getResultEntryById(@PathVariable String id) {
         logger.info("GET /api/result-entries/{} - Fetching result entry", id);
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("GET /api/result-entries/{} - Invalid result entry ID", id);
-            return ResponseEntity.badRequest().build();
-        }
-        
-        try {
-            ResultEntry entry = resultEntryService.getResultEntryById(id);
-            if (entry != null) {
-                logger.info("GET /api/result-entries/{} - Found result entry", id);
-                return ResponseEntity.ok(entry);
-            } else {
-                logger.warn("GET /api/result-entries/{} - Result entry not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (Exception e) {
-            logger.error("GET /api/result-entries/{} - Error fetching result entry: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        ResultEntry entry = resultEntryService.getResultEntryById(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(entry);
     }
     
     /**
@@ -124,37 +93,9 @@ public class ResultEntryController {
             @Valid @RequestBody UpdateResultEntryDTO dto) {
         logger.info("PUT /api/result-entries/{} - Updating result entry", id);
 
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("PUT /api/result-entries/{} - Invalid result entry ID", id);
-            return ResponseEntity.badRequest().build();
-        }
+        ResultEntry updatedEntry = resultEntryService.updateResultEntry(id, dto.getResults());
 
-        if (dto == null) {
-            logger.warn("PUT /api/result-entries/{} - Request body is null", id);
-            return ResponseEntity.badRequest().build();
-        }
-        
-        try {
-            ResultEntry updatedEntry = resultEntryService.updateResultEntry(
-                    id,
-                    dto.getScoreboardId(),
-                    dto.getSessionId(),
-                    dto.getResults());
-            if (updatedEntry != null) {
-                logger.info("PUT /api/result-entries/{} - Successfully updated result entry", id);
-                return ResponseEntity.ok(updatedEntry);
-            } else {
-                logger.warn("PUT /api/result-entries/{} - Result entry not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.warn("PUT /api/result-entries/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("PUT /api/result-entries/{} - Error updating result entry: {}",
-                    id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(updatedEntry);
     }
     
     /**
@@ -165,22 +106,10 @@ public class ResultEntryController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ResultEntry> deleteResultEntry(@PathVariable String id) {
         logger.info("DELETE /api/result-entries/{} - Deleting result entry", id);
-        
-        try {
-            ResultEntry deleted = resultEntryService.deleteResultEntry(id);
-            if (deleted == null) {
-                logger.warn("DELETE /api/result-entries/{} - Result entry not found", id);
-                return ResponseEntity.notFound().build();
-            }
-            logger.info("DELETE /api/result-entries/{} - Successfully deleted result entry", id);
-            return ResponseEntity.ok(deleted);
-        } catch (IllegalArgumentException e) {
-            logger.warn("DELETE /api/result-entries/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("DELETE /api/result-entries/{} - Error deleting result entry: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        ResultEntry deleted = resultEntryService.deleteResultEntry(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }
 }
 

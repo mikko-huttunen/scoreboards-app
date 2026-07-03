@@ -101,6 +101,7 @@ public class ResultEntry extends Auditable {
     public String toString() {
         return "ResultEntry{" +
                 "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", sessionId='" + sessionId + '\'' +
                 ", userId='" + userId + '\'' +

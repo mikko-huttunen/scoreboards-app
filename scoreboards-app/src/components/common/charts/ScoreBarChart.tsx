@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Avatar,
-  Box,
-  CircularProgress,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Avatar, Box, Paper, Stack, Typography } from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -19,6 +12,7 @@ import {
   LabelList,
   type LegendProps,
 } from 'recharts';
+import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
 
 export type ScoreBarSeries = {
   key: string; // Field name in each data row (e.g. 'Math', 'Scrabble', ...)
@@ -286,7 +280,7 @@ export const ScoreBarChart: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey]);
 
-  if (loading) return <CircularProgress />;
+  if (loading) return <LoadingSpinner />;
 
   const CustomLegend: React.FC<LegendProps> = () => {
     return (
@@ -362,20 +356,6 @@ export const ScoreBarChart: React.FC<Props> = ({
         border: '1px solid rgba(56, 161, 79, 0.14)',
         background: 'linear-gradient(180deg, #ffffff 0%, #fbfdfb 100%)',
         boxShadow: '0 12px 30px rgba(0, 0, 0, 0.06)',
-        // Animated glowing edge for the leading user's bar, switched on only
-        // once the load animation has completed.
-        '@keyframes leaderGlow': {
-          '0%, 100%': {
-            filter: 'drop-shadow(0 0 1px rgba(255,179,0,0.9))',
-          },
-          '50%': {
-            filter:
-              'drop-shadow(0 0 5px rgba(255,179,0,0.95)) drop-shadow(0 0 9px rgba(255,213,79,0.85))',
-          },
-        },
-        '& .leader-bar': {
-          animation: 'leaderGlow 2s ease-in-out infinite',
-        },
       }}
     >
       <Box sx={{ p: { xs: 2, sm: 3 }, pb: 1 }}>
@@ -464,7 +444,7 @@ export const ScoreBarChart: React.FC<Props> = ({
                       const rowLabel = String(row[labelKey] ?? '');
                       const isLeader =
                         leaderName != null && rowLabel === leaderName;
-                      // Gold edge + animated glow appear only once loaded.
+                      // Gold edges appear only once loaded.
                       const showGlow = isLeader && animationComplete;
                       return (
                         <Cell

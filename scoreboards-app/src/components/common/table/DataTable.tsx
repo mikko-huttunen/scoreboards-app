@@ -3,7 +3,6 @@ import {
   Badge,
   Box,
   Button,
-  CircularProgress,
   IconButton,
   Paper,
   Stack,
@@ -20,6 +19,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
 
 type DataTableRow = Record<string, unknown>;
 
@@ -29,7 +29,7 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   title?: string;
   isLoading?: boolean;
   emptyText?: string;
-  showBadge?: boolean;
+  showHighlight?: boolean;
   canCreate?: boolean | ((row: T) => boolean);
   onCreate?: () => void | Promise<void> | null;
   canAdd?: boolean | ((row: T) => boolean);
@@ -41,6 +41,7 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   canCustom?: boolean | ((row: T) => boolean);
   onCustom?: (row: T) => void | Promise<void> | null;
   onCustomIcon?: React.ReactNode;
+  customTooltip?: string;
   pageSize?: number;
   onRowClick?: (row: T) => void;
   getRowId?: (row: T, index: number) => React.Key;
@@ -97,7 +98,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   title,
   isLoading = false,
   emptyText = 'No data',
-  showBadge = false,
+  showHighlight = false,
   onCreate,
   canCreate = false,
   onAdd,
@@ -109,6 +110,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   onCustom,
   canCustom = false,
   onCustomIcon,
+  customTooltip,
   pageSize = 10,
   onRowClick,
   getRowId,
@@ -248,7 +250,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             sx={{ width: '100%' }}
           >
             {title ? (
-              showBadge ? (
+              showHighlight ? (
                 <Stack direction="row" alignItems="center" spacing={2}>
                   <Typography variant="h6" sx={{ color: '#1b5e20' }}>
                     {title}
@@ -325,7 +327,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                     colSpan={columnCount}
                     sx={{ py: 4, textAlign: 'center' }}
                   >
-                    <CircularProgress />
+                    <LoadingSpinner size={30} />
                   </TableCell>
                 </TableRow>
               ) : data.length === 0 ? (
@@ -382,7 +384,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                         >
                           <Stack
                             direction="row"
-                            spacing={1}
+                            spacing={0}
                             justifyContent="flex-end"
                             flexWrap="nowrap"
                           >
@@ -390,9 +392,11 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               <Tooltip title="Edit">
                                 <IconButton
                                   size="small"
-                                  color="primary"
                                   onClick={() => onEdit?.(row)}
                                   aria-label="edit row"
+                                  sx={{
+                                    color: '#38a14f',
+                                  }}
                                 >
                                   <EditIcon fontSize="small" />
                                 </IconButton>
@@ -403,9 +407,11 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               <Tooltip title="Delete">
                                 <IconButton
                                   size="small"
-                                  color="error"
                                   onClick={() => onDelete?.(row)}
                                   aria-label="delete row"
+                                  sx={{
+                                    color: '#38a14f',
+                                  }}
                                 >
                                   <DeleteIcon />
                                 </IconButton>
@@ -413,12 +419,14 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                             )}
 
                             {showCustom && (
-                              <Tooltip title="Custom action">
+                              <Tooltip title={customTooltip ?? null}>
                                 <IconButton
                                   size="small"
-                                  color="secondary"
                                   onClick={() => onCustom?.(row)}
                                   aria-label="custom row action"
+                                  sx={{
+                                    color: '#38a14f',
+                                  }}
                                 >
                                   {onCustomIcon ?? (
                                     <EditIcon fontSize="small" />
@@ -453,45 +461,13 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
     );
   };
 
-  /*
-  const renderHighlightedContent = () => {
-    return (
-      <Box
-        sx={{
-          border: '2px solid #38a14f',
-          backgroundColor: '#f1f8f4',
-          borderRadius: 1,
-          p: 2,
-          animation:
-            'pulse 2s ease-in-out infinite, lightPulse 3s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': {
-              opacity: 1,
-            },
-            '50%': {
-              opacity: 0.95,
-            },
-          },
-          '@keyframes lightPulse': {
-            '0%, 100%': {
-              backgroundColor: '#f1f8f4',
-              borderColor: '#38a14f',
-            },
-            '50%': {
-              backgroundColor: '#e8f5e9',
-              borderColor: '#4caf50',
-            },
-          },
-        }}
-      >
-        {renderContent()}
-      </Box>
-    );
-  };
-  */
-
   return (
-    <Stack sx={{ width: '100%' }} spacing={2}>
+    <Stack
+      sx={{ width: '100%' }}
+      spacing={2}
+      border={showHighlight ? 'solid 3px greenyellow' : 'none'}
+      borderRadius={showHighlight ? '4px' : 'none'}
+    >
       {renderContent()}
     </Stack>
   );

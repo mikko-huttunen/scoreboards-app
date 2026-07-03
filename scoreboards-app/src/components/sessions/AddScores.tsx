@@ -7,7 +7,6 @@ import {
   Button,
   Paper,
   Alert,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,6 +18,7 @@ import type { PointCategory } from '../../types/PointCategory.ts';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
 import type { Result } from '../../types/Result.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 export type AddScoresProps = {
   open: boolean;
@@ -181,7 +181,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
       <DialogContent dividers>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
+            <LoadingSpinner />
           </Box>
         ) : (
           <Paper elevation={0} sx={{ p: 0 }}>
@@ -246,11 +246,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
           disabled={submitting || success || !resultEntry}
           sx={{ backgroundColor: '#38a14f', color: '#fff' }}
         >
-          {submitting ? (
-            <CircularProgress size={20} sx={{ color: '#fff' }} />
-          ) : (
-            'Submit Scores'
-          )}
+          {submitting ? <LoadingSpinner size={20} /> : 'Submit Scores'}
         </Button>
       </DialogActions>
     </Dialog>

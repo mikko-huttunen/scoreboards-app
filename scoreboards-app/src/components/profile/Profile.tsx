@@ -1,57 +1,44 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   Stack,
   TextField,
   Typography,
-  Alert,
-  CircularProgress,
 } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigationSpacing } from '../navigation/Navigation';
 import { UserService } from '../../services/UserService';
 import './Profile.css';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 export const ProfileView: React.FC = () => {
   const { user: auth0User, logout } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
-  const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { user, isLoadingUser } = useCurrentUser();
+  const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
 
   const avatarUrl = useMemo(() => {
     return auth0User?.picture ?? undefined;
   }, [avatarFile, user?.avatar, auth0User?.picture]);
 
-  const handlePickAvatar = () => fileInputRef.current?.click();
-
-  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const file = e.target.files?.[0] ?? null;
-    setAvatarFile(file);
-  };
-
   const handleSave = async () => {
     if (saving || !user) return;
     setSaving(true);
-    setError(null);
     try {
       await UserService.updateCurrentUser(username);
+      showSuccessMessage('User updated successfully');
     } catch (err) {
-      console.error('Error saving profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save profile');
+      showErrorMessage('Failed to update user');
     } finally {
       setSaving(false);
     }
@@ -60,14 +47,12 @@ export const ProfileView: React.FC = () => {
   const handleDelete = async () => {
     if (deleting || !user) return;
     setDeleting(true);
-    setError(null);
     try {
       await UserService.deleteCurrentUser();
       setConfirmOpen(false);
-      logout({ logoutParams: { returnTo: window.location.origin } });
+      await logout({ logoutParams: { returnTo: window.location.origin } });
     } catch (err) {
-      console.error('Error deleting user:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete account');
+      showErrorMessage('Failed to delete user');
       setDeleting(false);
     }
   };
@@ -95,28 +80,14 @@ export const ProfileView: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <CircularProgress />
+          <LoadingSpinner />
         </Box>
       </Box>
     );
   }
 
   if (!user) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          backgroundColor: '#ffffff',
-          position: 'relative',
-        }}
-      >
-        <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
-          <Alert severity="error">
-            {error || 'Failed to load user profile'}
-          </Alert>
-        </Box>
-      </Box>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -129,20 +100,11 @@ export const ProfileView: React.FC = () => {
     >
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack spacing={4} alignItems="flex-start">
-          {error && (
-            <Alert
-              severity="error"
-              onClose={() => setError(null)}
-              sx={{ width: 'min(1200px, 100%)' }}
-            >
-              {error}
-            </Alert>
-          )}
           <Stack
             direction="row"
             alignItems="center"
             justifyContent="space-between"
-            sx={{ width: 'min(1200px, 100%)' }}
+            sx={{ width: '100%' }}
           >
             <Typography variant="h4" sx={{ color: '#1b5e20' }}>
               Profile
@@ -166,31 +128,15 @@ export const ProfileView: React.FC = () => {
           <Stack
             spacing={2}
             alignItems="center"
-            sx={{ width: 'min(1200px, 100%)', alignSelf: 'flex-start' }}
+            sx={{ width: 'min(1200px, 100%)', alignSelf: 'center' }}
           >
             <Avatar src={avatarUrl} sx={{ width: 112, height: 112 }} />
-            <input
-              id="avatar-file-input"
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="file-input-hidden"
-            />
-            <Button
-              variant="contained"
-              onClick={handlePickAvatar}
-              sx={{
-                backgroundColor: '#ffffff',
-                color: '#38a14f',
-                ':hover': { backgroundColor: '#f7f7f7' },
-              }}
-            >
-              Change Avatar
-            </Button>
           </Stack>
 
-          <Stack spacing={2} sx={{ width: 'min(1200px, 100%)' }}>
+          <Stack
+            spacing={2}
+            sx={{ width: 'min(300px, 100%)', alignSelf: 'center' }}
+          >
             <TextField
               label="Username"
               value={username}
@@ -217,7 +163,7 @@ export const ProfileView: React.FC = () => {
                   ':hover': { backgroundColor: '#f7f7f7' },
                 }}
               >
-                {saving ? <CircularProgress size={24} /> : 'Save Changes'}
+                {saving ? <LoadingSpinner size={24} /> : 'Save Changes'}
               </Button>
               <Button
                 variant="outlined"
@@ -230,26 +176,17 @@ export const ProfileView: React.FC = () => {
           </Stack>
         </Stack>
 
-        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-          <DialogTitle>Confirm Deletion</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              This will permanently delete your account and its data. This
-              action cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button
-              color="error"
-              onClick={handleDelete}
-              autoFocus
-              disabled={deleting}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <ConfirmDialog
+          open={confirmOpen}
+          onCancel={() => setConfirmOpen(false)}
+          title={'Confirm Delete Account'}
+          text={
+            'This will permanently delete your account and its data. This action cannot be undone.'
+          }
+          onConfirm={handleDelete}
+          confirmLabel={'Delete'}
+          confirmDisabled={deleting}
+        />
       </Box>
     </Box>
   );

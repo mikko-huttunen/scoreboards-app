@@ -2,14 +2,14 @@ import { PERMISSIONS } from '../constants.ts';
 
 export type Invitation = {
   id: string;
+  type: string;
   receiverId: string;
   receiverName: string;
-  createdByName: string;
+  inviterName: string;
   scoreboardId: string;
   scoreboardName: string;
   permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][];
-  isPending: boolean;
-  acceptedDate: string;
+  acceptedDate: string | null;
   created: string;
   lastModified: string;
   createdBy: string;
@@ -18,18 +18,18 @@ export type Invitation = {
 
 export const Invitation = {
   create: (data: Invitation): Invitation => ({
-    id: data.id ?? '',
-    receiverId: data.receiverId ?? '',
-    receiverName: data.receiverName ?? '',
-    createdByName: data.createdByName ?? '',
-    scoreboardId: data.scoreboardId ?? '',
-    scoreboardName: data.scoreboardName ?? '',
+    id: data.id,
+    type: data.type,
+    receiverId: data.receiverId,
+    receiverName: data.receiverName,
+    inviterName: data.inviterName,
+    scoreboardId: data.scoreboardId,
+    scoreboardName: data.scoreboardName,
     permissions: data.permissions ?? [],
-    isPending: data.isPending ?? true,
-    acceptedDate: data.acceptedDate ?? '',
-    created: data.created ?? '',
-    lastModified: data.lastModified ?? '',
-    createdBy: data.createdBy ?? '',
-    isActive: data.isActive ?? true,
+    acceptedDate: data.acceptedDate,
+    created: data.created,
+    lastModified: data.lastModified,
+    createdBy: data.createdBy,
+    isActive: data.isActive,
   }),
 };

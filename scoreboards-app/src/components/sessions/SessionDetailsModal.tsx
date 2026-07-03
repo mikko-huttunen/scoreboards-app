@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import {
   Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -19,6 +18,7 @@ import {
   type ScoreBarSeries,
 } from '../common/charts/ScoreBarChart.tsx';
 import { useDateFormat } from '../../utils/Utils.ts';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 type SessionDetailsModalProps = {
   open: boolean;
@@ -76,7 +76,7 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
     for (const entry of entriesForSession) {
       const user = userById.get(entry.userId);
       const name = user?.name || user?.email || '[Removed user]';
-      const resultsArray = Array.from(entry.results ?? []);
+      const resultsArray = entry.results;
       if (!resultsByUserName.has(name)) resultsByUserName.set(name, []);
       resultsByUserName.set(name, [
         ...(resultsByUserName.get(name) ?? []),
@@ -119,7 +119,7 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
       <DialogContent>
         {!hasEnoughData ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
+            <LoadingSpinner />
           </Box>
         ) : (
           <ScoreBarChart

@@ -2,7 +2,6 @@ package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
-import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.services.ScoreboardService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -13,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -41,20 +39,11 @@ public class ScoreboardController {
      */
     @PostMapping
     public ResponseEntity<Scoreboard> createScoreboard(@Valid @RequestBody ScoreboardDTO dto) {
-        logger.info("POST /api/scoreboards - Creating new scoreboard with name: {}", dto.getName());
+        logger.info("POST /api/scoreboards - Creating new scoreboard");
 
-        try {
-            Scoreboard createdScoreboard = scoreboardService.createScoreboard(dto);
-            logger.info("POST /api/scoreboards - Successfully created scoreboard with ID: {}",
-                    createdScoreboard.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdScoreboard);
-        } catch (IllegalArgumentException e) {
-            logger.warn("POST /api/scoreboards - Invalid request: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("POST /api/scoreboards - Error creating scoreboard: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        Scoreboard createdScoreboard = scoreboardService.createScoreboard(dto);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdScoreboard);
     }
 
     /**
@@ -66,53 +55,23 @@ public class ScoreboardController {
         logger.info("GET /api/scoreboards - Fetching scoreboards for user");
 
         List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
-        logger.info("GET /api/scoreboards - Successfully retrieved {} scoreboards for user", scoreboards.size());
+
         return ResponseEntity.status(HttpStatus.OK).body(scoreboards);
 
     }
 
     /**
-     * Get a scoreboard by ID.
+     * Get a scoreboard by ID with all associated data.
      * @param id The scoreboard ID
-     * @return ResponseEntity containing the scoreboard if found
+     * @return ResponseEntity containing the scoreboard with all related data if found
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Scoreboard> getScoreboardById(@PathVariable String id) {
+    public ResponseEntity<Scoreboard> getScoreboardWithData(@PathVariable String id) {
         logger.info("GET /api/scoreboards/{} - Fetching scoreboard", id);
 
-        try {
-            Optional<Scoreboard> scoreboard = scoreboardService.getScoreboardById(id);
+        Scoreboard scoreboard = scoreboardService.getScoreboardWithData(id);
 
-            if (scoreboard.isPresent()) {
-                logger.info("GET /api/scoreboards/{} - Successfully retrieved scoreboard", id);
-                return ResponseEntity.ok(scoreboard.get());
-            } else {
-                logger.warn("GET /api/scoreboards/{} - Scoreboard not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (Exception e) {
-            logger.error("GET /api/scoreboards/{} - Error fetching scoreboard: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    /**
-     * Get all members for a scoreboard.
-     * @param scoreboardId The ID of the scoreboard
-     * @return ResponseEntity containing a list of users
-     */
-    @GetMapping("/{scoreboardId}/users")
-    public ResponseEntity<List<User>> getScoreboardUsers(@PathVariable String scoreboardId) {
-        logger.info("GET /api/scoreboard/{}/users - Fetching users for scoreboard", scoreboardId);
-
-        try {
-            List<User> users = scoreboardService.getScoreboardUsers(scoreboardId);
-            logger.info("GET /api/scoreboards/{}/users - Successfully retrieved {} users", scoreboardId, users.size());
-            return ResponseEntity.ok(users);
-        } catch (Exception e) {
-            logger.error("GET /api/scoreboards/{}/users - Error fetching users: {}", scoreboardId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(scoreboard);
     }
 
     /**
@@ -127,23 +86,9 @@ public class ScoreboardController {
             @Valid @RequestBody ScoreboardDTO scoreboard) {
         logger.info("PUT /api/scoreboards/{} - Updating scoreboard", id);
 
-        try {
-            Optional<Scoreboard> updatedScoreboard = scoreboardService.updateScoreboard(id, scoreboard);
+        Scoreboard updatedScoreboard = scoreboardService.updateScoreboard(id, scoreboard);
 
-            if (updatedScoreboard.isPresent()) {
-                logger.info("PUT /api/scoreboards/{} - Successfully updated scoreboard", id);
-                return ResponseEntity.ok(updatedScoreboard.get());
-            } else {
-                logger.warn("PUT /api/scoreboards/{} - Scoreboard not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.warn("PUT /api/scoreboards/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("PUT /api/scoreboards/{} - Error updating scoreboard: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(updatedScoreboard);
     }
 
     /**
@@ -155,22 +100,9 @@ public class ScoreboardController {
     public ResponseEntity<Scoreboard> deleteScoreboard(@PathVariable String id) {
         logger.info("DELETE /api/scoreboards/{} - Deleting scoreboard", id);
 
-        try {
-            List<Scoreboard> deleted = scoreboardService.deleteScoreboards(Set.of(id));
-            if (deleted.isEmpty()) {
-                logger.warn("DELETE /api/scoreboards/{} - Scoreboard not found", id);
-                return ResponseEntity.notFound().build();
-            }
+        List<Scoreboard> deleted = scoreboardService.deleteScoreboards(Set.of(id));
 
-            logger.info("DELETE /api/scoreboards/{} - Successfully deleted scoreboard", id);
-            return ResponseEntity.ok(deleted.getFirst());
-        } catch (IllegalArgumentException e) {
-            logger.warn("DELETE /api/scoreboards/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("DELETE /api/scoreboards/{} - Error deleting scoreboard: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(deleted.getFirst());
     }
     
     /**
@@ -180,24 +112,11 @@ public class ScoreboardController {
      */
     @PostMapping("/{id}/leave")
     public ResponseEntity<Void> leaveScoreboard(@PathVariable String id) {
-        logger.info("POST /api/scoreboards/{}/leave - User leaving scoreboard", id);
-        
-        try {
-            boolean left = scoreboardService.leaveScoreboard(id);
-            if (left) {
-                logger.info("POST /api/scoreboards/{}/leave - Successfully left scoreboard", id);
-                return ResponseEntity.noContent().build();
-            } else {
-                logger.warn("POST /api/scoreboards/{}/leave - User is not a member of scoreboard", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.error("POST /api/scoreboards/{}/leave - Bad request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("POST /api/scoreboards/{}/leave - Error: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        logger.info("POST /api/scoreboards/{}/leave - User is leaving scoreboard", id);
+
+        scoreboardService.leaveScoreboard(id);
+
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
     
     /**
@@ -210,23 +129,10 @@ public class ScoreboardController {
             @PathVariable String scoreboardId,
             @PathVariable String userId) {
         logger.info("POST /api/scoreboards/{}/remove/{} - Removing user from scoreboard", scoreboardId, userId);
-        
-        try {
-            boolean removed = scoreboardService.removeUserFromScoreboard(scoreboardId, userId);
-            if (removed) {
-                logger.info("POST /api/scoreboards/{}/remove/{} - Successfully removed user", scoreboardId, userId);
-                return ResponseEntity.noContent().build();
-            } else {
-                logger.warn("POST /api/scoreboards/{}/remove/{} - User is not a member of scoreboard", scoreboardId, userId);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.error("POST /api/scoreboards/{}/remove/{} - Bad request: {}", scoreboardId, userId, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("POST /api/scoreboards/{}/remove/{} - Error: {}", scoreboardId, userId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        scoreboardService.removeUserFromScoreboard(scoreboardId, userId);
+
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 }
 

@@ -24,19 +24,16 @@ public class SessionService {
 
     private final ResultEntryService resultEntryService;
     private final CurrentUserContext currentUserContext;
-    private final ScoreboardService scoreboardService;
-    private final MongoDBService mongoDBService;
+    private final QueryService queryService;
     
     @Autowired
     public SessionService(
             ResultEntryService resultEntryService,
             CurrentUserContext currentUserContext,
-            ScoreboardService scoreboardService,
-            MongoDBService mongoDBService) {
+            QueryService queryService) {
         this.resultEntryService = resultEntryService;
         this.currentUserContext = currentUserContext;
-        this.scoreboardService = scoreboardService;
-        this.mongoDBService = mongoDBService;
+        this.queryService = queryService;
     }
 
     /**
@@ -56,78 +53,44 @@ public class SessionService {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Creating new session for scoreboard: {} by user: {}", scoreboardName, currentUser.getId());
 
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            logger.error("Invalid scoreboard ID provided: {}", scoreboardId);
-            throw new IllegalArgumentException("Scoreboard ID cannot be null or empty");
-        }
+        Set<String> allParticipantIds = new HashSet<>();
 
-        if (scoreboardName == null || scoreboardName.trim().isEmpty()) {
-            logger.error("Invalid scoreboard name provided: {}", scoreboardName);
-            throw new IllegalArgumentException("Scoreboard name cannot be null or empty");
-        }
+        //Verify participants exist and belong to the scoreboard
+        allParticipantIds.add(currentUser.getId());
+        Query scoreboardUsersQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
+        List<Membership> memberships = queryService.find(scoreboardUsersQuery, Membership.class, false);
+        allParticipantIds.addAll(memberships.stream().map(Membership::getUserId).collect(Collectors.toSet()));
 
-        if (participantIds == null || participantIds.isEmpty()) {
-            logger.error("Invalid participant IDs provided: {}", participantIds);
-            throw new IllegalArgumentException("Participant IDs cannot be null or empty");
-        }
-
-        if (pointCategoryIds == null || pointCategoryIds.isEmpty()) {
-            logger.error("Invalid point category IDs provided: {}", pointCategoryIds);
-            throw new IllegalArgumentException("Point category IDs cannot be null or empty");
-        }
-
-        try {
-            Set<String> allParticipantIds = new HashSet<>();
-
-            //Verify participants exist and belong to the scoreboard
-            allParticipantIds.add(currentUser.getId());
-            Set<String> scoreboardUserIds = scoreboardService.getScoreboardUsers(scoreboardId)
-                    .stream().map(User::getId).collect(Collectors.toSet());
-            allParticipantIds.addAll(scoreboardUserIds);
-
-            for (String userId : participantIds) {
-                if (!allParticipantIds.contains(userId)) {
-                    logger.error("User {} is not a member of the scoreboard {}", userId, scoreboardId);
-                    throw new IllegalArgumentException("User is not a member of this scoreboard");
-                }
+        for (String userId : participantIds) {
+            if (!allParticipantIds.contains(userId)) {
+                logger.error("User {} is not a member of the scoreboard {}", userId, scoreboardId);
+                throw new IllegalArgumentException("User is not a member of this scoreboard");
             }
-
-            Session session = new Session();
-            session.setScoreboardId(scoreboardId);
-            session.setScoreboardName(scoreboardName);
-            session.setCreatedByName(currentUser.getName());
-            session.setIsPending(true);
-            session.setParticipants(participantIds);
-            session.setPointCategories(pointCategoryIds);
-            session.setResultEntries(new HashSet<>());
-
-            Session createdSession = mongoDBService.create(session);
-            logger.info("Successfully created session with ID: {} for scoreboard: {}",
-                    createdSession.getId(), scoreboardId);
-
-
-            try {
-                resultEntryService.createResultEntries(
-                        scoreboardId,
-                        createdSession.getId(),
-                        participantIds
-                );
-                logger.info("Created result entries for session: {} with participant IDs: {}",
-                        createdSession.getId(), participantIds);
-            } catch (Exception e) {
-                logger.error("Error creating result entries for session {} with participant IDs {}: {}",
-                        createdSession.getId(), participantIds, e.getMessage(), e);
-                throw new RuntimeException("Failed to create result entries", e);
-            }
-
-            return createdSession;
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error creating session: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error creating session: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create session: " + e.getMessage(), e);
         }
+
+        Session session = new Session();
+        session.setId(UUID.randomUUID().toString());
+        session.setScoreboardId(scoreboardId);
+        session.setScoreboardName(scoreboardName);
+        session.setCreatedByName(currentUser.getName());
+        session.setIsPending(true);
+        session.setParticipants(participantIds);
+        session.setPointCategories(pointCategoryIds);
+        session.setResultEntries(new HashSet<>());
+
+        List<ResultEntry> createdResultEntries = resultEntryService.createResultEntries(
+                scoreboardId,
+                session.getId(),
+                participantIds
+        );
+
+        session.setResultEntries(createdResultEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet()));
+
+        Session createdSession = queryService.create(session);
+
+        logger.info("Successfully created session with ID: {} for scoreboard: {}",
+                createdSession.getId(), scoreboardId);
+        return createdSession;
     }
 
     /**
@@ -138,48 +101,26 @@ public class SessionService {
     public List<Session> getSessionsByScoreboardId(String scoreboardId) {
         logger.info("Fetching sessions for scoreboard ID: {}", scoreboardId);
 
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            logger.warn("Invalid scoreboard ID provided: {}", scoreboardId);
-            throw new IllegalArgumentException("Scoreboard ID cannot be null or empty");
-        }
+        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
+        List<Session> sessions = queryService.find(query, Session.class, false);
 
-        try {
-            Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-            List<Session> sessions = mongoDBService.find(query, Session.class, false);
-
-            logger.info("Found {} sessions for scoreboard ID: {}", sessions.size(), scoreboardId);
-            return sessions;
-        } catch (Exception e) {
-            logger.error("Error fetching sessions for scoreboard ID {}: {}", scoreboardId, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch sessions", e);
-        }
+        logger.info("Found {} sessions for scoreboard ID: {}", sessions.size(), scoreboardId);
+        return sessions;
     }
     
     /**
      * Get a session by ID if it's active.
      * @param id The session ID
-     * @return Optional session
+     * @return The session if found
      */
-    public Optional<Session> getSessionById(String id) {
+    public Session getSessionById(String id) {
         logger.info("Fetching session by ID: {}", id);
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("Invalid session ID provided: {}", id);
-            return Optional.empty();
-        }
-        
-        try {
-            Optional<Session> session = mongoDBService.findById(id, Session.class, false);
-            if (session.isPresent()) {
-                logger.info("Found active session with ID: {}", id);
-            } else {
-                logger.warn("Session with ID {} not found or not active", id);
-            }
-            return session;
-        } catch (Exception e) {
-            logger.error("Error fetching session by ID {}: {}", id, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch session", e);
-        }
+
+        Optional<Session> sessionOpt = queryService.findById(id, Session.class, false);
+        Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
+
+        logger.info("Found active session with ID: {}", session.getId());
+        return session;
     }
     
     /**
@@ -201,34 +142,18 @@ public class SessionService {
             ) {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Updating session: {} by user: {}", id, currentUser.getId());
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.error("Invalid session ID provided: {}", id);
-            throw new IllegalArgumentException("Session ID cannot be null or empty");
-        }
-        
-        try {
-            Optional<Session> updatedSession = mongoDBService.update(id, Session.class, session -> {
-                if (isPending != null) session.setIsPending(isPending);
-                if (participantIds != null) session.setParticipants(participantIds);
-                if (pointCategoryIds != null) session.setPointCategories(pointCategoryIds);
-                if (resultEntryIds != null) session.setResultEntries(resultEntryIds);
-            });
 
-            if (updatedSession.isEmpty()) {
-                logger.warn("Session {} not found or is inactive", id);
-                return null;
-            }
+        Optional<Session> updatedSessionOpt = queryService.updateById(id, Session.class, session -> {
+            if (isPending != null) session.setIsPending(isPending);
+            if (participantIds != null) session.setParticipants(participantIds);
+            if (pointCategoryIds != null) session.setPointCategories(pointCategoryIds);
+            if (resultEntryIds != null) session.setResultEntries(resultEntryIds);
+        });
 
-            logger.info("Successfully updated session: {}", id);
-            return updatedSession.get();
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error updating session: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error updating session {}: {}", id, e.getMessage(), e);
-            throw new RuntimeException("Failed to update session: " + e.getMessage(), e);
-        }
+        Session updatedSession = updatedSessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
+
+        logger.info("Successfully updated session: {}", updatedSession.getId());
+        return updatedSession;
     }
     
     /**
@@ -240,29 +165,15 @@ public class SessionService {
     public List<Session> deleteSessions(Set<String> ids) {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Deleting sessions: {} by user: {}", ids, currentUser.getId());
-        
-        if (ids == null || ids.isEmpty()) {
-            logger.warn("Attempted to delete sessions with null or empty IDs");
-            throw new IllegalArgumentException("Session IDs cannot be null or empty");
-        }
-        
-        try {
-            //Delete sessions
-            List<Session> deletedSessions = mongoDBService.deleteAll(ids, Session.class);
 
-            //Delete related result entries
-            mongoDBService.deleteByQuery(
-                    new Query(Criteria.where("sessionId").in(ids)), ResultEntry.class);
+        List<Session> deletedSessions = queryService.deleteAll(ids, Session.class);
 
-            logger.info("Successfully deleted sessions: {}", ids);
-            return deletedSessions;
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error deleting sessions with IDs {}: {}", ids, e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error deleting sessions with IDs {}: {}", ids, e.getMessage(), e);
-            throw new RuntimeException("Failed to delete sessions: " + e.getMessage(), e);
-        }
+        //Delete related result entries
+        queryService.delete(
+                new Query(Criteria.where("sessionId").in(ids)), ResultEntry.class);
+
+        logger.info("Successfully deleted sessions: {}", ids);
+        return deletedSessions;
     }
     
     /**
@@ -274,80 +185,59 @@ public class SessionService {
     public Session finishSession(String id) {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Finishing session: {} by user: {}", id, currentUser.getId());
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.error("Invalid session ID provided: {}", id);
-            throw new IllegalArgumentException("Session ID cannot be null or empty");
+
+        Session session = getSessionById(id);
+
+        // Get all result entries for this session
+        Query query = new Query(Criteria.where("sessionId").is(id));
+        List<ResultEntry> resultEntryEntries = queryService.find(query, ResultEntry.class, false);
+
+        // Get all participant IDs (including creator)
+        List<String> allParticipantIds = new ArrayList<>();
+        allParticipantIds.add(session.getCreatedBy());
+        if (session.getParticipants() != null) {
+            for (String participantId : session.getParticipants()) {
+                if (!allParticipantIds.contains(participantId)) {
+                    allParticipantIds.add(participantId);
+                }
+            }
         }
-        
-        try {
-            Optional<Session> sessionOpt = getSessionById(id);
-            if (sessionOpt.isEmpty()) {
-                logger.warn("Session {} not found or is inactive", id);
-                return null;
-            }
 
-            Session session = sessionOpt.get();
-
-            // Get all result entries for this session
-            Query query = new Query(Criteria.where("sessionId").is(id));
-            List<ResultEntry> resultEntryEntries = mongoDBService.find(query, ResultEntry.class, false);
-
-            // Get all participant IDs (including creator)
-            List<String> allParticipantIds = new ArrayList<>();
-            allParticipantIds.add(session.getCreatedBy());
-            if (session.getParticipants() != null) {
-                for (String participantId : session.getParticipants()) {
-                    if (!allParticipantIds.contains(participantId)) {
-                        allParticipantIds.add(participantId);
-                    }
+        // Check if all participants have submitted results
+        for (String participantId : allParticipantIds) {
+            boolean hasSubmitted = false;
+            for (ResultEntry entry : resultEntryEntries) {
+                if (entry.getUserId().equals(participantId) &&
+                        entry.getResults() != null &&
+                        !entry.getResults().isEmpty()) {
+                    hasSubmitted = true;
+                    break;
                 }
             }
-
-            // Check if all participants have submitted results
-            for (String participantId : allParticipantIds) {
-                boolean hasSubmitted = false;
-                for (ResultEntry entry : resultEntryEntries) {
-                    if (entry.getUserId().equals(participantId) &&
-                            entry.getResults() != null &&
-                            !entry.getResults().isEmpty()) {
-                        hasSubmitted = true;
-                        break;
-                    }
-                }
-                if (!hasSubmitted) {
-                    logger.warn("Participant {} has not submitted results for session {}", participantId, id);
-                    throw new IllegalArgumentException("All participants must submit their results before finishing the session");
-                }
+            if (!hasSubmitted) {
+                logger.warn("Participant {} has not submitted results for session {}", participantId, id);
+                throw new IllegalArgumentException("All participants must submit their results before finishing the session");
             }
-
-            Optional<Session> finishedSessionOpt = mongoDBService.update(id, Session.class, s -> {
-                    if (!s.getIsPending()) {
-                        logger.warn("Session {} is already finished", id);
-                        throw new IllegalArgumentException("Session is already finished");
-                    }
-                    s.setResultEntries(resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet()));
-                    s.setIsPending(false);
-            });
-
-            if (finishedSessionOpt.isEmpty()) {
-                logger.warn("Session {} not found or is inactive", id);
-                return null;
-            }
-
-            // Mark all result entries as not pending
-            Set<String> resultEntryIds = resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet());
-            mongoDBService.updateAll(resultEntryIds, ResultEntry.class, re -> re.setIsPending(false));
-
-            logger.info("Successfully finished session: {}", id);
-            return finishedSessionOpt.get();
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error finishing session: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error finishing session {}: {}", id, e.getMessage(), e);
-            throw new RuntimeException("Failed to finish session: " + e.getMessage(), e);
         }
+
+        Optional<Session> finishedSessionOpt = queryService.updateById(id, Session.class, s -> {
+                if (!s.getIsPending()) {
+                    logger.warn("Session {} is already finished", id);
+                    throw new IllegalArgumentException("Session is already finished");
+                }
+                s.setResultEntries(resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet()));
+                s.setIsPending(false);
+        });
+
+        Session finishedSession = finishedSessionOpt.orElseThrow(() ->
+                new IllegalArgumentException("Session not found"));
+
+        // Mark all result entries as not pending
+        Set<String> resultEntryIds = resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet());
+        queryService.updateAll(resultEntryIds, ResultEntry.class, re -> re.setIsPending(false));
+
+        logger.info("Successfully finished session: {}", finishedSession.getId());
+        return finishedSession;
     }
 }
 

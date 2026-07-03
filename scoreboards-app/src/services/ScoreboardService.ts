@@ -1,8 +1,6 @@
 import axios from 'axios';
 import type { Scoreboard } from '../types/Scoreboard';
 import apiClient from '../api/Interceptor';
-import type { User } from '../types/User';
-
 const API_BASE_URL = '/api/scoreboards';
 
 export type ScoreboardData = {
@@ -44,7 +42,7 @@ export class ScoreboardsService {
 
   /**
    * Get all active scoreboards of the current user.
-   * @returns Promise resolving to array of scoreboards
+   * @returns Promise resolving to an array of scoreboards
    */
   static async getScoreboardsByCurrentUser(): Promise<Scoreboard[]> {
     try {
@@ -77,20 +75,6 @@ export class ScoreboardsService {
     }
   }
 
-  static async getScoreboardUsers(scoreboardId: string): Promise<User[]> {
-    try {
-      const response = await apiClient.get<User[]>(
-        `${API_BASE_URL}/${scoreboardId}/users`
-      );
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch users: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch users: ${error}`);
-    }
-  }
-
   /**
    * Update an existing scoreboard.
    * @param id Scoreboard ID
@@ -101,7 +85,6 @@ export class ScoreboardsService {
     id: string,
     scoreboard: ScoreboardData
   ): Promise<Scoreboard | null> {
-    console.log('Updating scoreboard:', id, scoreboard);
     try {
       const response = await apiClient.put<Scoreboard>(
         `${API_BASE_URL}/${id}`,

@@ -5,11 +5,12 @@ import com.mikko_huttunen.scoreboards.services.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * REST controller for User operations.
@@ -37,17 +38,22 @@ public class UserController {
     public ResponseEntity<User> getCurrentUser() {
         logger.info("GET /api/users/user - Fetching current user");
 
-        Optional<User> user = userService.getCurrentUser();
-        if (user.isPresent()) {
-            User existingUser = user.get();
-            logger.info("GET /api/users/user - Successfully retrieved user");
-            return ResponseEntity.status(org.springframework.http.HttpStatus.OK).body(existingUser);
-        } else {
-            // User doesn't exist in database, create from Auth0 info
-            logger.info("GET /api/users/user - User not found, creating new user");
-            User newUser = userService.createUser();
-            return ResponseEntity.status(org.springframework.http.HttpStatus.OK).body(newUser);
-        }
+        User user = userService.getCurrentUser();
+        return ResponseEntity.status(HttpStatus.OK).body(user);
+    }
+
+    /**
+     * Get all members for a scoreboard.
+     * @param scoreboardId The ID of the scoreboard
+     * @return ResponseEntity containing a list of users
+     */
+    @GetMapping("/{scoreboardId}/users")
+    public ResponseEntity<List<User>> getScoreboardUsers(@PathVariable String scoreboardId) {
+        logger.info("GET /api/scoreboard/{}/users - Fetching users for scoreboard", scoreboardId);
+
+        List<User> users = userService.getScoreboardUsers(scoreboardId);
+
+        return ResponseEntity.status(HttpStatus.OK).body(users);
     }
 
     /**
@@ -60,8 +66,7 @@ public class UserController {
         logger.info("PUT /api/users/user - Updating current user");
 
         User updatedUser = userService.updateUser(userData);
-        logger.info("PUT /api/users/user - Successfully updated user");
-        return ResponseEntity.ok(updatedUser);
+        return ResponseEntity.status(HttpStatus.OK).body(updatedUser);
     }
 
     /**
@@ -69,16 +74,10 @@ public class UserController {
      * @return ResponseEntity with no content if deleted successfully
      */
     @DeleteMapping("/user")
-    public ResponseEntity<Void> deleteCurrentUser() {
+    public ResponseEntity<User> deleteCurrentUser() {
         logger.info("DELETE /api/users/user - Deleting current user");
 
         User deleted = userService.deleteUser();
-        if (deleted.getIsActive() == false) {
-            logger.info("DELETE /api/users/user - Successfully deleted user");
-            return ResponseEntity.noContent().build();
-        } else {
-            logger.warn("DELETE /api/users/user - User not found");
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }
 }

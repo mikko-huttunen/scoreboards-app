@@ -1,7 +1,6 @@
 import {
   Alert,
   Button,
-  CircularProgress,
   Checkbox,
   Dialog,
   DialogActions,
@@ -16,6 +15,7 @@ import { useState } from 'react';
 import { InvitationService } from '../../services/InvitationService.ts';
 import type { Invitation } from '../../types/Invitation.ts';
 import { PERMISSIONS } from '../../constants.ts';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 type InviteUserModalProps = {
   open: boolean;
   onClose: (invitation: Invitation | null) => void;
@@ -41,8 +41,8 @@ export const InviteUserModal = ({
 
     try {
       setInviteLoading(true);
-      setInviteError(null);
       setInviteSuccess(false);
+      setInviteError(null);
 
       const permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][] = [];
       if (sessionsPermission) permissions.push(PERMISSIONS.SESSIONS);
@@ -54,13 +54,10 @@ export const InviteUserModal = ({
       );
 
       setInviteSuccess(true);
-      setInviteEmail('');
-      setSessionsPermission(false);
       setTimeout(() => {
-        onClose(createdInvitation);
+        handleClose(createdInvitation);
       }, 1500);
     } catch (err) {
-      console.error('Error sending invitation:', err);
       setInviteError(
         err instanceof Error ? err.message : 'Failed to send invitation'
       );
@@ -69,8 +66,21 @@ export const InviteUserModal = ({
     }
   };
 
+  const handleClose = (invitation: Invitation | null) => {
+    setInviteSuccess(false);
+    setInviteError(null);
+    setInviteEmail('');
+    setSessionsPermission(false);
+    onClose(invitation);
+  };
+
   return (
-    <Dialog open={open} onClose={() => onClose(null)} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={() => handleClose(null)}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>Invite User to Scoreboard</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -110,7 +120,7 @@ export const InviteUserModal = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => onClose(null)} disabled={inviteLoading}>
+        <Button onClick={() => handleClose(null)} disabled={inviteLoading}>
           Cancel
         </Button>
         <Button
@@ -119,7 +129,7 @@ export const InviteUserModal = ({
           disabled={inviteLoading || !inviteEmail.trim()}
           sx={{ backgroundColor: '#38a14f', color: '#ffffff' }}
         >
-          {inviteLoading ? <CircularProgress size={20} /> : 'Send Invitation'}
+          {inviteLoading ? <LoadingSpinner size={20} /> : 'Send Invitation'}
         </Button>
       </DialogActions>
     </Dialog>

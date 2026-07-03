@@ -30,6 +30,9 @@ export class InvitationService {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        if (error.response) {
+          throw new Error(error.response?.data);
+        }
         throw new Error(`Failed to create invitation: ${error.message}`);
       }
       throw new Error(`Failed to create invitation: ${error}`);

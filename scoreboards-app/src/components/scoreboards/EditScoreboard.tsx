@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  Box,
-  Stack,
-  Typography,
-  IconButton,
-  CircularProgress,
-} from '@mui/material';
+import { Box, Stack, Typography, IconButton } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useNavigationSpacing } from '../navigation/Navigation';
@@ -13,86 +7,52 @@ import { ScoreboardForm } from './ScoreboardForm';
 import { ScoreboardsService } from '../../services/ScoreboardService';
 import { useEffect, useState } from 'react';
 import type { Scoreboard } from '../../types/Scoreboard';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import type { PointCategory } from '../../types/PointCategory.ts';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
 export const EditScoreboard: React.FC = () => {
   const navigate = useNavigate();
   const { scoreboardId } = useParams<{ scoreboardId: string }>();
   const navigationSpacing = useNavigationSpacing();
   const [scoreboard, setScoreboard] = useState<Scoreboard | null>(null);
+  const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { showErrorMessage } = useMessageSnackbar();
+  const { user } = useCurrentUser();
 
   useEffect(() => {
-    const loadScoreboard = async () => {
-      if (!scoreboardId) {
-        setError('Scoreboard ID is missing');
-        setLoading(false);
+    const loadData = async () => {
+      if (!scoreboardId || !user) {
         return;
       }
 
       try {
-        setLoading(true);
-        setError(null);
-        const data = await ScoreboardsService.getScoreboardById(scoreboardId);
-        if (data) {
-          setScoreboard(data);
-        } else {
-          setError('Scoreboard not found');
+        const scoreboardData =
+          await ScoreboardsService.getScoreboardById(scoreboardId);
+
+        if (scoreboardData?.createdBy !== user?.id) {
+          navigate('/scoreboards');
+          return;
         }
+
+        setScoreboard(scoreboardData);
+
+        setPointCategories(scoreboardData!.pointCategories);
       } catch (err) {
-        console.error('Error loading scoreboard:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load scoreboard'
-        );
+        showErrorMessage('Failed to load scoreboard');
+        navigate('/scoreboards');
       } finally {
         setLoading(false);
       }
     };
 
-    loadScoreboard();
-  }, [scoreboardId]);
+    loadData();
+  }, [scoreboardId, user]);
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          backgroundColor: '#ffffff',
-          position: 'relative',
-          pb: { xs: 10, sm: 4 },
-        }}
-      >
-        <Box
-          sx={{
-            px: 2,
-            py: 4,
-            ...navigationSpacing,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      </Box>
-    );
-  }
-
-  if (error || !scoreboard) {
-    return (
-      <Box
-        sx={{
-          backgroundColor: '#ffffff',
-          position: 'relative',
-          pb: { xs: 10, sm: 4 },
-        }}
-      >
-        <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
-          <Typography variant="h6" sx={{ color: '#d32f2f' }}>
-            {error || 'Scoreboard not found'}
-          </Typography>
-        </Box>
-      </Box>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -130,8 +90,8 @@ export const EditScoreboard: React.FC = () => {
             </Typography>
           </Stack>
           <ScoreboardForm
-            scoreboardId={scoreboardId}
-            initialName={scoreboard.name}
+            scoreboard={scoreboard}
+            pointCategories={pointCategories}
             onSuccess={(updated) => {
               navigate(`/scoreboards/${updated.id}`);
             }}

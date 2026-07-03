@@ -1,13 +1,40 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  monospace;
+}
+
+/* --- Full-width app layout (single unified place) --- */
+html,
+body,
+#root {
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+/* Prevent accidental horizontal overflow from breaking "full width" */
+body {
+  overflow-x: hidden;
+}
+
+/* If you use MUI Container anywhere, remove its max-width cap */
+.MuiContainer-root {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+/* If any layout uses MUI Box with default centering behavior, keep it left-stretched */
+.MuiBox-root {
+  box-sizing: border-box;
 }

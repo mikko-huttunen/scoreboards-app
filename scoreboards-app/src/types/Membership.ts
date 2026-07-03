@@ -1,6 +1,7 @@
 import { PERMISSIONS } from '../constants.ts';
 
 export type Membership = {
+
   scoreboardId: string;
   userId: string;
   permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][];

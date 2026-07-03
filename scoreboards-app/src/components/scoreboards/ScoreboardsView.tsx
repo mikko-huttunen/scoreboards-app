@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Stack, CircularProgress, Alert } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import type { Scoreboard } from '../../types/Scoreboard';
 import type { Invitation } from '../../types/Invitation';
 import { useNavigationSpacing } from '../navigation/Navigation';
@@ -9,6 +9,7 @@ import { ScoreboardsList } from './ScoreboardsList.tsx';
 import { ReceivedInvitationsList } from '../invitations/ReceivedInvitationsList.tsx';
 import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 
 export const ScoreboardsView: React.FC = () => {
   const navigationSpacing = useNavigationSpacing();
@@ -16,52 +17,54 @@ export const ScoreboardsView: React.FC = () => {
   const [pendingInvitations, setPendingInvitations] = useState<Invitation[]>(
     []
   );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingScoreboards, setLoadingScoreboards] = useState(true);
+  const [loadingInvitations, setLoadingInvitations] = useState(true);
   const [deleteScoreboardConfirmOpen, setDeleteScoreboardConfirmOpen] =
     useState(false);
   const [deleteInvitationConfirmOpen, setDeleteInvitationConfirmOpen] =
     useState(false);
-  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaveScoreboardConfirmOpen, setLeaveScoreboardConfirmOpen] =
+    useState(false);
   const [selectedInvitation, setSelectedInvitation] =
     useState<Invitation | null>(null);
   const [selectedScoreboard, setSelectedScoreboard] =
     useState<Scoreboard | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const [processingInvitation, setProcessingInvitation] =
-    useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useCurrentUser();
+  const { showErrorMessage } = useMessageSnackbar();
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
+    const fetchScoreboards = async () => {
+      if (!user) return;
 
       try {
-        // Fetch scoreboards
         const scoreboardsData =
           await ScoreboardsService.getScoreboardsByCurrentUser();
         setScoreboards(scoreboardsData);
-
-        //Fetch invitations
-        const fetchedInvitations = await InvitationService.getInvitations();
-        setPendingInvitations(
-          fetchedInvitations.filter(
-            (inv) => inv.isPending && inv.receiverId === user.id
-          )
-        );
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        showErrorMessage('Failed loading scoreboards');
       } finally {
-        setLoading(false);
+        setLoadingScoreboards(false);
       }
     };
 
-    fetchData();
+    const fetchInvitations = async () => {
+      try {
+        const invitationsData = await InvitationService.getInvitations();
+        setPendingInvitations(
+          invitationsData.filter((inv) => inv.receiverId === user.id)
+        );
+      } catch (err) {
+        showErrorMessage('Failed loading invitations');
+      } finally {
+        setLoadingInvitations(false);
+      }
+    };
+
+    fetchScoreboards();
+    fetchInvitations();
   }, [user]);
 
   const handleDeleteScoreboardClick = (scoreboard: Scoreboard) => {
@@ -76,65 +79,54 @@ export const ScoreboardsView: React.FC = () => {
       return;
     }
 
-    // Default implementation: call backend API
     try {
-      setDeleting(true);
+      setIsProcessing(true);
       await ScoreboardsService.deleteScoreboard(selectedScoreboard.id);
-      // Remove from local state
       setScoreboards(
         scoreboards.filter((sb) => sb.id !== selectedScoreboard.id)
       );
     } catch (err) {
-      console.error('Error deleting scoreboard:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to delete scoreboard'
-      );
+      showErrorMessage('Failed to delete scoreboard');
     } finally {
-      setDeleting(false);
+      setIsProcessing(false);
       setDeleteScoreboardConfirmOpen(false);
       setSelectedScoreboard(null);
     }
   };
 
-  const handleLeaveClick = (scoreboard: Scoreboard) => {
+  const handleLeaveScoreboardClick = (scoreboard: Scoreboard) => {
     setSelectedScoreboard(scoreboard);
-    setLeaveConfirmOpen(true);
+    setLeaveScoreboardConfirmOpen(true);
   };
 
-  const handleLeaveConfirm = async () => {
+  const handleLeaveScoreboardConfirm = async () => {
     if (!selectedScoreboard) {
-      setLeaveConfirmOpen(false);
+      setLeaveScoreboardConfirmOpen(false);
       setSelectedScoreboard(null);
       return;
     }
 
     try {
-      setLeaving(true);
+      setIsProcessing(true);
       await ScoreboardsService.leaveScoreboard(selectedScoreboard.id);
-
-      // Remove from local state
       setScoreboards(
         scoreboards.filter((sb) => sb.id !== selectedScoreboard.id)
       );
     } catch (err) {
-      console.error('Error leaving scoreboard:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to leave scoreboard'
-      );
+      showErrorMessage('Failed to leave scoreboard');
     } finally {
-      setLeaving(false);
-      setLeaveConfirmOpen(false);
+      setIsProcessing(false);
+      setLeaveScoreboardConfirmOpen(false);
       setSelectedScoreboard(null);
     }
   };
 
   const handleAcceptInvitation = async (invitationId: string) => {
     try {
-      setProcessingInvitation(true);
+      setIsProcessing(true);
 
       await InvitationService.acceptInvitation(invitationId);
 
-      // Remove from pending invitations
       setPendingInvitations(
         pendingInvitations.filter((inv) => inv.id !== invitationId)
       );
@@ -142,17 +134,13 @@ export const ScoreboardsView: React.FC = () => {
       // Small delay to ensure backend has persisted the changes
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Refresh scoreboards list and user to include the newly joined scoreboard
       const updatedScoreboards =
         await ScoreboardsService.getScoreboardsByCurrentUser();
       setScoreboards(updatedScoreboards);
     } catch (err) {
-      console.error('Error accepting invitation:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to accept invitation'
-      );
+      showErrorMessage('Failed to accept invitation');
     } finally {
-      setProcessingInvitation(false);
+      setIsProcessing(false);
     }
   };
 
@@ -169,7 +157,7 @@ export const ScoreboardsView: React.FC = () => {
     }
 
     try {
-      setProcessingInvitation(true);
+      setIsProcessing(true);
 
       await InvitationService.deleteInvitation(selectedInvitation.id);
 
@@ -178,41 +166,63 @@ export const ScoreboardsView: React.FC = () => {
         pendingInvitations.filter((inv) => inv.id !== selectedInvitation.id)
       );
     } catch (err) {
-      console.error('Error declining invitation:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to decline invitation'
-      );
+      showErrorMessage('Failed to decline invitation');
     } finally {
-      setProcessingInvitation(false);
+      setIsProcessing(false);
       setDeleteInvitationConfirmOpen(false);
       setSelectedInvitation(null);
     }
   };
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          backgroundColor: '#ffffff',
-          position: 'relative',
-        }}
-      >
-        <Box
-          sx={{
-            px: 2,
-            py: 4,
-            ...navigationSpacing,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      </Box>
-    );
-  }
+  const renderConfirmDialog = () => {
+    if (deleteScoreboardConfirmOpen) {
+      return (
+        <ConfirmDialog
+          open={deleteScoreboardConfirmOpen}
+          onCancel={() => setDeleteScoreboardConfirmOpen(false)}
+          title="Delete Scoreboard"
+          text={`Are you sure you want to delete the scoreboard ${selectedScoreboard?.name}? This will
+           permanently delete all data including sessions, result entries, and
+           results. This action cannot be undone.`}
+          confirmLabel="Delete"
+          loading={isProcessing}
+          onConfirm={handleDeleteScoreboardConfirm}
+        />
+      );
+    }
+
+    if (deleteInvitationConfirmOpen) {
+      return (
+        <ConfirmDialog
+          open={deleteInvitationConfirmOpen}
+          onCancel={() => setDeleteInvitationConfirmOpen(false)}
+          title="Delete Invitation"
+          text={`Are you sure you want to delete the invitation to ${selectedInvitation?.scoreboardName}?`}
+          confirmLabel="Delete"
+          loading={isProcessing}
+          onConfirm={handleDeleteInvitationConfirm}
+        />
+      );
+    }
+
+    if (leaveScoreboardConfirmOpen) {
+      return (
+        <ConfirmDialog
+          open={leaveScoreboardConfirmOpen}
+          onCancel={() => !isProcessing && setLeaveScoreboardConfirmOpen(false)}
+          title="Leave Scoreboard"
+          text={`Are you sure you want to leave the scoreboard ${selectedScoreboard?.name}? You will no longer
+           have access to it.`}
+          confirmLabel="Leave"
+          confirmColor="warning"
+          loading={isProcessing}
+          onConfirm={handleLeaveScoreboardConfirm}
+        />
+      );
+    }
+
+    return null;
+  };
 
   return (
     <Box
@@ -224,33 +234,26 @@ export const ScoreboardsView: React.FC = () => {
     >
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack spacing={4} alignItems="flex-start">
-          {error && (
-            <Alert
-              severity="error"
-              onClose={() => setError(null)}
-              sx={{ width: 'min(1200px, 100%)' }}
-            >
-              {error}
-            </Alert>
-          )}
           <Stack
             direction="column"
             alignItems="flex-start"
             justifyContent="space-between"
-            sx={{ width: 'min(1200px, 100%)' }}
+            sx={{ width: '100%' }}
             spacing={2}
           >
             <Stack sx={{ width: '100%', alignItems: 'flex-start' }} spacing={2}>
               <ScoreboardsList
+                isLoading={loadingScoreboards}
                 scoreboards={scoreboards}
                 onDelete={(scoreboard) =>
                   handleDeleteScoreboardClick(scoreboard)
                 }
-                onLeave={(scoreboard) => handleLeaveClick(scoreboard)}
+                onLeave={(scoreboard) => handleLeaveScoreboardClick(scoreboard)}
               />
             </Stack>
             <Stack sx={{ width: '100%', alignItems: 'flex-start' }} spacing={2}>
               <ReceivedInvitationsList
+                isLoading={loadingInvitations}
                 invitations={pendingInvitations}
                 processingInvitation={false}
                 onAcceptInvitation={(invitation) =>
@@ -264,43 +267,7 @@ export const ScoreboardsView: React.FC = () => {
           </Stack>
         </Stack>
       </Box>
-
-      {/* Delete Scoreboard Confirmation Dialog */}
-      <ConfirmDialog
-        open={deleteScoreboardConfirmOpen}
-        onCancel={() => setDeleteScoreboardConfirmOpen(false)}
-        title="Delete Scoreboard"
-        text={`Are you sure you want to delete the scoreboard ${selectedScoreboard?.name}? This will
-           permanently delete all data including sessions, result entries, and
-           results. This action cannot be undone.`}
-        confirmLabel="Delete"
-        loading={deleting}
-        onConfirm={handleDeleteScoreboardConfirm}
-      />
-
-      {/* Delete Invitation Confirm Dialog */}
-      <ConfirmDialog
-        open={deleteInvitationConfirmOpen}
-        onCancel={() => setDeleteInvitationConfirmOpen(false)}
-        title="Delete Invitation"
-        text={`Are you sure you want to delete the invitation to ${selectedInvitation?.scoreboardName}?`}
-        confirmLabel="Delete"
-        loading={deleting}
-        onConfirm={handleDeleteInvitationConfirm}
-      />
-
-      {/* Leave Scoreboard Confirm Dialog */}
-      <ConfirmDialog
-        open={leaveConfirmOpen}
-        onCancel={() => !leaving && setLeaveConfirmOpen(false)}
-        title="Leave Scoreboard"
-        text={`Are you sure you want to leave the scoreboard ${selectedScoreboard?.name}? You will no longer
-           have access to it.`}
-        confirmLabel="Leave"
-        confirmColor="warning"
-        loading={leaving}
-        onConfirm={handleLeaveConfirm}
-      />
+      {renderConfirmDialog()}
     </Box>
   );
 };

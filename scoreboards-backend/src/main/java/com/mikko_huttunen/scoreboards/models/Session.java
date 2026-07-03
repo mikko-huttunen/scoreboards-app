@@ -2,6 +2,7 @@ package com.mikko_huttunen.scoreboards.models;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -114,6 +115,7 @@ public class Session extends Auditable {
     public String toString() {
         return "Session{" +
                 "id='" + id + '\'' +
+                ", type='" + getType() + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", scoreboardName='" + scoreboardName + '\'' +
                 ", isPending=" + isPending +
@@ -125,6 +127,35 @@ public class Session extends Auditable {
                 ", createdBy='" + getCreatedBy() + '\'' +
                 ", isActive=" + getIsActive() +
                 '}';
+    }
+
+    public static class SessionDetails extends Session {
+
+        private List<PointCategory> pointCategoryDetails = new ArrayList<>();
+        private List<ResultEntry> resultEntryDetails = new ArrayList<>();
+
+        public SessionDetails() {
+        }
+
+        public SessionDetails(Session session) {
+            BeanUtils.copyProperties(session, this);
+        }
+
+        public List<PointCategory> getPointCategoryDetails() {
+            return pointCategoryDetails;
+        }
+
+        public void setPointCategoryDetails(List<PointCategory> pointCategoryDetails) {
+            this.pointCategoryDetails = pointCategoryDetails;
+        }
+
+        public List<ResultEntry> getResultEntryDetails() {
+            return resultEntryDetails;
+        }
+
+        public void setResultEntryDetails(List<ResultEntry> resultEntryDetails) {
+            this.resultEntryDetails = resultEntryDetails;
+        }
     }
 }
 

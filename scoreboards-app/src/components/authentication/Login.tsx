@@ -1,9 +1,10 @@
 import React, { useCallback } from 'react';
-import { Button, CircularProgress, Stack } from '@mui/material';
+import { Button, Stack } from '@mui/material';
 import { useAuth0 } from '@auth0/auth0-react';
 import './Login.css';
 import logo from '../../resources/scoreboards_logo_white.png';
 import { Navigate } from 'react-router-dom';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 export type LoginViewProps = {
   onLogin?: () => void | Promise<void>;
@@ -38,7 +39,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               alignItems="center"
               justifyContent="center"
             >
-              <CircularProgress size={20} sx={{ color: '#ffffff' }} />
+              <LoadingSpinner size={20} />
             </Stack>
           )}
           <Button

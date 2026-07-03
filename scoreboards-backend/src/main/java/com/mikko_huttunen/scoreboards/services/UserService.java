@@ -30,7 +30,7 @@ public class UserService {
 
     private final Auth0ManagementService auth0ManagementService;
     private final AuthProvider authProvider;
-    private final MongoDBService mongoDBService;
+    private final QueryService queryService;
     private final ScoreboardService scoreboardService;
     private final UserRepository userRepository;
     private final CurrentUserContext currentUserContext;
@@ -39,10 +39,13 @@ public class UserService {
     public UserService(
             Auth0ManagementService auth0ManagementService,
             AuthProvider authProvider,
-            MongoDBService mongoDBService, ScoreboardService scoreboardService, UserRepository userRepository, CurrentUserContext currentUserContext) {
+            QueryService queryService,
+            ScoreboardService scoreboardService,
+            UserRepository userRepository,
+            CurrentUserContext currentUserContext) {
         this.auth0ManagementService = auth0ManagementService;
         this.authProvider = authProvider;
-        this.mongoDBService = mongoDBService;
+        this.queryService = queryService;
         this.scoreboardService = scoreboardService;
         this.userRepository = userRepository;
         this.currentUserContext = currentUserContext;
@@ -54,6 +57,7 @@ public class UserService {
      */
     @Transactional
     public User createUser() {
+        logger.info("Creating new user");
         String auth0UserId = authProvider.requireAuth0UserId();
 
         JsonNode auth0User = auth0ManagementService.getUser(auth0UserId);
@@ -76,34 +80,59 @@ public class UserService {
         user.setIsActive(true);
 
         User createdUser = userRepository.save(user);
-        logger.info("Successfully created user with ID: {}", createdUser.getId());
+        logger.info("Created new user with ID: {}", createdUser.getId());
+
         return createdUser;
     }
 
     /**
      * Get the current user.
-     * @return Optional containing the user if found and active
+     * @return The current user
      */
-    public Optional<User> getCurrentUser() {
+    public User getCurrentUser() {
         String auth0UserId = authProvider.requireAuth0UserId();
         Query query = new Query(Criteria.where("auth0Id").is(auth0UserId));
 
-        return mongoDBService.find(query, User.class, false).stream().findFirst();
+        Optional<User> user = queryService.find(query, User.class, false).stream().findFirst();
+        //If user doesn't exist in, create a new one
+        if (user.isEmpty()) {
+            return createUser();
+        }
+
+        logger.info("Found user with ID: {}", user.get().getId());
+        return user.get();
+    }
+
+    /**
+     * Get all users for a scoreboard.
+     * @param scoreboardId The scoreboard ID
+     * @return List of users associated with the scoreboard
+     */
+    public List<User> getScoreboardUsers(String scoreboardId) {
+        logger.info("Fetching users for scoreboard ID: {}", scoreboardId);
+
+        Optional<List<User>> usersOpt = queryService.fetchUsersWithMembershipsByScoreboardId(scoreboardId);
+        List<User> users = usersOpt.orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
+
+        logger.info("Found {} users for scoreboard ID: {}", users.size(), scoreboardId);
+        return users;
     }
 
     /**
      * Update user information.
      * @param userData Map containing the new user data
-     * @return Optional containing the updated user if found
+     * @return The updated user
      */
     @Transactional
     public User updateUser(Map <String, String> userData) {
         User user = currentUserContext.requireCurrentUser();
+        logger.info("Updating user with ID: {}", user.getId());
+
         String name = userData.get("name");
 
         auth0ManagementService.updateUser(user.getAuth0Id(), name);
 
-        Optional<User> updatedUserOpt = mongoDBService.update(user.getId(), User.class, userToUpdate ->
+        Optional<User> updatedUserOpt = queryService.updateById(user.getId(), User.class, userToUpdate ->
                 userToUpdate.setName(name));
 
         User updatedUser = updatedUserOpt.orElseThrow(() -> new RuntimeException("Failed to update user"));
@@ -111,7 +140,7 @@ public class UserService {
         //Update username in all sessions and invitations created by the user
         Query sessionQuery = new Query(Criteria.where("createdBy").is(user.getId()));
 
-        mongoDBService.updateByQuery(sessionQuery, Session.class, session ->
+        queryService.update(sessionQuery, Session.class, session ->
                 session.setCreatedByName(updatedUser.getName()));
 
         Query invitationQuery = new Query(new Criteria().orOperator(
@@ -119,15 +148,16 @@ public class UserService {
                 where("receiverId").is(user.getId())
         ));
 
-        mongoDBService.updateByQuery(invitationQuery, Invitation.class, invitation -> {
+        queryService.update(invitationQuery, Invitation.class, invitation -> {
             if (invitation.getReceiverId().equals(user.getId())) {
                 invitation.setReceiverName(updatedUser.getName());
             }
             if (invitation.getCreatedBy().equals(user.getId())) {
-                invitation.setCreatedByName(updatedUser.getName());
+                invitation.setInviterName(updatedUser.getName());
             }
         });
 
+        logger.info("Successfully updated user with ID: {}", updatedUser.getId());
         return updatedUser;
     }
 
@@ -138,24 +168,19 @@ public class UserService {
     @Transactional
     public User deleteUser() {
         User user = currentUserContext.requireCurrentUser();
+        logger.info("Deleting user with ID: {}", user.getId());
 
-        try {
-            //Delete user from Auth0
-            auth0ManagementService.deleteUser(user.getAuth0Id());
+        auth0ManagementService.deleteUser(user.getAuth0Id());
 
-            //Delete user from scoreboards
-            List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
-            Set<String> createdScoreboardsIds = scoreboards.stream().filter(sb ->
-                    sb.getCreatedBy().equals(user.getId())).map(Scoreboard::getId).collect(Collectors.toSet());
+        List<Scoreboard> scoreboards = scoreboardService.getScoreboardsByUser();
+        Set<String> createdScoreboardsIds = scoreboards.stream().filter(sb ->
+                sb.getCreatedBy().equals(user.getId())).map(Scoreboard::getId).collect(Collectors.toSet());
 
-            //Delete scoreboards created by the user
-            scoreboardService.deleteScoreboards(createdScoreboardsIds);
+        scoreboardService.deleteScoreboards(createdScoreboardsIds);
 
-            return mongoDBService.deleteById(user.getId(), User.class);
-        } catch (Exception e) {
-            logger.error("Error deleting user {}: {}", user.getId(), e.getMessage(), e);
-            throw new RuntimeException("Failed to delete user: " + user.getId(), e);
-        }
+        User deletedUser = queryService.deleteById(user.getId(), User.class);
+        logger.info("Successfully deleted user with ID: {}", deletedUser.getId());
+        return deletedUser;
     }
 }
 

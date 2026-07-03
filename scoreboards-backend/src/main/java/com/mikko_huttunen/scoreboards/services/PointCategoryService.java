@@ -2,8 +2,6 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
 import com.mikko_huttunen.scoreboards.models.PointCategory;
-import com.mikko_huttunen.scoreboards.models.Scoreboard;
-import com.mikko_huttunen.scoreboards.repositories.PointCategoryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +25,11 @@ public class PointCategoryService {
     
     private static final Logger logger = LoggerFactory.getLogger(PointCategoryService.class);
 
-    private final MongoDBService mongoDBService;
+    private final QueryService queryService;
     
     @Autowired
-    public PointCategoryService(MongoDBService mongoDBService) {
-        this.mongoDBService = mongoDBService;
+    public PointCategoryService(QueryService queryService) {
+        this.queryService = queryService;
     }
 
     /**
@@ -43,18 +41,10 @@ public class PointCategoryService {
     @Transactional
     public List<PointCategory> createPointCategories(List<PointCategoryDTO> pointCategories, String scoreboardId) {
         logger.info("Creating point categories for scoreboard: {}", scoreboardId);
+
         List<PointCategory> pointCategoriesToCreate = new ArrayList<>();
 
         for (PointCategoryDTO categoryData : pointCategories) {
-            if (categoryData.getName() == null || categoryData.getName().trim().isEmpty()) {
-                logger.warn("Skipping point category with empty name");
-                continue;
-            }
-            if (categoryData.getColor() == null || categoryData.getColor().trim().isEmpty()) {
-                logger.warn("Skipping point category with empty color");
-                continue;
-            }
-
             PointCategory pointCategory = new PointCategory();
             pointCategory.setName(categoryData.getName().trim());
             pointCategory.setColor(categoryData.getColor().trim());
@@ -63,8 +53,11 @@ public class PointCategoryService {
             pointCategoriesToCreate.add(pointCategory);
         }
 
-        logger.info("Successfully created point categories for scoreboard: {}", scoreboardId);
-        return mongoDBService.createMany(pointCategoriesToCreate);
+        List<PointCategory> createdPointCategories = queryService.create(pointCategoriesToCreate);
+
+        logger.info("Successfully created {} point categories for scoreboard: {}",
+                createdPointCategories.size(), scoreboardId);
+        return createdPointCategories;
     }
     
     /**
@@ -74,21 +67,12 @@ public class PointCategoryService {
      */
     public List<PointCategory> getPointCategoriesByScoreboardId(String scoreboardId) {
         logger.info("Fetching point categories for scoreboard: {}", scoreboardId);
-        
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            logger.warn("Invalid scoreboard ID provided: {}", scoreboardId);
-            throw new IllegalArgumentException("Scoreboard ID cannot be null or empty");
-        }
-        
-        try {
-            Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId));
-            List<PointCategory> pointCategories = mongoDBService.find(query, PointCategory.class, false);
-            logger.info("Found {} point categories for scoreboard: {}", pointCategories.size(), scoreboardId);
-            return pointCategories;
-        } catch (Exception e) {
-            logger.error("Error fetching point categories for scoreboard {}: {}", scoreboardId, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch point categories", e);
-        }
+
+        Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId));
+        List<PointCategory> pointCategories = queryService.find(query, PointCategory.class, false);
+
+        logger.info("Found {} point categories for scoreboard: {}", pointCategories.size(), scoreboardId);
+        return pointCategories;
     }
     
     /**
@@ -98,24 +82,13 @@ public class PointCategoryService {
      */
     public PointCategory getPointCategoryById(String id) {
         logger.info("Fetching point category by ID: {}", id);
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("Invalid point category ID provided: {}", id);
-            return null;
-        }
-        
-        try {
-            Optional<PointCategory> pointCategory = mongoDBService.findById(id, PointCategory.class, false);
-            if (pointCategory.isEmpty()) {
-                logger.warn("Point category with ID {} not found or not active", id);
-                return null;
-            }
-            logger.info("Found active point category with ID: {}", id);
-            return pointCategory.get();
-        } catch (Exception e) {
-            logger.error("Error fetching point category by ID {}: {}", id, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch point category", e);
-        }
+
+        Optional<PointCategory> pointCategoryOpt = queryService.findById(id, PointCategory.class, false);
+        PointCategory pointCategory = pointCategoryOpt.orElseThrow(() ->
+                new IllegalArgumentException("Point category not found"));
+
+        logger.info("Found point category with ID: {}", pointCategory.getId());
+        return pointCategory;
     }
 
     /**
@@ -126,22 +99,12 @@ public class PointCategoryService {
      */
     @Transactional
     public List<PointCategory> updatePointCategories(List<PointCategoryDTO> pointCategories, String scoreboardId) {
-        logger.info("Updating point categories: {}", pointCategories);
-
-        if (pointCategories == null || pointCategories.isEmpty()) {
-            logger.warn("No point categories provided to update");
-            return List.of();
-        }
-
-        if (scoreboardId == null || scoreboardId.trim().isEmpty()) {
-            logger.warn("Invalid scoreboard ID provided: {}", scoreboardId);
-            throw new IllegalArgumentException("Scoreboard ID cannot be null or empty");
-        }
+        logger.info("Updating point categories: {} for scoreboard: {}", pointCategories, scoreboardId);
 
         Set<String> pointCategoryIds = pointCategories.stream()
                 .map(PointCategoryDTO::getId).collect(Collectors.toSet());
 
-        List<PointCategory> updatedPointCategories = mongoDBService.updateAll(
+        List<PointCategory> updatedPointCategories = queryService.updateAll(
                 pointCategoryIds, PointCategory.class, pc -> {
                 PointCategoryDTO pointCategoryDTO = pointCategories.stream()
                         .filter(pcDTO ->
@@ -152,20 +115,22 @@ public class PointCategoryService {
                 pc.setScoreboardId(scoreboardId);
         });
 
-        logger.info("Successfully updated point categories: {}", updatedPointCategories);
+        logger.info("Successfully updated point categories: {} for scoreboard: {}",
+                updatedPointCategories, scoreboardId);
         return updatedPointCategories;
     }
 
+    /**
+     * Delete point categories (soft delete).
+     * @param pointCategoryIds List of point category IDs to delete
+     * @return Deleted point categories
+     */
     @Transactional
     public List<PointCategory> deletePointCategories(Set<String> pointCategoryIds) {
         logger.info("Deleting point categories: {}", pointCategoryIds);
 
-        if (pointCategoryIds == null || pointCategoryIds.isEmpty()) {
-            logger.warn("No point categories provided to delete");
-            return List.of();
-        }
+        List<PointCategory> deletedPointCategories = queryService.deleteAll(pointCategoryIds, PointCategory.class);
 
-        List<PointCategory> deletedPointCategories = mongoDBService.deleteAll(pointCategoryIds, PointCategory.class);
         logger.info("Successfully deleted point categories: {}", deletedPointCategories);
         return deletedPointCategories;
     }

@@ -40,30 +40,16 @@ public class SessionController {
     @PostMapping
     public ResponseEntity<Session> createSession(
             @Valid @RequestBody CreateSessionDTO dto) {
-        logger.info("POST /api/sessions - Creating new session for scoreboard: {}",
-                dto != null ? dto.getScoreboardName() : "null");
+        logger.info("POST /api/sessions - Creating new session");
 
-        if (dto == null) {
-            logger.error("POST /api/sessions - Request body is null");
-            return ResponseEntity.badRequest().build();
-        }
+        Session createdSession = sessionService.createSession(
+                dto.getScoreboardId(),
+                dto.getScoreboardName(),
+                dto.getParticipants(),
+                dto.getPointCategories()
+        );
 
-        try {
-            Session createdSession = sessionService.createSession(
-                    dto.getScoreboardId(),
-                    dto.getScoreboardName(),
-                    dto.getParticipants(),
-                    dto.getPointCategories()
-            );
-            logger.info("POST /api/sessions - Successfully created session with ID: {}", createdSession.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
-        } catch (IllegalArgumentException e) {
-            logger.warn("POST /api/sessions - Invalid request: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("POST /api/sessions - Error creating session: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
     }
 
     /**
@@ -76,18 +62,9 @@ public class SessionController {
             @PathVariable String scoreboardId) {
         logger.info("GET /api/sessions/scoreboard/{} - Fetching sessions", scoreboardId);
 
-        try {
-            List<Session> sessions = sessionService.getSessionsByScoreboardId(scoreboardId);
-            logger.info("GET /api/sessions/scoreboard/{} - Found {} sessions", scoreboardId, sessions.size());
-            return ResponseEntity.ok(sessions);
-        } catch (IllegalArgumentException e) {
-            logger.warn("GET /api/sessions/scoreboard/{} - Invalid request: {}", scoreboardId, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("GET /api/sessions/scoreboard/{} - Error fetching sessions: {}",
-                    scoreboardId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        List<Session> sessions = sessionService.getSessionsByScoreboardId(scoreboardId);
+
+        return ResponseEntity.status(HttpStatus.OK).body(sessions);
     }
     
     /**
@@ -99,26 +76,10 @@ public class SessionController {
     public ResponseEntity<Session> getSessionById(
             @PathVariable String id) {
         logger.info("GET /api/sessions/{} - Fetching session", id);
-        
-        if (id == null || id.trim().isEmpty()) {
-            logger.warn("GET /api/sessions/{} - Invalid session ID", id);
-            return ResponseEntity.badRequest().build();
-        }
-        
-        try {
-            Optional<Session> session = sessionService.getSessionById(id);
 
-            if (session.isEmpty()) {
-                logger.warn("GET /api/sessions/{} - Session not found", id);
-                return ResponseEntity.notFound().build();
-            }
+        Session session = sessionService.getSessionById(id);
 
-            logger.info("GET /api/sessions/{} - Found session", id);
-            return ResponseEntity.ok(session.get());
-        } catch (Exception e) {
-            logger.error("GET /api/sessions/{} - Error fetching session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(session);
     }
     
     /**
@@ -132,34 +93,16 @@ public class SessionController {
             @PathVariable String id,
             @Valid @RequestBody UpdateSessionDTO dto) {
         logger.info("PUT /api/sessions/{} - Updating session", id);
-        
-        if (dto == null) {
-            logger.error("PUT /api/sessions/{} - Request body is null", id);
-            return ResponseEntity.badRequest().build();
-        }
-        
-        try {
-            Session updatedSession = sessionService.updateSession(
-                    id,
-                    dto.getPending(),
-                    dto.getParticipants(),
-                    dto.getPointCategories(),
-                    dto.getResultEntries()
-            );
-            if (updatedSession != null) {
-                logger.info("PUT /api/sessions/{} - Successfully updated session", id);
-                return ResponseEntity.ok(updatedSession);
-            } else {
-                logger.warn("PUT /api/sessions/{} - Session not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.warn("PUT /api/sessions/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("PUT /api/sessions/{} - Error updating session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Session updatedSession = sessionService.updateSession(
+                id,
+                dto.getPending(),
+                dto.getParticipants(),
+                dto.getPointCategories(),
+                dto.getResultEntries()
+        );
+
+        return ResponseEntity.status(HttpStatus.OK).body(updatedSession);
     }
     
     /**
@@ -171,22 +114,10 @@ public class SessionController {
     public ResponseEntity<Session> deleteSession(
             @PathVariable String id) {
         logger.info("DELETE /api/sessions/{} - Deleting session", id);
-        
-        try {
-            Session deleted = sessionService.deleteSessions(Set.of(id)).getFirst();
-            if (deleted == null) {
-                logger.warn("DELETE /api/sessions/{} - Session not found", id);
-                return ResponseEntity.notFound().build();
-            }
-            logger.info("DELETE /api/sessions/{} - Successfully deleted session", id);
-            return ResponseEntity.ok(deleted);
-        } catch (IllegalArgumentException e) {
-            logger.warn("DELETE /api/sessions/{} - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("DELETE /api/sessions/{} - Error deleting session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Session deleted = sessionService.deleteSessions(Set.of(id)).getFirst();
+
+        return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }
     
     /**
@@ -198,23 +129,10 @@ public class SessionController {
     public ResponseEntity<Session> finishSession(
             @PathVariable String id) {
         logger.info("PUT /api/sessions/{}/finish - Finishing session", id);
-        
-        try {
-            Session finishedSession = sessionService.finishSession(id);
-            if (finishedSession != null) {
-                logger.info("PUT /api/sessions/{}/finish - Successfully finished session", id);
-                return ResponseEntity.ok(finishedSession);
-            } else {
-                logger.warn("PUT /api/sessions/{}/finish - Session not found", id);
-                return ResponseEntity.notFound().build();
-            }
-        } catch (IllegalArgumentException e) {
-            logger.warn("PUT /api/sessions/{}/finish - Invalid request: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("PUT /api/sessions/{}/finish - Error finishing session: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+
+        Session finishedSession = sessionService.finishSession(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(finishedSession);
     }
 }
 

@@ -9,11 +9,11 @@ import React, {
 import type { User } from '../types/User';
 import { UserService } from '../services/UserService';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useMessageSnackbar } from '../components/common/snackbar/MessageSnackbar.tsx';
 
 type CurrentUserContextValue = {
   user: User | null;
   isLoadingUser: boolean;
-  userError: string | null;
   refreshUser: () => Promise<void>;
   setUser: (user: User | null) => void;
 };
@@ -28,28 +28,26 @@ export function CurrentUserProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated } = useAuth0();
+  const { showErrorMessage } = useMessageSnackbar();
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [userError, setUserError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async () => {
     if (!isAuthenticated) {
       setUser(null);
-      setUserError(null);
       setIsLoadingUser(true);
       return;
     }
 
     setIsLoadingUser(true);
-    setUserError(null);
 
     try {
       const fetched = await UserService.getCurrentUser();
       setUser(fetched);
     } catch (e) {
       setUser(null);
-      setUserError(e instanceof Error ? e.message : String(e));
+      showErrorMessage('Failed to load user');
     } finally {
       setIsLoadingUser(false);
     }
@@ -62,7 +60,6 @@ export function CurrentUserProvider({
     } else {
       // When not authenticated yet, wait (don’t show error)
       setUser(null);
-      setUserError(null);
       setIsLoadingUser(true);
     }
   }, [isAuthenticated, refreshUser]);
@@ -71,11 +68,10 @@ export function CurrentUserProvider({
     () => ({
       user,
       isLoadingUser,
-      userError,
       refreshUser,
       setUser,
     }),
-    [user, isLoadingUser, userError, refreshUser]
+    [user, isLoadingUser, refreshUser]
   );
 
   return (

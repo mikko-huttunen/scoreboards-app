@@ -15,7 +15,6 @@ import {
   Checkbox,
   FormControlLabel,
   Alert,
-  CircularProgress,
   Box,
 } from '@mui/material';
 import {
@@ -28,6 +27,8 @@ import type { Session } from '../../types/Session.ts';
 import { Session as SessionType } from '../../types/Session.ts';
 import type { Scoreboard } from '../../types/Scoreboard.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 
 type SessionFormProps = {
   open: boolean;
@@ -56,6 +57,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useCurrentUser();
+  const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
 
   useEffect(() => {
     if (open && scoreboard && user) {
@@ -139,6 +141,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
         : new Set<string>();
       const session: Session = SessionType.create({
         id: createdSession.id,
+        type: createdSession.type,
         scoreboardId: createdSession.scoreboardId,
         scoreboardName: createdSession.scoreboardName,
         createdByName: createdSession.createdByName,
@@ -153,10 +156,12 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       });
 
       if (onSuccess) {
+        showSuccessMessage('Session created');
         onSuccess(session);
       }
       onClose();
     } catch (err) {
+      showErrorMessage('Failed to create session');
       console.error('Error creating session:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
     } finally {
@@ -173,7 +178,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
 
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
+              <LoadingSpinner />
             </Box>
           ) : (
             <>
@@ -278,7 +283,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
           }
           sx={{ backgroundColor: '#38a14f', color: '#ffffff' }}
         >
-          {submitting ? <CircularProgress size={20} /> : 'Create Session'}
+          {submitting ? <LoadingSpinner size={20} /> : 'Create Session'}
         </Button>
       </DialogActions>
     </Dialog>

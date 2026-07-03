@@ -9,6 +9,7 @@ type ReceivedInvitationsListProps = {
   processingInvitation: boolean;
   onAcceptInvitation: (invitation: Invitation) => void;
   onDeleteInvitation: (invitation: Invitation) => void;
+  isLoading: boolean;
 };
 
 export const ReceivedInvitationsList: React.FC<
@@ -18,6 +19,7 @@ export const ReceivedInvitationsList: React.FC<
   processingInvitation,
   onAcceptInvitation,
   onDeleteInvitation,
+  isLoading,
 }) => {
   const { format_date } = useDateFormat();
 
@@ -26,7 +28,7 @@ export const ReceivedInvitationsList: React.FC<
       invitations.map((invitation) => ({
         id: invitation.id,
         'Scoreboard Name': invitation.scoreboardName,
-        From: invitation.createdByName,
+        From: invitation.inviterName,
         Received: format_date(invitation.created),
         invitation,
       })),
@@ -38,13 +40,15 @@ export const ReceivedInvitationsList: React.FC<
       title={'Scoreboard Invitations'}
       headers={['Scoreboard Name', 'From', 'Received']}
       data={data}
-      showBadge
+      showHighlight={invitations.length > 0}
       pageSize={10}
       onDelete={(row) => onDeleteInvitation(row.invitation)}
       canDelete={!processingInvitation}
       onCustom={(row) => onAcceptInvitation(row.invitation)}
       canCustom
       onCustomIcon={<CheckIcon />}
+      customTooltip={'Accept'}
+      isLoading={isLoading}
     />
   );
 };

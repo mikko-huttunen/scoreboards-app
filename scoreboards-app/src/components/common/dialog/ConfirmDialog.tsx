@@ -9,6 +9,7 @@ import {
   DialogContentText,
   DialogTitle,
 } from '@mui/material';
+import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
 
 export type ConfirmDialogProps = {
   open: boolean;
@@ -70,7 +71,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           autoFocus
           disabled={confirmDisabled || loading}
         >
-          {loading ? <CircularProgress size={24} /> : confirmLabel}
+          {loading ? <LoadingSpinner size={24} /> : confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

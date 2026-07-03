@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,17 +30,17 @@ public class InvitationService {
     
     private static final Logger logger = LoggerFactory.getLogger(InvitationService.class);
 
-    private final MongoDBService mongoDBService;
+    private final QueryService queryService;
     private final ScoreboardService scoreboardService;
     private final CurrentUserContext currentUserContext;
     private final UserRepository userRepository;
     
     @Autowired
-    public InvitationService(MongoDBService mongoDBService,
-                             UserService userService,
+    public InvitationService(QueryService queryService,
                              ScoreboardService scoreboardService,
-                             CurrentUserContext currentUserContext, UserRepository userRepository) {
-        this.mongoDBService = mongoDBService;
+                             CurrentUserContext currentUserContext,
+                             UserRepository userRepository) {
+        this.queryService = queryService;
         this.scoreboardService = scoreboardService;
         this.currentUserContext = currentUserContext;
         this.userRepository = userRepository;
@@ -52,156 +54,98 @@ public class InvitationService {
      */
     @Transactional
     public Invitation createInvitation(String receiverEmail, String scoreboardId, Set<Permission> permissions) {
-        logger.info("Creating invitation for email: {} to scoreboard: {}", receiverEmail, scoreboardId);
-        
-        try {
-            User inviter = currentUserContext.requireCurrentUser();
+        User inviter = currentUserContext.requireCurrentUser();
+        logger.info("Creating invitation for email: {} to scoreboard: {} by: {}", receiverEmail, scoreboardId, inviter.getId());
 
-            Optional<User> receiverOpt = userRepository.findByEmailAndIsActiveTrue(receiverEmail);
-            if (receiverOpt.isEmpty()) {
-                logger.error("User with email {} not found or is inactive", receiverEmail);
-                throw new IllegalArgumentException("User not found or is inactive");
-            }
+        Optional<User> receiverOpt = userRepository.findByEmailAndIsActiveTrue(receiverEmail);
+        User receiver = receiverOpt.orElseThrow(() ->
+                new IllegalArgumentException("User with email " + receiverEmail + " not found"));
 
-            User receiver = receiverOpt.get();
-            
-            //Check if user is trying to invite themselves
-            if (receiver.getId().equals(inviter.getId())) {
-                logger.error("User {} cannot invite themselves", inviter.getId());
-                throw new IllegalArgumentException("Cannot invite yourself");
-            }
-            
-            Optional<Scoreboard> scoreboardOpt = scoreboardService.getScoreboardById(scoreboardId);
-            if (scoreboardOpt.isEmpty()) {
-                logger.error("Scoreboard with ID {} not found or is inactive", scoreboardId);
-                throw new IllegalArgumentException("Scoreboard not found or is inactive");
-            }
-            
-            Scoreboard scoreboard = scoreboardOpt.get();
-            
-            //Verify the inviter is the creator of the scoreboard
-            if (!scoreboard.getCreatedBy().equals(inviter.getId())) {
-                logger.error("User {} is not the creator of the scoreboard {}", inviter.getId(), scoreboardId);
-                throw new IllegalArgumentException("You can only invite users to your own scoreboards");
-            }
-            
-            // Check if user is already a member (creator or joined)
-            if (scoreboard.getMemberships().stream().map(Membership::getUserId)
-                    .anyMatch(userId -> userId.equals(receiver.getId()))) {
-                logger.error("User {} is already a member of the scoreboard {}", receiver.getId(), scoreboardId);
-                throw new IllegalArgumentException("User is already a member of this scoreboard");
-            }
-            
-            // Check if there's already a pending invitation
-            List<Invitation> invitations = getInvitationsByUserId(receiver.getId());
-            if (invitations.stream().anyMatch(invitation ->
-                    invitation.getScoreboardId().equals(scoreboardId) && invitation.getIsPending())) {
-                logger.error("Pending invitation already exists for user {} to scoreboard {}", receiver.getId(), scoreboardId);
-                throw new IllegalArgumentException("An invitation has already been sent to this user for this scoreboard");
-            }
-            
-            // Create invitation
-            Invitation invitation = new Invitation();
-            invitation.setReceiverId(receiver.getId());
-            invitation.setReceiverName(receiver.getName());
-            invitation.setCreatedByName(inviter.getName());
-            invitation.setScoreboardId(scoreboardId);
-            invitation.setScoreboardName(scoreboard.getName());
-            invitation.setPermissions(permissions);
-            invitation.setIsPending(true);
-
-            Invitation created = mongoDBService.create(invitation);
-            logger.info("Successfully created invitation with ID: {}", created.getId());
-            
-            return created;
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error creating invitation: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error creating invitation: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create invitation: " + e.getMessage(), e);
+        //Check if user is trying to invite themselves
+        if (receiver.getId().equals(inviter.getId())) {
+            logger.error("User {} cannot invite themselves", inviter.getId());
+            throw new IllegalArgumentException("Cannot invite yourself");
         }
+
+        Scoreboard scoreboard = scoreboardService.getScoreboardById(scoreboardId);
+
+        //Verify the inviter is the creator of the scoreboard
+        if (!scoreboard.getCreatedBy().equals(inviter.getId())) {
+            logger.error("User {} is not the creator of the scoreboard {}", inviter.getId(), scoreboardId);
+            throw new IllegalArgumentException("You are not authorized to invite users to this scoreboard");
+        }
+
+        // Check if user is already a member (creator or joined)
+        if (scoreboard.getMemberships().stream().map(Membership::getUserId)
+                .anyMatch(userId -> userId.equals(receiver.getId()))) {
+            logger.error("User {} is already a member of the scoreboard {}", receiver.getId(), scoreboardId);
+            throw new IllegalArgumentException("User is already a member of this scoreboard");
+        }
+
+        // Check if there's already a pending invitation
+        List<Invitation> invitations = getInvitationsByUserId(receiver.getId());
+        if (invitations.stream().anyMatch(invitation ->
+                invitation.getScoreboardId().equals(scoreboardId))) {
+            logger.error("Pending invitation already exists for user {} to scoreboard {}", receiver.getId(), scoreboardId);
+            throw new IllegalArgumentException("An invitation has already been sent to this user for this scoreboard");
+        }
+
+        Invitation invitation = new Invitation();
+        invitation.setReceiverId(receiver.getId());
+        invitation.setScoreboardId(scoreboardId);
+        invitation.setScoreboardName(scoreboard.getName());
+        invitation.setPermissions(permissions);
+
+        Invitation createdInvitation = queryService.create(invitation);
+
+        //Inviter name can change so we do not save it in the invitation
+        createdInvitation.setReceiverName(receiver.getName());
+
+        logger.info("Successfully created invitation with ID: {}", createdInvitation.getId());
+        return createdInvitation;
     }
-    
+
     /**
-     * Get all invitations for a user.
+     * Get all invitations of a user.
      * @param userId ID of the user
-     * @return List of all active invitations
+     * @return List of invitations
      */
     public List<Invitation> getInvitationsByUserId(String userId) {
-        logger.info("Fetching all invitations for user: {}", userId);
-        
-        if (userId == null || userId.trim().isEmpty()) {
-            logger.warn("Attempted to fetch invitations with null or empty user ID");
-            return List.of();
-        }
-        
-        try {
-            Query query = new Query(new Criteria().orOperator(
-                    where("receiverId").is(userId),
-                    where("createdBy").is(userId)));
-            List<Invitation> invitations = mongoDBService.find(query, Invitation.class, false);
-            logger.info("Successfully fetched {} invitations for user: {}", invitations.size(), userId);
-            return invitations;
-        } catch (Exception e) {
-            logger.error("Error fetching invitations for user {}: {}", userId, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch invitations", e);
-        }
+        logger.info("Fetching invitations for user: {}", userId);
+
+        List<Invitation> invitations = queryService.fetchInvitationsWithResolvedUserNames(userId);
+
+        logger.info("Successfully fetched {} invitations for user: {}", invitations.size(), userId);
+        return invitations;
     }
     
     /**
      * Get invitation by ID.
      * @param invitationId ID of the invitation
-     * @return Optional invitation
+     * @return The invitation if found
      */
-    public Optional<Invitation> getInvitationById(String invitationId) {
+    public Invitation getInvitationById(String invitationId) {
         logger.info("Fetching invitation with ID: {}", invitationId);
-        
-        if (invitationId == null || invitationId.trim().isEmpty()) {
-            logger.warn("Attempted to fetch invitation with null or empty ID");
-            return Optional.empty();
-        }
-        
-        try {
-            Optional<Invitation> invitation = mongoDBService.findById(invitationId, Invitation.class, false);
-            if (invitation.isPresent()) {
-                logger.info("Successfully fetched invitation with ID: {}", invitationId);
-            } else {
-                logger.warn("Invitation with ID {} not found or is inactive", invitationId);
-            }
-            return invitation;
-        } catch (Exception e) {
-            logger.error("Error fetching invitation with ID {}: {}", invitationId, e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch invitation", e);
-        }
+
+        Optional<Invitation> invitationOpt = queryService.findById(invitationId, Invitation.class, false);
+        Invitation invitation = invitationOpt.orElseThrow(() ->
+                new IllegalArgumentException("Invitation not found"));
+
+        logger.info("Found invitation with ID: {}", invitation.getId());
+        return invitation;
     }
     
     /**
      * Accept an invitation.
      * @param invitationId ID of the invitation
-     * @return Updated invitation
+     * @return The accepted invitation
      */
     @Transactional
     public Invitation acceptInvitation(String invitationId) {
         logger.info("Accepting invitation {}", invitationId);
 
-        // Validate inputs
-        if (invitationId == null || invitationId.trim().isEmpty()) {
-            logger.error("Invitation ID cannot be null or empty");
-            throw new IllegalArgumentException("Invitation ID cannot be null or empty");
-        }
-
         try {
-            Optional<Invitation> invitationOpt = getInvitationById(invitationId);
-
-            if (invitationOpt.isEmpty()) {
-                logger.error("Invitation with ID {} not found or is inactive", invitationId);
-                throw new IllegalArgumentException("Invitation not found");
-            }
-
-            Invitation invitation = invitationOpt.get();
-
-            String userToAddId = invitation.getReceiverId();
+            Invitation invitation = getInvitationById(invitationId);
 
             User user = currentUserContext.requireCurrentUser();
 
@@ -210,80 +154,43 @@ public class InvitationService {
             membership.setUserId(invitation.getReceiverId());
             membership.setPermissions(invitation.getPermissions());
 
-            Set<Membership> userMemberships = user.getMemberships();
-            boolean userHasMembership = userMemberships.stream().anyMatch(ms ->
+            boolean userHasMembership = user.getMemberships().stream().anyMatch(ms ->
                     ms.getScoreboardId().equals(invitation.getScoreboardId()));
 
             if (userHasMembership) {
-                logger.error("User {} already has a membership to the scoreboard {}", user.getId(), invitation.getScoreboardId());
+                logger.error("User {} already has a membership to the scoreboard {}",
+                        user.getId(), invitation.getScoreboardId());
                 deleteInvitations(Set.of(invitationId));
                 throw new IllegalArgumentException("User is already a member of this scoreboard");
             }
 
-            mongoDBService.update(user.getId(), User.class, u -> u.getMemberships().add(membership));
-            logger.info("Added membership for user: {} to user: {}", userToAddId, invitation.getScoreboardId());
-
-            Optional<Scoreboard> scoreboardOpt = scoreboardService.getScoreboardById(invitation.getScoreboardId());
-            if (scoreboardOpt.isEmpty()) {
-                logger.error("Scoreboard {} no longer exists", invitation.getScoreboardId());
-                deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("Scoreboard no longer exists");
-            }
-
-            Scoreboard scoreboard = scoreboardOpt.get();
-
-            Set<Membership> scoreboardMemberships = scoreboard.getMemberships();
-            boolean scoreboardHasMembership = scoreboardMemberships.stream().anyMatch(ms ->
-                    ms.getUserId().equals(user.getId()));
-
-            if (scoreboardHasMembership) {
-                logger.error("Scoreboard {} already has a membership for the user {}", scoreboard.getId(), user.getId());
-                deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("User is already a member of this scoreboard");
-            }
-
-            mongoDBService.update(scoreboard.getId(), Scoreboard.class, sb -> sb.getMemberships().add(membership));
-            logger.info("Added membership to scoreboard: {} for user {}", invitation.getScoreboardId(), userToAddId);
+            queryService.create(membership);
 
             //Delete invitation after it's accepted
-            Invitation deleted = deleteInvitations(Set.of(invitationId)).getFirst();
-            logger.info("Successfully accepted invitation {}", invitationId);
-            
-            return deleted;
+            Invitation deletedInvitation = deleteInvitations(Set.of(invitationId)).getFirst();
+
+            logger.info("Successfully accepted invitation {}", deletedInvitation.getId());
+            return deletedInvitation;
         } catch (IllegalArgumentException e) {
-            logger.error("Validation error accepting invitation: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error accepting invitation {}: {}", invitationId, e.getMessage(), e);
-            throw new RuntimeException("Failed to accept invitation: " + e.getMessage(), e);
+            logger.error("Failed to accept invitation {}", invitationId, e);
+            deleteInvitations(Set.of(invitationId));
+            throw new IllegalArgumentException("Failed to accept invitation", e);
         }
     }
     
     /**
      * Delete an invitation (soft delete).
      * @param ids List of invitation IDs
-     * @return all the deleted invitations
+     * @return All the deleted invitations
      */
     @Transactional
     public List<Invitation> deleteInvitations(Set<String> ids) {
         logger.info("Deleting invitations {}", ids);
 
-        if (ids == null || ids.isEmpty()) {
-            logger.warn("Attempted to delete invitations with null or empty IDs");
-            throw new IllegalArgumentException("Invitation IDs cannot be null or empty");
-        }
-        
-        try {
-            List<Invitation> deleted = mongoDBService.deleteAll(ids, Invitation.class);
-            logger.info("Successfully deleted invitations: {}", ids);
-            return deleted;
-        } catch (IllegalArgumentException e) {
-            logger.error("Validation error deleting invitations with IDs {}: {}", ids, e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error deleting invitations with IDs {}: {}", ids, e.getMessage(), e);
-            throw new RuntimeException("Failed to delete invitations: " + e.getMessage(), e);
-        }
+        List<Invitation> deletedInvitations = queryService.deleteAll(ids, Invitation.class);
+
+        logger.info("Successfully deleted invitations: {}", deletedInvitations);
+        return deletedInvitations;
     }
 }
 

@@ -1,11 +1,16 @@
 import type { Membership } from './Membership.ts';
+import type { PointCategory } from './PointCategory.ts';
+import type { ResultEntry } from './ResultEntry.ts';
+import type { Session } from './Session.ts';
 
 export type Scoreboard = {
   id: string;
   type: string;
   name: string;
-  memberships: Set<Membership>;
-  pointCategories: Set<string>;
+  memberships: Membership[];
+  pointCategories: PointCategory[];
+  sessions: Session[];
+  resultEntries: ResultEntry[];
   created: Date;
   lastModified: Date;
   createdBy: string;
@@ -14,14 +19,16 @@ export type Scoreboard = {
 
 export const Scoreboard = {
   create: (data: Scoreboard): Scoreboard => ({
-    id: data.id ?? '',
-    type: data.type ?? '',
-    name: data.name ?? '',
-    memberships: data.memberships ?? new Set(),
-    pointCategories: data.pointCategories ?? new Set(),
-    created: data.created ?? new Date(),
-    lastModified: data.lastModified ?? new Date(),
-    createdBy: data.createdBy ?? '',
-    isActive: data.isActive ?? true,
+    id: data.id,
+    type: data.type,
+    name: data.name,
+    memberships: data.memberships,
+    pointCategories: data.pointCategories,
+    sessions: data.sessions,
+    resultEntries: data.resultEntries,
+    created: data.created,
+    lastModified: data.lastModified,
+    createdBy: data.createdBy,
+    isActive: data.isActive,
   }),
 };

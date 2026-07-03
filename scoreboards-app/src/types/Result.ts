@@ -5,7 +5,7 @@ export type Result = {
 
 export const Result = {
   create: (data: Result): Result => ({
-    pointCategoryId: data.pointCategoryId ?? '',
-    points: data.points ?? 0,
+    pointCategoryId: data.pointCategoryId,
+    points: data.points,
   }),
 };
