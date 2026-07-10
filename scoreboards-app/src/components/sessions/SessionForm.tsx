@@ -16,6 +16,7 @@ import {
   FormControlLabel,
   Alert,
   Box,
+  TextField,
 } from '@mui/material';
 import {
   SessionService,
@@ -39,6 +40,9 @@ type SessionFormProps = {
   onSuccess?: (session: Session) => void;
 };
 
+const SESSION_NAME_MAX_LENGTH = 20;
+const SESSION_COMMENT_MAX_LENGTH = 50;
+
 export const SessionForm: React.FC<SessionFormProps> = ({
   open,
   onClose,
@@ -59,6 +63,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const { user } = useCurrentUser();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
 
+  const [name, setName] = useState<string>('');
+  const [comment, setComment] = useState<string>('');
+
   useEffect(() => {
     if (open && scoreboard && user) {
       const loadPointCategories = async () => {
@@ -69,8 +76,18 @@ export const SessionForm: React.FC<SessionFormProps> = ({
           setSelectedPointCategories(
             new Set(pointCategories?.map((pc) => pc.id) || [])
           );
-          // Add all users to participants by default
+
+          // Include all scoreboard users in participants by default
           setSelectedParticipants(new Set(users.map((u) => u.id)));
+
+          // Default session name to current date/time (capped)
+          const defaultName = `${scoreboard.name} session ${
+            scoreboard.sessions.length + 1
+          }`;
+          setName(defaultName.slice(0, SESSION_NAME_MAX_LENGTH));
+
+          // Comment initially empty (optional; capped)
+          setComment('');
         } catch (err) {
           console.error('Error loading point categories:', err);
           setError(
@@ -87,6 +104,8 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       // Reset form when closed
       setSelectedParticipants(new Set());
       setSelectedPointCategories(new Set());
+      setName('');
+      setComment('');
       setError(null);
     }
   }, [open, scoreboard, user, users, pointCategories]);
@@ -109,12 +128,30 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       return;
     }
 
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('Name cannot be empty');
+      return;
+    }
+    if (trimmedName.length > SESSION_NAME_MAX_LENGTH) {
+      setError(`Name must be at most ${SESSION_NAME_MAX_LENGTH} characters`);
+      return;
+    }
+
+    const trimmedComment = comment.trim();
+    if (trimmedComment.length > SESSION_COMMENT_MAX_LENGTH) {
+      setError(
+        `Comment must be at most ${SESSION_COMMENT_MAX_LENGTH} characters`
+      );
+      return;
+    }
+
     if (selectedPointCategories.size === 0) {
       setError('At least one point category must be selected');
       return;
     }
 
-    // Require at least 2 participants
+    // Require at least 2 participants (creator is not mandatory)
     if (selectedParticipants.size < 2) {
       setError('At least 2 participants are required');
       return;
@@ -125,8 +162,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
 
     try {
       const sessionData: CreateSessionData = {
+        name: trimmedName,
+        comment: trimmedComment, // optional; empty string is fine
         scoreboardId: scoreboard.id,
-        scoreboardName: scoreboard.name,
         participants: Array.from(selectedParticipants),
         pointCategories: Array.from(selectedPointCategories),
       };
@@ -142,8 +180,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       const session: Session = SessionType.create({
         id: createdSession.id,
         type: createdSession.type,
+        name: createdSession.name,
+        comment: createdSession.comment,
         scoreboardId: createdSession.scoreboardId,
-        scoreboardName: createdSession.scoreboardName,
         createdByName: createdSession.createdByName,
         isPending: createdSession.isPending ?? true,
         participants: allParticipantIds,
@@ -182,6 +221,20 @@ export const SessionForm: React.FC<SessionFormProps> = ({
             </Box>
           ) : (
             <>
+              <Stack spacing={2}>
+                <TextField
+                  label="Name"
+                  value={name}
+                  onChange={(e) =>
+                    setName(e.target.value.slice(0, SESSION_NAME_MAX_LENGTH))
+                  }
+                  fullWidth
+                  disabled={submitting}
+                  required
+                  inputProps={{ maxLength: SESSION_NAME_MAX_LENGTH }}
+                />
+              </Stack>
+
               <FormControl fullWidth>
                 <InputLabel id="participants-label">Participants</InputLabel>
                 <Select
@@ -209,16 +262,10 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   disabled={submitting}
                 >
                   {users.map((u) => {
-                    const isCreator = u.id === user?.id;
-                    const isSelected = selectedParticipants.has(u.id);
+                    // Creator does NOT need to be included; allow toggling freely.
                     return (
-                      <MenuItem
-                        key={u.id}
-                        value={u.id}
-                        disabled={isCreator && isSelected} // Disable if creator is already selected
-                      >
+                      <MenuItem key={u.id} value={u.id}>
                         {u.name || u.email || 'Unknown User'}
-                        {isCreator && ' (You)'}
                       </MenuItem>
                     );
                   })}
@@ -263,6 +310,20 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                     </Typography>
                   )}
                 </Stack>
+                <TextField
+                  label="Comment"
+                  value={comment}
+                  onChange={(e) =>
+                    setComment(
+                      e.target.value.slice(0, SESSION_COMMENT_MAX_LENGTH)
+                    )
+                  }
+                  fullWidth
+                  disabled={submitting}
+                  multiline
+                  minRows={2}
+                  inputProps={{ maxLength: SESSION_COMMENT_MAX_LENGTH }}
+                />
               </Stack>
             </>
           )}
@@ -279,7 +340,10 @@ export const SessionForm: React.FC<SessionFormProps> = ({
             submitting ||
             loading ||
             selectedPointCategories.size === 0 ||
-            selectedParticipants.size < 2
+            selectedParticipants.size < 2 ||
+            name.trim().length === 0 ||
+            name.trim().length > SESSION_NAME_MAX_LENGTH ||
+            comment.trim().length > SESSION_COMMENT_MAX_LENGTH
           }
           sx={{ backgroundColor: '#38a14f', color: '#ffffff' }}
         >

@@ -1,12 +1,15 @@
-import axios from 'axios';
 import apiClient from '../api/Interceptor';
 import type { Session } from '../types/Session';
+import type { PointCategory } from '../types/PointCategory.ts';
+import type { ResultEntry } from '../types/ResultEntry.ts';
+import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/sessions';
 
 export type CreateSessionData = {
+  name: string;
+  comment: string;
   scoreboardId: string;
-  scoreboardName: string;
   participants: string[];
   pointCategories: string[];
 };
@@ -14,6 +17,19 @@ export type CreateSessionData = {
 export type UpdateSessionData = {
   participants?: string[];
   pointCategories?: string[];
+};
+
+export type SessionData = {
+  id: string;
+  name: string;
+  comment: string;
+  scoreboardId: string;
+  createdBy: string;
+  createdByName: string;
+  isPending: boolean;
+  participants: Set<string>;
+  pointCategoryDetails: PointCategory[];
+  resultEntryDetails: ResultEntry[];
 };
 
 /**
@@ -31,10 +47,8 @@ export class SessionService {
       const response = await apiClient.post<Session>(API_BASE_URL, data);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to create session: ${error.message}`);
-      }
-      throw new Error(`Failed to create session: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to create session: ${errorMessage}`);
     }
   }
 
@@ -52,10 +66,8 @@ export class SessionService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch sessions: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch sessions: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch sessions: ${errorMessage}`);
     }
   }
 
@@ -64,15 +76,15 @@ export class SessionService {
    * @param id Session ID
    * @returns Promise resolving to session or null if not found
    */
-  static async getSessionById(id: string): Promise<Session | null> {
+  static async getSessionById(id: string): Promise<SessionData | null> {
     try {
-      const response = await apiClient.get<Session>(`${API_BASE_URL}/${id}`);
+      const response = await apiClient.get<SessionData>(
+        `${API_BASE_URL}/${id}`
+      );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch session: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch session: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch session: ${errorMessage}`);
     }
   }
 
@@ -93,10 +105,8 @@ export class SessionService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to update session: ${error.message}`);
-      }
-      throw new Error(`Failed to update session: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to update session: ${errorMessage}`);
     }
   }
 
@@ -110,10 +120,8 @@ export class SessionService {
       const response = await apiClient.delete<Session>(`${API_BASE_URL}/${id}`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to delete session: ${error.message}`);
-      }
-      throw new Error(`Failed to delete session: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to delete session: ${errorMessage}`);
     }
   }
 
@@ -129,13 +137,8 @@ export class SessionService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response) {
-          throw new Error(error.response?.data);
-        }
-        throw new Error(`Failed to finish session: ${error.message}`);
-      }
-      throw new Error(`Failed to finish session: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to finish session: ${errorMessage}`);
     }
   }
 }

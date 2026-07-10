@@ -28,15 +28,17 @@ public class ScoreboardService {
     private final QueryService queryService;
     private final CurrentUserContext currentUserContext;
     private final PointCategoryService pointCategoryService;
+    private final SessionService sessionService;
 
     @Autowired
     public ScoreboardService(
             QueryService queryService,
             CurrentUserContext currentUserContext,
-            PointCategoryService pointCategoryService) {
+            PointCategoryService pointCategoryService, SessionService sessionService) {
         this.queryService = queryService;
         this.currentUserContext = currentUserContext;
         this.pointCategoryService = pointCategoryService;
+        this.sessionService = sessionService;
     }
 
     /**
@@ -82,12 +84,17 @@ public class ScoreboardService {
         Set<String> scoreboardIds = user.getMemberships().stream()
                 .map(Membership::getScoreboardId).collect(Collectors.toSet());
 
-        Query query = new Query(Criteria.where("_id").in(scoreboardIds));
-        List<Scoreboard> scoreboards = queryService.find(query, Scoreboard.class, false);
+        if (scoreboardIds.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        scoreboards.forEach(s ->
-                s.setMemberships(user.getMemberships().stream().filter(m ->
-                        m.getScoreboardId().equals(s.getId())).toList()));
+        Optional<List<Scoreboard>> scoreboardsOpt = queryService.fetchScoreboardsWithPartialData(scoreboardIds);
+        if (scoreboardsOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Scoreboard> scoreboards = scoreboardsOpt.orElseThrow(() ->
+                new IllegalArgumentException("Failed to load scoreboards"));
 
         logger.info("Found {} scoreboards for user: {}", scoreboards.size(), user.getId());
         return scoreboards;
@@ -116,12 +123,9 @@ public class ScoreboardService {
     public Scoreboard getScoreboardById(String scoreboardId) {
         logger.info("Fetching scoreboard by ID: {}", scoreboardId);
 
-        Optional<Scoreboard> scoreboardOpt = queryService.findById(scoreboardId, Scoreboard.class, false);
-        Scoreboard scoreboard = scoreboardOpt.orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
-
-        Query membershipQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-        List<Membership> memberships = queryService.find(membershipQuery, Membership.class, false);
-        scoreboard.setMemberships(memberships);
+        Optional<List<Scoreboard>> scoreboardsOpt = queryService.fetchScoreboardsWithPartialData(Set.of(scoreboardId));
+        Scoreboard scoreboard = scoreboardsOpt.orElseThrow(() ->
+                new IllegalArgumentException("Scoreboard not found")).getFirst();
 
         logger.info("Found scoreboard with ID: {}", scoreboard.getId());
         return scoreboard;
@@ -136,6 +140,12 @@ public class ScoreboardService {
     @Transactional
     public Scoreboard updateScoreboard(String scoreboardId, ScoreboardDTO updatedScoreboardData) {
         logger.info("Updating scoreboard with ID: {}", scoreboardId);
+
+        List<Session> pendingSessions = sessionService.getPendingSessionsByScoreboardId(scoreboardId);
+        if (!pendingSessions.isEmpty()) {
+            logger.error("Cannot update scoreboard with ID: {} because there are pending sessions", scoreboardId);
+            throw new IllegalArgumentException("Cannot update scoreboard with pending sessions");
+        }
 
         List<PointCategory> existingPointCategories =
                 pointCategoryService.getPointCategoriesByScoreboardId(scoreboardId);
@@ -179,11 +189,6 @@ public class ScoreboardService {
         Scoreboard updatedScoreboard = updatedScoreboardOpt.orElseThrow(() ->
                 new IllegalArgumentException("Scoreboard not found"));
 
-        //Update scoreboard name in invitations
-        Query invitationQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-        queryService.update(invitationQuery, Invitation.class, invitation ->
-                invitation.setScoreboardName(updatedScoreboard.getName()));
-
         logger.info("Successfully updated scoreboard with ID: {}", updatedScoreboard.getId());
         return updatedScoreboard;
     }
@@ -196,6 +201,15 @@ public class ScoreboardService {
     @Transactional
     public List<Scoreboard> deleteScoreboards(Set<String> ids) {
         logger.info("Deleting scoreboards with IDs: {}", ids);
+
+        ids.forEach(id -> {
+            List<Session> pendingSessions = sessionService.getPendingSessionsByScoreboardId(id);
+            if (!pendingSessions.isEmpty()) {
+                logger.error("Cannot delete scoreboard with ID: {} because there are pending sessions", id);
+                throw new IllegalArgumentException("Cannot delete scoreboard with pending sessions");
+            }
+        });
+
         List<Scoreboard> deletedScoreboards = queryService.deleteAll(ids, Scoreboard.class);
 
         deletedScoreboards.forEach(deleted -> {
@@ -216,6 +230,10 @@ public class ScoreboardService {
             //Delete related result entries
             Query resultEntryQuery = new Query(Criteria.where("scoreboardId").is(id));
             queryService.delete(resultEntryQuery, ResultEntry.class);
+
+            //Delete related memberships
+            Query membershipQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(membershipQuery, Membership.class);
         });
 
         logger.info("Successfully deleted scoreboards with IDs: {}", ids);
@@ -232,13 +250,15 @@ public class ScoreboardService {
         User user = currentUserContext.requireCurrentUser();
         logger.info("User: {} is leaving the scoreboard: {}", user.getId(), scoreboardId);
 
-        //Remove membership from scoreboard
-        queryService.updateById(scoreboardId, Scoreboard.class, scoreboard -> scoreboard.getMemberships()
-                .removeIf(ms -> ms.getUserId().equals(user.getId())));
+        Boolean isParticipatingInSession = sessionService.isUserParticipatingInSession(scoreboardId, user.getId());
+        if (isParticipatingInSession) {
+            logger.error("User: {} cannot leave the scoreboard: {} because they are participating in a session", user.getId(), scoreboardId);
+            throw new IllegalArgumentException("Cannot leave scoreboard when participating in a session");
+        }
 
-        //Remove membership from user
-        queryService.updateById(user.getId(), User.class, userToUpdate -> userToUpdate.getMemberships()
-                .removeIf(ms -> ms.getScoreboardId().equals(scoreboardId)));
+        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
+                .and("userId").is(user.getId()));
+        queryService.delete(query, Membership.class);
 
         logger.info("User: {} successfully left the scoreboard: {}", user.getId(), scoreboardId);
         return true;
@@ -255,25 +275,27 @@ public class ScoreboardService {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Removing user {} from scoreboard {}", userId, scoreboardId);
 
+        Boolean isParticipatingInSession = sessionService.isUserParticipatingInSession(scoreboardId, userId);
+        if (isParticipatingInSession) {
+            logger.error("User {} cannot be removed from a scoreboard {} because they are participating in a session", userId, scoreboardId);
+            throw new IllegalArgumentException("Cannot remove user from scoreboard when participating in a session");
+        }
+
         if (currentUser.getId().equals(userId)) {
             logger.error("Creator {} cannot remove themselves from scoreboard {}", currentUser.getId(), scoreboardId);
             throw new IllegalArgumentException("Cannot remove yourself from a scoreboard");
         }
 
-        //Remove membership from scoreboard
-        queryService.updateById(scoreboardId, Scoreboard.class, scoreboard -> {
-            if (scoreboard.getCreatedBy().equals(currentUser.getId())) {
-                scoreboard.getMemberships().removeIf(ms -> ms.getUserId().equals(userId));
-            } else {
-                logger.error("User {} is not the creator of scoreboard {}", currentUser.getId(), scoreboardId);
-                throw new IllegalArgumentException("Only the creator can remove users from a scoreboard");
-            }
-        });
+        Scoreboard scoreboard = getScoreboardById(scoreboardId);
 
-        //Remove membership from user
-        queryService.updateById(userId, User.class, userToUpdate ->
-                userToUpdate.getMemberships().removeIf(ms ->
-                        ms.getScoreboardId().equals(scoreboardId)));
+        if (!scoreboard.getCreatedBy().equals(currentUser.getId())) {
+            logger.error("User {} is not the creator of scoreboard {}", currentUser.getId(), scoreboardId);
+            throw new IllegalArgumentException("Only the creator can remove users from a scoreboard");
+        }
+
+        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
+                .and("userId").is(userId));
+        queryService.delete(query, Membership.class);
 
         logger.info("Successfully removed user {} from scoreboard {}", userId, scoreboardId);
         return true;

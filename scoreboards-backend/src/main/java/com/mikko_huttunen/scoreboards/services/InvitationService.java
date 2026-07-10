@@ -10,16 +10,10 @@ import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-
-import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
  * Service class for handling Invitation business logic.
@@ -98,7 +92,7 @@ public class InvitationService {
 
         Invitation createdInvitation = queryService.create(invitation);
 
-        //Inviter name can change so we do not save it in the invitation
+        //Inviter name can change, so we do not save it in the invitation document in database but add it afterward
         createdInvitation.setReceiverName(receiver.getName());
 
         logger.info("Successfully created invitation with ID: {}", createdInvitation.getId());
@@ -113,7 +107,13 @@ public class InvitationService {
     public List<Invitation> getInvitationsByUserId(String userId) {
         logger.info("Fetching invitations for user: {}", userId);
 
-        List<Invitation> invitations = queryService.fetchInvitationsWithResolvedUserNames(userId);
+        Optional<List<Invitation>> invitationsOpt = queryService.fetchInvitationsWithResolvedUsernamesByUserId(userId);
+        if (invitationsOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Invitation> invitations = invitationsOpt.orElseThrow(() ->
+                new IllegalArgumentException("Failed to fetch invitations"));
 
         logger.info("Successfully fetched {} invitations for user: {}", invitations.size(), userId);
         return invitations;
@@ -127,7 +127,8 @@ public class InvitationService {
     public Invitation getInvitationById(String invitationId) {
         logger.info("Fetching invitation with ID: {}", invitationId);
 
-        Optional<Invitation> invitationOpt = queryService.findById(invitationId, Invitation.class, false);
+        Optional<Invitation> invitationOpt =
+                queryService.fetchInvitationWithResolvedUsernamesByInvitationId(invitationId);
         Invitation invitation = invitationOpt.orElseThrow(() ->
                 new IllegalArgumentException("Invitation not found"));
 

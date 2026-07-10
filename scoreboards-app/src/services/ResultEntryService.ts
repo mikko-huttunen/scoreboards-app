@@ -1,7 +1,7 @@
-import axios from 'axios';
 import apiClient from '../api/Interceptor';
 import type { ResultEntry } from '../types/ResultEntry';
 import type { Result } from '../types/Result.ts';
+import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/result-entries';
 
@@ -17,6 +17,15 @@ export type ResultEntryData = {
  * All methods require an authentication token.
  */
 export class ResultEntryService {
+  static async createResultEntry(data: ResultEntryData): Promise<ResultEntry> {
+    try {
+      const response = await apiClient.post<ResultEntry>(API_BASE_URL, data);
+      return response.data;
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  }
   /**
    * Get all result entries for a specific scoreboard.
    * @param scoreboardId The scoreboard ID
@@ -31,12 +40,10 @@ export class ResultEntryService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch result entries by scoreboard: ${error.message}`
-        );
-      }
-      throw new Error(`Failed to fetch result entries by scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(
+        `Failed to fetch result entries by scoreboard: ${errorMessage}`
+      );
     }
   }
 
@@ -51,12 +58,10 @@ export class ResultEntryService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch result entries by user: ${error.message}`
-        );
-      }
-      throw new Error(`Failed to fetch result entries by user: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(
+        `Failed to fetch result entries by user: ${errorMessage}`
+      );
     }
   }
 
@@ -72,10 +77,8 @@ export class ResultEntryService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch result entry by ID: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch result entry by ID: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch result entry by ID: ${errorMessage}`);
     }
   }
 
@@ -96,10 +99,8 @@ export class ResultEntryService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to update result entry: ${error.message}`);
-      }
-      throw new Error(`Failed to update result entry: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(errorMessage);
     }
   }
 }

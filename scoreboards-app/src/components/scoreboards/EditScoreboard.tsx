@@ -21,6 +21,7 @@ export const EditScoreboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const { showErrorMessage } = useMessageSnackbar();
   const { user } = useCurrentUser();
+  let isCreator = false;
 
   useEffect(() => {
     const loadData = async () => {
@@ -32,8 +33,19 @@ export const EditScoreboard: React.FC = () => {
         const scoreboardData =
           await ScoreboardsService.getScoreboardById(scoreboardId);
 
-        if (scoreboardData?.createdBy !== user?.id) {
-          navigate('/scoreboards');
+        isCreator = scoreboardData?.createdBy === user.id;
+        if (!isCreator) {
+          navigate(`/scoreboards/${scoreboardId}`);
+          return;
+        }
+        isCreator = true;
+
+        const hasPendingSessions = scoreboardData?.sessions.find(
+          (s) => s.isPending
+        );
+        if (hasPendingSessions) {
+          showErrorMessage('Cannot edit scoreboard with pending sessions');
+          navigate(`/scoreboards/${scoreboardId}`);
           return;
         }
 
@@ -51,7 +63,7 @@ export const EditScoreboard: React.FC = () => {
     loadData();
   }, [scoreboardId, user]);
 
-  if (loading) {
+  if (loading || !isCreator) {
     return <LoadingSpinner />;
   }
 

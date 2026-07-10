@@ -1,6 +1,6 @@
-import axios from 'axios';
 import type { Scoreboard } from '../types/Scoreboard';
 import apiClient from '../api/Interceptor';
+import { getErrorMessage } from '../utils/Utils.ts';
 const API_BASE_URL = '/api/scoreboards';
 
 export type ScoreboardData = {
@@ -33,10 +33,8 @@ export class ScoreboardsService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to create scoreboard: ${error.message}`);
-      }
-      throw new Error(`Failed to create scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to create scoreboard: ${errorMessage}`);
     }
   }
 
@@ -49,12 +47,8 @@ export class ScoreboardsService {
       const response = await apiClient.get<Scoreboard[]>(API_BASE_URL);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch scoreboards by user: ${error.message}`
-        );
-      }
-      throw new Error(`Failed to fetch scoreboards by user: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch scoreboards by user: ${errorMessage}`);
     }
   }
 
@@ -68,10 +62,8 @@ export class ScoreboardsService {
       const response = await apiClient.get<Scoreboard>(`${API_BASE_URL}/${id}`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch scoreboard by ID: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch scoreboard by ID: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch scoreboard by ID: ${errorMessage}`);
     }
   }
 
@@ -92,10 +84,8 @@ export class ScoreboardsService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to update scoreboard: ${error.message}`);
-      }
-      throw new Error(`Failed to update scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to update scoreboard: ${errorMessage}`);
     }
   }
 
@@ -109,10 +99,8 @@ export class ScoreboardsService {
       const response = await apiClient.delete(`${API_BASE_URL}/${id}`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to delete scoreboard: ${error.message}`);
-      }
-      throw new Error(`Failed to delete scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to delete scoreboard: ${errorMessage}`);
     }
   }
 
@@ -126,10 +114,8 @@ export class ScoreboardsService {
       const response = await apiClient.post(`${API_BASE_URL}/${id}/leave`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to leave scoreboard: ${error.message}`);
-      }
-      throw new Error(`Failed to leave scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to leave scoreboard: ${errorMessage}`);
     }
   }
 
@@ -151,12 +137,8 @@ export class ScoreboardsService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to remove user from scoreboard: ${error.message}`
-        );
-      }
-      throw new Error(`Failed to remove user from scoreboard: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to remove user from scoreboard: ${errorMessage}`);
     }
   }
 }

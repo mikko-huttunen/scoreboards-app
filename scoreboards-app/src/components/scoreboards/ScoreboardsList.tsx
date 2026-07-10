@@ -30,6 +30,20 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
     navigate('/scoreboards/new');
   };
 
+  const canDelete = (scoreboard: Scoreboard) => {
+    const isCreator = isOwner(scoreboard.memberships, user?.id);
+    const hasPendingSessions = scoreboard.sessions.find((s) => s.isPending);
+
+    return isCreator && !hasPendingSessions;
+  };
+
+  const canLeave = (scoreboard: Scoreboard) => {
+    const isCreator = isOwner(scoreboard.memberships, user?.id);
+    const hasPendingSessions = scoreboard.sessions.find((s) => s.isPending);
+
+    return !isCreator && !hasPendingSessions;
+  };
+
   const data = useMemo(
     () =>
       scoreboards.map((scoreboard) => {
@@ -37,8 +51,6 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
           id: scoreboard.id,
           Name: scoreboard.name,
           scoreboard,
-          canDelete: isOwner(scoreboard.memberships, user?.id),
-          canLeave: !isOwner(scoreboard.memberships, user?.id),
         };
       }),
     [scoreboards]
@@ -54,9 +66,9 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
       onCreate={handleCreateNew}
       canCreate
       onDelete={(row) => onDelete(row.scoreboard)}
-      canDelete={(row) => row.canDelete}
+      canDelete={(row) => canDelete(row.scoreboard)}
       onCustom={(row) => onLeave(row.scoreboard)}
-      canCustom={(row) => row.canLeave}
+      canCustom={(row) => canLeave(row.scoreboard)}
       onCustomIcon={<ExitToAppIcon />}
       customTooltip={'Leave'}
       isLoading={isLoading}

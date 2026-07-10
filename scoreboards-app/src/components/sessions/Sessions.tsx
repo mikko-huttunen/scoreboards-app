@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { DataTable } from '../common/table/DataTable.tsx';
-import { hasSessionsPermission, useDateFormat } from '../../utils/Utils.ts';
+import {
+  hasSessionsPermission,
+  isOwner,
+  useDateFormat,
+} from '../../utils/Utils.ts';
 import type { Session } from '../../types/Session.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import type { Scoreboard } from '../../types/Scoreboard.ts';
@@ -43,12 +47,20 @@ export const Sessions: React.FC<SessionsProps> = ({
     scoreboard.memberships,
     user?.id
   );
+  const isCreator = isOwner(scoreboard.memberships, user?.id);
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
   const [sessionDetailsModalOpen, setSessionDetailsModalOpen] = useState(false);
   const [createSessionModalOpen, setCreateSessionModalOpen] = useState(false);
   const [deleteSessionDialogOpen, setDeleteSessionDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+
+  const canDelete = (session: Session) => {
+    if (isCreator) return true;
+    if (hasPermissions && session.createdBy === user?.id) return true;
+
+    return false;
+  };
 
   const goToSessionResults = (sessionId: string) => {
     navigate(`/scoreboards/${scoreboard.id}/session/${sessionId}/results`);
@@ -94,8 +106,8 @@ export const Sessions: React.FC<SessionsProps> = ({
     () =>
       sessions.map((session) => ({
         id: session.id,
+        Name: session.name,
         Date: format_date(session.created),
-        'Last Modified': format_date(session.lastModified),
         'Created By': session.createdByName,
         session,
       })),
@@ -140,12 +152,12 @@ export const Sessions: React.FC<SessionsProps> = ({
       )}
       <DataTable
         title="Latest Sessions"
-        headers={['Date', 'Last Modified', 'Created By']}
+        headers={['Name', 'Date', 'Created By']}
         data={data}
         onCreate={openCreateSessionModal}
         canCreate={hasPermissions}
         onDelete={(row) => openDeleteSessionModal(row.session)}
-        canDelete={hasPermissions}
+        canDelete={(row) => canDelete(row.session)}
         canCustom
         onCustom={(row) => goToSessionResults(row.session.id)}
         onCustomIcon={<PlayArrow />}

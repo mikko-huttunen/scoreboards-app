@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.dtos.UpdateResultEntryDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
@@ -34,35 +35,32 @@ public class ResultEntryService {
 
     /**
      * Create a new result entry.
-     * @param scoreboardId The scoreboard ID
-     * @param sessionId The session ID
-     * @param userIds The set of user IDs
-     * @return The created result entries
+     * @param dto The DTO containing result entry data
+     * @return The created result entry
      */
     @Transactional
-    public List<ResultEntry> createResultEntries(
-            String scoreboardId,
-            String sessionId,
-            Set<String> userIds) {
-        logger.info("Creating result entries for session: {}", sessionId);
+    public ResultEntry createResultEntry(UpdateResultEntryDTO dto) {
+        User currentUser = currentUserContext.requireCurrentUser();
+        logger.info("Creating result entry for session: {}, for user: {}", dto.getSessionId(), currentUser.getId());
 
-        List<ResultEntry> resultEntriesToCreate = new ArrayList<>();
-
-        for (String userId : userIds) {
-            ResultEntry resultEntry = new ResultEntry();
-            resultEntry.setScoreboardId(scoreboardId);
-            resultEntry.setSessionId(sessionId);
-            resultEntry.setUserId(userId);
-            resultEntry.setResults(new HashSet<>());
-
-            resultEntriesToCreate.add(resultEntry);
+        Optional<Session> sessionOpt = queryService.findById(dto.getSessionId(), Session.class, true);
+        Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        if (!session.getIsPending() || !session.getIsActive()) {
+            throw new IllegalArgumentException("Session has been finished or deleted");
         }
 
-        List<ResultEntry> createdResultEntries = queryService.create(resultEntriesToCreate);
+        ResultEntry resultEntry = new ResultEntry();
+        resultEntry.setScoreboardId(dto.getScoreboardId());
+        resultEntry.setSessionId(dto.getSessionId());
+        resultEntry.setUserId(currentUser.getId());
+        resultEntry.setResults(dto.getResults());
+        resultEntry.setTotalPoints(dto.getTotalPoints());
 
-        logger.info("Successfully created {} new result entries for session: {}",
-                createdResultEntries.size(), sessionId);
-        return createdResultEntries;
+        ResultEntry createdResultEntry = queryService.create(resultEntry);
+
+        logger.info("Successfully created result entry for session: {}, for user: {}",
+                dto.getSessionId(), currentUser.getId());
+        return createdResultEntry;
     }
 
     /**
@@ -114,15 +112,23 @@ public class ResultEntryService {
     /**
      * Update an existing result entry with results.
      * @param resultEntryId The result entry ID
-     * @param results Set of updated results to associate with this entry
+     * @param dto The updated result entry data
      * @return The updated result entry if found
      */
     @Transactional
     public ResultEntry updateResultEntry(
             String resultEntryId,
-            Set<Result> results) {
+            UpdateResultEntryDTO dto) {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Updating result entry: {} by user: {}", resultEntryId, currentUser.getId());
+
+        Optional<Session> sessionOpt = queryService.findById(dto.getSessionId(), Session.class, true);
+        Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        if (!session.getIsPending() || !session.getIsActive()) {
+            throw new IllegalArgumentException("Session has been finished or deleted");
+        }
+
+        Set<Result> results = dto.getResults();
 
         double totalPoints = 0.0;
 

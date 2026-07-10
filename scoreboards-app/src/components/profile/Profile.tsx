@@ -63,31 +63,8 @@ export const ProfileView: React.FC = () => {
 
   if (isLoadingUser) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          backgroundColor: '#ffffff',
-          position: 'relative',
-        }}
-      >
-        <Box
-          sx={{
-            px: 2,
-            py: 4,
-            ...navigationSpacing,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <LoadingSpinner />
-        </Box>
-      </Box>
+      <LoadingSpinner label={'Loading user'} size={64} screenCentered={true} />
     );
-  }
-
-  if (!user) {
-    return <LoadingSpinner />;
   }
 
   return (

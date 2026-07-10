@@ -39,7 +39,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               alignItems="center"
               justifyContent="center"
             >
-              <LoadingSpinner size={20} />
+              <LoadingSpinner size={64} screenCentered={true} />
             </Stack>
           )}
           <Button

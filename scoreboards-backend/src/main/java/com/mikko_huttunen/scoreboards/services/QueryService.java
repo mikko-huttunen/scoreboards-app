@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.AccessControlValidator;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
@@ -20,6 +21,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.springframework.data.mongodb.core.BulkOperations.BulkMode.UNORDERED;
+import static org.springframework.data.mongodb.core.aggregation.Aggregation.match;
 
 /**
  * Query service for globally reusable MongoDB CRUD and aggregation queries.
@@ -86,7 +88,9 @@ public class QueryService {
     @Transactional
     private <T extends Auditable> Optional<T> findById(String id, Class<T> entityClass, boolean includeDeleted, boolean validateAccess) {
         Query query = new Query(Criteria.where("_id").is(id));
-        addisActiveFilter(query, entityClass, includeDeleted);
+        if (!includeDeleted) {
+            addisActiveFilter(query, entityClass, false);
+        }
 
         T document = mongoTemplate.findOne(query, entityClass);
 
@@ -103,7 +107,9 @@ public class QueryService {
     @Transactional
     private <T extends Auditable> List<T> find(Query query, Class<T> entityClass, boolean includeDeleted, boolean validateAccess) {
         Query effectiveQuery = query == null ? new Query() : query;
-        addisActiveFilter(effectiveQuery, entityClass, includeDeleted);
+        if (!includeDeleted) {
+            addisActiveFilter(query, entityClass, false);
+        }
 
         List<T> documents = mongoTemplate.find(effectiveQuery, entityClass);
 
@@ -238,154 +244,49 @@ public class QueryService {
     public Optional<List<User>> fetchUsersWithMembershipsByScoreboardId(String scoreboardId) {
         Aggregation aggregation = queryBuilder.usersWithMembershipsByScoreboardIdQuery(scoreboardId);
 
-        Optional<List<User>> usersOpt = aggregateList(aggregation, User.class, User.class);
-        usersOpt.ifPresent(users -> users.forEach(user -> user.setMemberships(
-                user.getMemberships()
-                        .stream()
-                        .filter(membership -> Boolean.TRUE.equals(membership.getIsActive()))
-                        .collect(LinkedHashSet::new, Set::add, Set::addAll)
-        )));
-
-        return usersOpt;
+        return aggregateList(aggregation, Membership.class, User.class);
     }
 
-    public Optional<User> fetchUserWithMembershipsByAuth0Id(String auth0Id) {
-        Aggregation aggregation = queryBuilder.userWithMembershipsByAuth0IdQuery(auth0Id);
+    public Optional<List<Scoreboard>> fetchScoreboardsWithPartialData(Set<String> scoreboardIds) {
+        Aggregation aggregation = queryBuilder.scoreboardsWithPartialDataQuery(scoreboardIds);
 
-        Optional<User> userOpt = aggregate(aggregation, User.class, User.class);
-        userOpt.ifPresent(user -> user.setMemberships(
-                user.getMemberships()
-                        .stream()
-                        .filter(membership -> Boolean.TRUE.equals(membership.getIsActive()))
-                        .collect(LinkedHashSet::new, Set::add, Set::addAll)
-        ));
-
-        return userOpt;
-    }
-
-    public Optional<Scoreboard> fetchScoreboardWithMemberships(String scoreboardId) {
-        Aggregation aggregation = queryBuilder.scoreboardWithMembershipsQuery(scoreboardId);
-
-        Optional<Scoreboard> scoreboardOpt = aggregate(aggregation, Scoreboard.class, Scoreboard.class);
-        scoreboardOpt.ifPresent(scoreboard -> scoreboard.setMemberships(
-                scoreboard.getMemberships()
-                        .stream()
-                        .filter(membership -> Boolean.TRUE.equals(membership.getIsActive()))
-                        .toList()
-        ));
-
-        return scoreboardOpt;
+        return aggregateList(aggregation, Scoreboard.class, Scoreboard.class);
     }
 
     public Optional<Scoreboard> fetchScoreboardWithData(String scoreboardId) {
-        Aggregation aggregation = queryBuilder.scoreboardWithDataQuery(scoreboardId);
+        Aggregation scoreboardAggregation = queryBuilder.scoreboardWithDataQuery(scoreboardId);
 
-        Optional<Scoreboard> scoreboardOpt = aggregate(aggregation, Scoreboard.class, Scoreboard.class);
-        scoreboardOpt.ifPresent(scoreboard -> {
-            scoreboard.setMemberships(
-                    scoreboard.getMemberships()
-                            .stream()
-                            .filter(membership -> Boolean.TRUE.equals(membership.getIsActive()))
-                            .toList()
-            );
-            scoreboard.setPointCategories(
-                    scoreboard.getPointCategories()
-                            .stream()
-                            .filter(pointCategory -> Boolean.TRUE.equals(pointCategory.getIsActive()))
-                            .toList()
-            );
-            scoreboard.setSessions(
-                    scoreboard.getSessions()
-                            .stream()
-                            .filter(session -> Boolean.TRUE.equals(session.getIsActive()))
-                            .toList()
-            );
-            scoreboard.setResultEntries(
-                    scoreboard.getResultEntries()
-                            .stream()
-                            .filter(resultEntry -> Boolean.TRUE.equals(resultEntry.getIsActive()))
-                            .toList()
-            );
+        return aggregate(scoreboardAggregation, Scoreboard.class, Scoreboard.class);
+    }
+
+    public Optional<SessionDTO> fetchSessionWithPointCategoriesAndResultEntries(String sessionId) {
+        Aggregation aggregation = queryBuilder.sessionWithPointCategoriesAndResultEntriesQuery(sessionId);
+
+        return aggregate(aggregation, Session.class, SessionDTO.class);
+    }
+
+    public Optional<Invitation> fetchInvitationWithResolvedUsernamesByInvitationId(String invitationId) {
+        Aggregation aggregation = queryBuilder.invitationWithUsernamesByInvitationIdQuery(invitationId);
+
+        Optional<Invitation> invitationOpt = aggregate(aggregation, Invitation.class, Invitation.class);
+        invitationOpt.ifPresent(invitation -> {
+            invitation.setInviterName(invitation.getInviterName());
+            invitation.setReceiverName(invitation.getReceiverName());
         });
 
-        return scoreboardOpt;
+        return invitationOpt;
     }
 
-    public Optional<Scoreboard> fetchScoreboardWithPointCategories(String scoreboardId) {
-        Aggregation aggregation = queryBuilder.scoreboardWithPointCategoriesQuery(scoreboardId);
+    public Optional<List<Invitation>> fetchInvitationsWithResolvedUsernamesByUserId(String userId) {
+        Aggregation aggregation = queryBuilder.invitationsWithUsernamesByUserIdQuery(Set.of(userId));
 
-        Optional<Scoreboard> scoreboardOpt = aggregate(aggregation, Scoreboard.class, Scoreboard.class);
-        scoreboardOpt.ifPresent(scoreboard -> scoreboard.setPointCategories(
-                scoreboard.getPointCategories()
-                        .stream()
-                        .filter(pointCategory -> Boolean.TRUE.equals(pointCategory.getIsActive()))
-                        .toList()
-        ));
+        Optional<List<Invitation>> invitationsOpt = aggregateList(aggregation, Invitation.class, Invitation.class);
+        invitationsOpt.ifPresent(invitations -> invitations.forEach(invitation -> {
+            invitation.setInviterName(invitation.getInviterName());
+            invitation.setReceiverName(invitation.getReceiverName());
+        }));
 
-        return scoreboardOpt;
-    }
-
-    public Optional<Session.SessionDetails> fetchSessionWithPointCategoriesAndResultEntries(String scoreboardId, String sessionId) {
-        Aggregation aggregation = queryBuilder.sessionWithPointCategoriesAndResultEntriesQuery(scoreboardId, sessionId);
-
-        Optional<Session.SessionDetails> sessionOpt = aggregate(aggregation, Session.class, Session.SessionDetails.class);
-        sessionOpt.ifPresent(session -> {
-            session.setPointCategoryDetails(
-                    session.getPointCategoryDetails()
-                            .stream()
-                            .filter(pointCategory -> Boolean.TRUE.equals(pointCategory.getIsActive()))
-                            .toList()
-            );
-            session.setResultEntryDetails(
-                    session.getResultEntryDetails()
-                            .stream()
-                            .filter(resultEntry -> Boolean.TRUE.equals(resultEntry.getIsActive()))
-                            .toList()
-            );
-        });
-
-        return sessionOpt;
-    }
-
-    public List<Invitation> fetchInvitationsWithResolvedUserNames(String userId) {
-        Query invitationQuery = queryBuilder.invitationsWithUserNamesQuery(userId);
-
-        List<Invitation> invitations = mongoTemplate.find(invitationQuery, Invitation.class);
-        if (invitations.isEmpty()) {
-            return List.of();
-        }
-
-        Set<String> userIds = new LinkedHashSet<>();
-        for (Invitation invitation : invitations) {
-            if (invitation.getReceiverId() != null) {
-                userIds.add(invitation.getReceiverId());
-            }
-            if (invitation.getCreatedBy() != null) {
-                userIds.add(invitation.getCreatedBy());
-            }
-        }
-
-        Query userQuery = new Query(Criteria.where("_id").in(userIds).and("isActive").is(true));
-        List<User> users = mongoTemplate.find(userQuery, User.class);
-
-        Map<String, String> userNamesById = new HashMap<>();
-        for (User user : users) {
-            userNamesById.put(user.getId(), user.getName());
-        }
-
-        for (Invitation invitation : invitations) {
-            String receiverName = userNamesById.get(invitation.getReceiverId());
-            String inviterName = userNamesById.get(invitation.getCreatedBy());
-
-            if (receiverName != null) {
-                invitation.setReceiverName(receiverName);
-            }
-            if (inviterName != null) {
-                invitation.setInviterName(inviterName);
-            }
-        }
-
-        return invitations;
+        return invitationsOpt;
     }
 
     // -------------------------------------------------------------------------

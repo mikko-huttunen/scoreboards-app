@@ -1,9 +1,11 @@
 package com.mikko_huttunen.scoreboards.models;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -21,14 +23,16 @@ public class Session extends Auditable {
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
+    @Indexed
     private String scoreboardId;
-    
-    @Field("scoreboardName")
-    @NotBlank(message = "Scoreboard name cannot be blank")
-    private String scoreboardName;
 
-    @Field("createdByName")
-    @NotBlank(message = "Created by name cannot be blank")
+    @Field("name")
+    @NotBlank(message = "Name cannot be blank")
+    private String name;
+
+    @Field("comment")
+    private String comment;
+
     private String createdByName;
     
     @Field("isPending")
@@ -36,16 +40,15 @@ public class Session extends Auditable {
     private Boolean isPending = false;
     
     @Field("participants")
-    @NotNull(message = "Participants cannot be null")
-    private Set<String> participants = new HashSet<>(); // User IDs
+    @NotEmpty(message = "Participants cannot be empty")
+    private Set<String> participants = new HashSet<>();
     
     @Field("pointCategories")
-    @NotNull(message = "Point categories cannot be null")
-    private Set<String> pointCategories = new HashSet<>(); // PointCategory IDs
+    @NotEmpty(message = "Point categories cannot be empty")
+    private Set<String> pointCategories = new HashSet<>();
     
     @Field("resultEntries")
-    @NotNull(message = "Result entries cannot be null")
-    private Set<String> resultEntries = new HashSet<>(); // ResultEntry IDs
+    private Set<String> resultEntries = new HashSet<>();
 
     public String getId() {
         return id;
@@ -63,13 +66,13 @@ public class Session extends Auditable {
         this.scoreboardId = scoreboardId;
     }
 
-    public String getScoreboardName() {
-        return scoreboardName;
-    }
+    public String getName() { return name; }
 
-    public void setScoreboardName(String scoreboardName) {
-        this.scoreboardName = scoreboardName;
-    }
+    public void setName(String name) { this.name = name; }
+
+    public String getComment() { return comment; }
+
+    public void setComment(String comment) { this.comment = comment; }
 
     public String getCreatedByName() {
         return createdByName;
@@ -117,7 +120,8 @@ public class Session extends Auditable {
                 "id='" + id + '\'' +
                 ", type='" + getType() + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
-                ", scoreboardName='" + scoreboardName + '\'' +
+                ", name='" + name + '\'' +
+                ", comment='" + comment + '\'' +
                 ", isPending=" + isPending +
                 ", participants=" + participants +
                 ", pointCategories=" + pointCategories +
@@ -127,35 +131,6 @@ public class Session extends Auditable {
                 ", createdBy='" + getCreatedBy() + '\'' +
                 ", isActive=" + getIsActive() +
                 '}';
-    }
-
-    public static class SessionDetails extends Session {
-
-        private List<PointCategory> pointCategoryDetails = new ArrayList<>();
-        private List<ResultEntry> resultEntryDetails = new ArrayList<>();
-
-        public SessionDetails() {
-        }
-
-        public SessionDetails(Session session) {
-            BeanUtils.copyProperties(session, this);
-        }
-
-        public List<PointCategory> getPointCategoryDetails() {
-            return pointCategoryDetails;
-        }
-
-        public void setPointCategoryDetails(List<PointCategory> pointCategoryDetails) {
-            this.pointCategoryDetails = pointCategoryDetails;
-        }
-
-        public List<ResultEntry> getResultEntryDetails() {
-            return resultEntryDetails;
-        }
-
-        public void setResultEntryDetails(List<ResultEntry> resultEntryDetails) {
-            this.resultEntryDetails = resultEntryDetails;
-        }
     }
 }
 

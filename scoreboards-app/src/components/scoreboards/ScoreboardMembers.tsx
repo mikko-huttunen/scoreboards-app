@@ -5,7 +5,7 @@ import { Avatar, Box, Stack } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import type { Scoreboard } from '../../types/Scoreboard.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
-import { isOwner } from '../../utils/Utils.ts';
+import { hasSessionsPermission, isOwner } from '../../utils/Utils.ts';
 import { InviteUserModal } from '../invitations/InviteUserModal.tsx';
 import type { Invitation } from '../../types/Invitation.ts';
 import { ScoreboardsService } from '../../services/ScoreboardService.ts';
@@ -40,11 +40,9 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
   const canDelete = (rowUser: User) => {
     if (disableActions) return false;
     if (isOwner(scoreboard.memberships, rowUser.id)) return false;
-
-    const userIsSelf = rowUser.id === user?.id;
-    if (userIsSelf) return false;
-
-    return true;
+    //User is self
+    if (rowUser.id === user?.id) return false;
+    return hasSessionsPermission(scoreboard.memberships, user?.id);
   };
 
   const openInviteUserModal = () => {

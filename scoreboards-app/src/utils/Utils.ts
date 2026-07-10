@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import type { Membership } from '../types/Membership.ts';
+import axios from 'axios';
 
 const FORMATS = {
   DATE: 'd/M/yyyy',
@@ -53,4 +54,13 @@ export const hasSessionsPermission = (
   if (userPermissions?.includes('OWNER')) return true;
 
   return userPermissions?.includes('SESSIONS') || false;
+};
+
+export const getErrorMessage = (error: unknown) => {
+  const axiosErr = axios.isAxiosError(error) ? error : null;
+  return (
+    axiosErr?.response?.data?.message ??
+    axiosErr?.message ??
+    'Something went wrong'
+  );
 };

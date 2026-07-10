@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
@@ -22,16 +23,13 @@ public class SessionService {
     
     private static final Logger logger = LoggerFactory.getLogger(SessionService.class);
 
-    private final ResultEntryService resultEntryService;
     private final CurrentUserContext currentUserContext;
     private final QueryService queryService;
     
     @Autowired
     public SessionService(
-            ResultEntryService resultEntryService,
             CurrentUserContext currentUserContext,
             QueryService queryService) {
-        this.resultEntryService = resultEntryService;
         this.currentUserContext = currentUserContext;
         this.queryService = queryService;
     }
@@ -39,7 +37,8 @@ public class SessionService {
     /**
      * Create a new session.
      * @param scoreboardId The scoreboard ID
-     * @param scoreboardName The scoreboard name
+     * @param sessionName The name of the session
+     * @param comment Optional comment for the session
      * @param participantIds List of user IDs participating in the session
      * @param pointCategoryIds List of point category IDs for the session
      * @return The created session
@@ -47,46 +46,38 @@ public class SessionService {
     @Transactional
     public Session createSession(
             String scoreboardId,
-            String scoreboardName,
+            String sessionName,
+            String comment,
             Set<String> participantIds,
             Set<String> pointCategoryIds) {
         User currentUser = currentUserContext.requireCurrentUser();
-        logger.info("Creating new session for scoreboard: {} by user: {}", scoreboardName, currentUser.getId());
+        logger.info("Creating new session for scoreboard: {} by user: {}", scoreboardId, currentUser.getId());
 
-        Set<String> allParticipantIds = new HashSet<>();
 
         //Verify participants exist and belong to the scoreboard
-        allParticipantIds.add(currentUser.getId());
         Query scoreboardUsersQuery = new Query(Criteria.where("scoreboardId").is(scoreboardId));
         List<Membership> memberships = queryService.find(scoreboardUsersQuery, Membership.class, false);
-        allParticipantIds.addAll(memberships.stream().map(Membership::getUserId).collect(Collectors.toSet()));
+        Set<String> scoreboardUserIds = memberships.stream().map(Membership::getUserId).collect(Collectors.toSet());
 
         for (String userId : participantIds) {
-            if (!allParticipantIds.contains(userId)) {
+            if (!scoreboardUserIds.contains(userId)) {
                 logger.error("User {} is not a member of the scoreboard {}", userId, scoreboardId);
                 throw new IllegalArgumentException("User is not a member of this scoreboard");
             }
         }
 
         Session session = new Session();
-        session.setId(UUID.randomUUID().toString());
         session.setScoreboardId(scoreboardId);
-        session.setScoreboardName(scoreboardName);
-        session.setCreatedByName(currentUser.getName());
+        session.setName(sessionName);
+        session.setComment(comment);
         session.setIsPending(true);
         session.setParticipants(participantIds);
         session.setPointCategories(pointCategoryIds);
-        session.setResultEntries(new HashSet<>());
-
-        List<ResultEntry> createdResultEntries = resultEntryService.createResultEntries(
-                scoreboardId,
-                session.getId(),
-                participantIds
-        );
-
-        session.setResultEntries(createdResultEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet()));
 
         Session createdSession = queryService.create(session);
+
+        //Creator name can change, so we do not save it in the session document in database but add it afterward
+        createdSession.setCreatedByName(currentUser.getName());
 
         logger.info("Successfully created session with ID: {} for scoreboard: {}",
                 createdSession.getId(), scoreboardId);
@@ -111,13 +102,13 @@ public class SessionService {
     /**
      * Get a session by ID if it's active.
      * @param id The session ID
-     * @return The session if found
+     * @return The session with data if found
      */
-    public Session getSessionById(String id) {
+    public SessionDTO getSessionById(String id) {
         logger.info("Fetching session by ID: {}", id);
 
-        Optional<Session> sessionOpt = queryService.findById(id, Session.class, false);
-        Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        Optional<SessionDTO> sessionOpt = queryService.fetchSessionWithPointCategoriesAndResultEntries(id);
+        SessionDTO session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         logger.info("Found active session with ID: {}", session.getId());
         return session;
@@ -186,11 +177,9 @@ public class SessionService {
         User currentUser = currentUserContext.requireCurrentUser();
         logger.info("Finishing session: {} by user: {}", id, currentUser.getId());
 
-        Session session = getSessionById(id);
+        SessionDTO session = getSessionById(id);
 
-        // Get all result entries for this session
-        Query query = new Query(Criteria.where("sessionId").is(id));
-        List<ResultEntry> resultEntryEntries = queryService.find(query, ResultEntry.class, false);
+        List<ResultEntry> resultEntries = session.getResultEntryDetails();
 
         // Get all participant IDs (including creator)
         List<String> allParticipantIds = new ArrayList<>();
@@ -206,7 +195,7 @@ public class SessionService {
         // Check if all participants have submitted results
         for (String participantId : allParticipantIds) {
             boolean hasSubmitted = false;
-            for (ResultEntry entry : resultEntryEntries) {
+            for (ResultEntry entry : resultEntries) {
                 if (entry.getUserId().equals(participantId) &&
                         entry.getResults() != null &&
                         !entry.getResults().isEmpty()) {
@@ -220,12 +209,14 @@ public class SessionService {
             }
         }
 
+        Set<String> resultEntryIds = resultEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet());
+
         Optional<Session> finishedSessionOpt = queryService.updateById(id, Session.class, s -> {
                 if (!s.getIsPending()) {
                     logger.warn("Session {} is already finished", id);
                     throw new IllegalArgumentException("Session is already finished");
                 }
-                s.setResultEntries(resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet()));
+                s.setResultEntries(resultEntryIds);
                 s.setIsPending(false);
         });
 
@@ -233,11 +224,30 @@ public class SessionService {
                 new IllegalArgumentException("Session not found"));
 
         // Mark all result entries as not pending
-        Set<String> resultEntryIds = resultEntryEntries.stream().map(ResultEntry::getId).collect(Collectors.toSet());
         queryService.updateAll(resultEntryIds, ResultEntry.class, re -> re.setIsPending(false));
 
         logger.info("Successfully finished session: {}", finishedSession.getId());
         return finishedSession;
+    }
+
+    public List<Session> getPendingSessionsByScoreboardId(String scoreboardId) {
+        logger.info("Fetching pending sessions by scoreboard ID: {}", scoreboardId);
+
+        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
+                .and("isPending").is(true));
+        List<Session> sessions = queryService.find(query, Session.class, false);
+
+        logger.info("Found {} pending sessions for scoreboard {}", sessions.size(), scoreboardId);
+        return sessions;
+    }
+
+    public Boolean isUserParticipatingInSession(String scoreboardId, String userId) {
+        logger.info("Checking if user {} is participating in session", userId);
+
+        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
+                .and("participants").in(userId));
+        List<Session> sessions = queryService.find(query, Session.class, false);
+        return !sessions.isEmpty();
     }
 }
 

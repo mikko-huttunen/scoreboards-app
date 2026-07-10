@@ -2,7 +2,11 @@ import React, { useMemo, useState } from 'react';
 import DoneIcon from '@mui/icons-material/Done';
 import type { Session } from '../../types/Session.ts';
 import { DataTable } from '../common/table/DataTable.tsx';
-import { hasSessionsPermission, useDateFormat } from '../../utils/Utils.ts';
+import {
+  hasSessionsPermission,
+  isOwner,
+  useDateFormat,
+} from '../../utils/Utils.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import type { Scoreboard } from '../../types/Scoreboard.ts';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
@@ -11,12 +15,14 @@ import type { PointCategory } from '../../types/PointCategory.ts';
 import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
 import { SessionService } from '../../services/SessionService.ts';
 import { useNavigate } from 'react-router-dom';
+import type { ResultEntry } from '../../types/ResultEntry.ts';
 
 type PendingSessionsProps = {
   pendingSessions: Session[];
   scoreboard: Scoreboard;
   pointCategories: PointCategory[];
   onCancelSession: (sessionId: string) => void;
+  onScoreSubmit: (resultEntry: ResultEntry) => void;
   isLoading?: boolean;
 };
 
@@ -25,6 +31,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   scoreboard,
   pointCategories,
   onCancelSession,
+  onScoreSubmit,
   isLoading = false,
 }) => {
   const { format_date } = useDateFormat();
@@ -35,6 +42,14 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   const [cancelSessionDialogOpen, setCancelSessionDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const isCreator = isOwner(scoreboard.memberships, user?.id);
+
+  const canDelete = (session: Session) => {
+    if (isCreator) return true;
+    if (session.createdBy === user?.id) return true;
+
+    return false;
+  };
 
   const openAddScoresModal = (session: Session) => {
     setSelectedSession(session);
@@ -97,6 +112,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
     () =>
       pendingSessions.map((session) => ({
         id: session.id,
+        Name: session.name,
         Date: format_date(session.created),
         'Created By': session.createdByName,
         Results: resolvePendingResultEntries(session),
@@ -126,22 +142,22 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         <AddScores
           open={addScoresModalOpen}
           onClose={handleCloseAddScores}
+          onScoreSubmit={(resultEntry) => onScoreSubmit(resultEntry)}
           session={selectedSession}
           pointCategories={pointCategories}
         />
       )}
       <DataTable
         title="Pending Sessions"
-        headers={['Date', 'Created By', 'Results']}
+        headers={['Name', 'Date', 'Created By', 'Results']}
         showHighlight
         data={data}
         pageSize={10}
-        onEdit={(row) => openAddScoresModal(row.session)}
-        canEdit
+        onRowClick={(row) => openAddScoresModal(row.session)}
         onDelete={(row) => openCancelSessionModal(row.session)}
-        canDelete={(row) => row.hasPermissions}
+        canDelete={(row) => canDelete(row.session)}
         onCustom={(row) => handleFinishSession(row.id)}
-        canCustom={(row) => row.hasPermissions}
+        canCustom={(row) => row.session.createdBy === user?.id}
         onCustomIcon={<DoneIcon fontSize="small" />}
         customTooltip={'Finish'}
         isLoading={isLoading}

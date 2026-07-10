@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.CreateSessionDTO;
+import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.dtos.UpdateSessionDTO;
 import com.mikko_huttunen.scoreboards.services.SessionService;
@@ -44,7 +45,8 @@ public class SessionController {
 
         Session createdSession = sessionService.createSession(
                 dto.getScoreboardId(),
-                dto.getScoreboardName(),
+                dto.getName(),
+                dto.getComment(),
                 dto.getParticipants(),
                 dto.getPointCategories()
         );
@@ -73,11 +75,11 @@ public class SessionController {
      * @return ResponseEntity containing the session if found
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Session> getSessionById(
+    public ResponseEntity<SessionDTO> getSessionById(
             @PathVariable String id) {
         logger.info("GET /api/sessions/{} - Fetching session", id);
 
-        Session session = sessionService.getSessionById(id);
+        SessionDTO session = sessionService.getSessionById(id);
 
         return ResponseEntity.status(HttpStatus.OK).body(session);
     }

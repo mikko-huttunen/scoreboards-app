@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Stack, Typography } from '@mui/material';
+import { Stack, Typography, useMediaQuery } from '@mui/material';
 import { ScoreBarChart } from '../common/charts/ScoreBarChart';
 import type { Session } from '../../types/Session';
 import type { User } from '../../types/User';
@@ -31,6 +31,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
   chartTitle = 'Leaderboard',
   isLoading = false,
 }) => {
+  const isMobile = useMediaQuery('(max-width:600px)');
   const leaderboardChartData = useMemo<LeaderboardRow[]>(() => {
     if (!sessions?.length || !pointCategories?.length) return [];
 
@@ -177,7 +178,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         series={leaderboardSeries}
         animationDurationMs={200}
         legendToggleEnabled
-        showAvatars
+        showAvatars={(isMobile && users.length < 5) || !isMobile}
         emptyText={emptyText}
       />
     </Stack>

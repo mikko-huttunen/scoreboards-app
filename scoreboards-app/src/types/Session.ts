@@ -1,8 +1,9 @@
 export type Session = {
   id: string;
+  name: string;
+  comment: string;
   type: string;
   scoreboardId: string;
-  scoreboardName: string;
   createdByName: string;
   isPending: boolean;
   participants: Set<string>;
@@ -17,9 +18,10 @@ export type Session = {
 export const Session = {
   create: (data: Session): Session => ({
     id: data.id,
+    name: data.name,
+    comment: data.comment,
     type: data.type,
     scoreboardId: data.scoreboardId,
-    scoreboardName: data.scoreboardName,
     createdByName: data.createdByName,
     isPending: data.isPending,
     participants: data.participants,

@@ -27,7 +27,7 @@ export const ReceivedInvitationsList: React.FC<
     () =>
       invitations.map((invitation) => ({
         id: invitation.id,
-        'Scoreboard Name': invitation.scoreboardName,
+        Scoreboard: invitation.scoreboardName,
         From: invitation.inviterName,
         Received: format_date(invitation.created),
         invitation,
@@ -38,7 +38,7 @@ export const ReceivedInvitationsList: React.FC<
   return (
     <DataTable
       title={'Scoreboard Invitations'}
-      headers={['Scoreboard Name', 'From', 'Received']}
+      headers={['Scoreboard', 'From', 'Received']}
       data={data}
       showHighlight={invitations.length > 0}
       pageSize={10}

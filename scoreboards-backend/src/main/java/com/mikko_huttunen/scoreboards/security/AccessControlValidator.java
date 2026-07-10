@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.security;
 
+import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.*;
 import org.springframework.security.access.AccessDeniedException;
@@ -65,6 +66,11 @@ public class AccessControlValidator {
 
         if (document instanceof Session session) {
             validateSessionAccess(session, requireCreator);
+            return;
+        }
+
+        if (document instanceof SessionDTO sessionDTO) {
+            validateSessionDTOAccess(sessionDTO);
             return;
         }
 
@@ -137,6 +143,18 @@ public class AccessControlValidator {
         }
 
         if (hasPermission) return;
+        if (hasMembership(session.getScoreboardId())) {
+            boolean isParticipant = session.getParticipants().contains(currentUser.getId());
+            if (isParticipant) return;
+        }
+
+        throw new AccessDeniedException("User is not authorized to access this session");
+    }
+
+    private void validateSessionDTOAccess(SessionDTO session) {
+        boolean hasPermission = hasPermission(session.getScoreboardId(), Permission.SESSIONS);
+        if (hasPermission) return;
+
         if (hasMembership(session.getScoreboardId())) {
             boolean isParticipant = session.getParticipants().contains(currentUser.getId());
             if (isParticipant) return;

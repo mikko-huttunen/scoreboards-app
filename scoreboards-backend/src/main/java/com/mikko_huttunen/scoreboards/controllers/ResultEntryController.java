@@ -39,6 +39,15 @@ public class ResultEntryController {
         this.currentUserContext = currentUserContext;
     }
 
+    @PostMapping()
+    public ResponseEntity<ResultEntry> createResultEntry(@Valid @RequestBody UpdateResultEntryDTO dto) {
+        logger.info("POST /api/result-entries - Creating result entry");
+
+        ResultEntry createdEntry = resultEntryService.createResultEntry(dto);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdEntry);
+    }
+
     /**
      * Get all result entries for a specific scoreboard.
      * @param scoreboardId The scoreboard ID
@@ -93,7 +102,7 @@ public class ResultEntryController {
             @Valid @RequestBody UpdateResultEntryDTO dto) {
         logger.info("PUT /api/result-entries/{} - Updating result entry", id);
 
-        ResultEntry updatedEntry = resultEntryService.updateResultEntry(id, dto.getResults());
+        ResultEntry updatedEntry = resultEntryService.updateResultEntry(id, dto);
 
         return ResponseEntity.status(HttpStatus.OK).body(updatedEntry);
     }

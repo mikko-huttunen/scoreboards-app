@@ -28,6 +28,7 @@ import type { ResultEntry } from '../../types/ResultEntry.ts';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { UserService } from '../../services/UserService.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { PerformanceChart } from './PerformanceChart.tsx';
 
 export type ScoreboardsViewProps = {
   sessions?: Session[];
@@ -124,11 +125,24 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   };
 
   const handleRemoveUser = (userId: string) => {
-    setUsers(users.filter((u) => u.id !== userId));
+    setUsers((prevUsers) => prevUsers.filter((u) => u.id !== userId));
+
+    setScoreboard((prevScoreboard) => {
+      if (!prevScoreboard) return prevScoreboard;
+
+      return {
+        ...prevScoreboard,
+        memberships: prevScoreboard.memberships.filter(
+          (m) => m.userId !== userId
+        ),
+      };
+    });
   };
 
   const handleRemovePendingSession = (sessionId: string) => {
-    setPendingSessions(pendingSessions.filter((s) => s.id !== sessionId));
+    setPendingSessions((prevSessions) =>
+      prevSessions.filter((s) => s.id !== sessionId)
+    );
   };
 
   const handleSessionCreated = (session: Session) => {
@@ -136,7 +150,27 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   };
 
   const handleDeleteSession = (sessionId: string) => {
-    setSessions(sessions.filter((s) => s.id !== sessionId));
+    setSessions((prevSessions) =>
+      prevSessions.filter((s) => s.id !== sessionId)
+    );
+  };
+
+  const handleScoreSubmitted = (resultEntry: ResultEntry) => {
+    const session = pendingSessions.find((s) => s.id === resultEntry.sessionId);
+
+    if (!session) return;
+
+    const updatedSessions = pendingSessions.map((s) => {
+      if (s.id !== session.id) return s;
+
+      const prev = s.resultEntries ?? new Set<string>();
+      const next = new Set<string>(prev);
+      next.add(resultEntry.id);
+
+      return { ...s, resultEntries: next };
+    });
+
+    setPendingSessions(updatedSessions);
   };
 
   const handleEditClick = () => {
@@ -145,7 +179,9 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   };
 
   const handleDeleteInvitation = async (invitationId: string) => {
-    setSentInvitations(sentInvitations.filter((i) => i.id !== invitationId));
+    setSentInvitations((prevInvitations) =>
+      prevInvitations.filter((i) => i.id !== invitationId)
+    );
   };
 
   const openLeaveScoreboardModal = () => {
@@ -250,7 +286,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       <Box sx={{ px: 2, py: 4, ...navigationSpacing }}>
         <Stack spacing={4} alignItems="flex-start" sx={{ width: '100%' }}>
           <Stack
-            direction={{ xs: 'column', sm: 'row' }}
+            direction="row"
             alignItems={{ xs: 'flex-start', sm: 'center' }}
             justifyContent="space-between"
             sx={{ width: '100%' }}
@@ -264,7 +300,13 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               >
                 <ArrowBackIcon />
               </IconButton>
-              <Typography variant="h4" sx={{ color: '#1b5e20' }}>
+              <Typography
+                variant="h4"
+                sx={{
+                  color: '#1b5e20',
+                  fontSize: { xs: '1.5rem', sm: '2rem' },
+                }}
+              >
                 {scoreboard.name}
               </Typography>
             </Stack>
@@ -326,9 +368,19 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               users={users}
               pointCategories={pointCategories}
               resultEntries={resultEntries}
-              emptyText="No scores recorded yet"
+              emptyText="No data. Create sessions to generate data"
               chartTitle="Leaderboard"
             />
+            {sessions.length >= 2 && (
+              <PerformanceChart
+                isLoading={loadingScoreboard}
+                sessions={sessions}
+                users={users}
+                resultEntries={resultEntries}
+                emptyText="No data. Create sessions to generate data"
+                chartTitle={'Performance'}
+              />
+            )}
 
             {pendingSessions.length > 0 && (
               <PendingSessions
@@ -338,6 +390,9 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                 pointCategories={pointCategories}
                 onCancelSession={(sessionId) =>
                   handleRemovePendingSession(sessionId)
+                }
+                onScoreSubmit={(resultEntry) =>
+                  handleScoreSubmitted(resultEntry)
                 }
               />
             )}

@@ -3,6 +3,7 @@ package com.mikko_huttunen.scoreboards.models;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -23,14 +24,17 @@ public class ResultEntry extends Auditable {
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
+    @Indexed
     private String scoreboardId;
     
     @Field("sessionId")
     @NotBlank(message = "Session ID cannot be blank")
+    @Indexed
     private String sessionId;
     
     @Field("userId")
     @NotBlank(message = "User ID cannot be blank")
+    @Indexed
     private String userId;
 
     @Field("isPending")

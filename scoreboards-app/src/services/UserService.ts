@@ -1,6 +1,6 @@
-import axios from 'axios';
 import type { User } from '../types/User';
 import apiClient from '../api/Interceptor';
+import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/users';
 
@@ -18,10 +18,8 @@ export class UserService {
 
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch current user: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch current user: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch current user: ${errorMessage}`);
     }
   }
 
@@ -32,10 +30,8 @@ export class UserService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch users: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch users: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch users: ${errorMessage}`);
     }
   }
 
@@ -52,16 +48,8 @@ export class UserService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorText =
-          error.response?.data instanceof Blob
-            ? await error.response?.data.text()
-            : String(error.response?.data);
-        throw new Error(
-          `Failed to update user: ${error.message} - ${errorText}`
-        );
-      }
-      throw new Error(`Failed to update user: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to update user: ${errorMessage}`);
     }
   }
 
@@ -70,10 +58,8 @@ export class UserService {
       const response = await apiClient.delete(`${API_BASE_URL}/user`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to delete user: ${error.message}`);
-      }
-      throw new Error(`Failed to delete user: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to delete user: ${errorMessage}`);
     }
   }
 }

@@ -4,6 +4,7 @@ import com.mikko_huttunen.scoreboards.enums.Permission;
 import jakarta.validation.constraints.NotNull;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -22,10 +23,12 @@ public class Membership extends Auditable {
     @Field("scoreboardId")
     @JsonIgnore
     @NotNull(message = "Scoreboard ID cannot be null")
+    @Indexed
     private String scoreboardId;
 
     @Field("userId")
     @NotNull(message = "User ID cannot be null")
+    @Indexed
     private String userId;
 
     @NotNull(message = "Permissions cannot be null")

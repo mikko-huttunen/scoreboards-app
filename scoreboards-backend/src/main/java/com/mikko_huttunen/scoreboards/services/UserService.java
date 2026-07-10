@@ -131,31 +131,10 @@ public class UserService {
         String name = userData.get("name");
 
         auth0ManagementService.updateUser(user.getAuth0Id(), name);
-
         Optional<User> updatedUserOpt = queryService.updateById(user.getId(), User.class, userToUpdate ->
                 userToUpdate.setName(name));
 
         User updatedUser = updatedUserOpt.orElseThrow(() -> new RuntimeException("Failed to update user"));
-
-        //Update username in all sessions and invitations created by the user
-        Query sessionQuery = new Query(Criteria.where("createdBy").is(user.getId()));
-
-        queryService.update(sessionQuery, Session.class, session ->
-                session.setCreatedByName(updatedUser.getName()));
-
-        Query invitationQuery = new Query(new Criteria().orOperator(
-                where("createdBy").is(user.getId()),
-                where("receiverId").is(user.getId())
-        ));
-
-        queryService.update(invitationQuery, Invitation.class, invitation -> {
-            if (invitation.getReceiverId().equals(user.getId())) {
-                invitation.setReceiverName(updatedUser.getName());
-            }
-            if (invitation.getCreatedBy().equals(user.getId())) {
-                invitation.setInviterName(updatedUser.getName());
-            }
-        });
 
         logger.info("Successfully updated user with ID: {}", updatedUser.getId());
         return updatedUser;

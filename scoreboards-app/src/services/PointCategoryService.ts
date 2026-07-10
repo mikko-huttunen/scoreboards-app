@@ -1,6 +1,6 @@
-import axios from 'axios';
 import apiClient from '../api/Interceptor';
 import type { PointCategory } from '../types/PointCategory';
+import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/point-categories';
 
@@ -12,7 +12,7 @@ export class PointCategoryService {
   /**
    * Get all active point categories for a specific scoreboard.
    * @param scoreboardId The scoreboard ID
-   * @returns Promise resolving to array of point categories
+   * @returns Promise resolving to an array of point categories
    */
   static async getPointCategoriesByScoreboard(
     scoreboardId: string
@@ -24,10 +24,8 @@ export class PointCategoryService {
 
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch point categories: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch point categories: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch point categories: ${errorMessage}`);
     }
   }
 
@@ -43,10 +41,8 @@ export class PointCategoryService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch point category: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch point category: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch point category: ${errorMessage}`);
     }
   }
 }

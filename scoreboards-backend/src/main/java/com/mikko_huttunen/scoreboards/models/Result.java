@@ -3,6 +3,7 @@ package com.mikko_huttunen.scoreboards.models;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -11,6 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
  */
 public class Result {
     @NotBlank(message = "Point category ID cannot be blank")
+    @Indexed
     private String pointCategoryId;
 
     @NotNull(message = "Points cannot be null")

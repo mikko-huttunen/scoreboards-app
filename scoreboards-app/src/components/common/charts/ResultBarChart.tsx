@@ -17,7 +17,6 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis,
 } from 'recharts';
 import type { PointCategory } from '../../../types/PointCategory.ts';
 import type { ResultEntry } from '../../../types/ResultEntry.ts';
@@ -64,7 +63,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   participants,
   results,
   pointCategories,
-  chartTitle = 'Session Results',
   emptyText = 'No results to display',
   onFinished,
   segmentDurationMs = 2000,
@@ -73,7 +71,8 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   const [revealedSegmentCount, setRevealedSegmentCount] = useState<number>(0);
   const [selectedCategoryIdForLegend, setSelectedCategoryIdForLegend] =
     useState<string | null>(null);
-  const isMobile = useMediaQuery('(max-width:899.99px)');
+  const isDesktop = useMediaQuery('(min-width:600px)');
+  const isMobile = !isDesktop;
 
   const segmentRevealDelayMs = 2000;
 
@@ -287,7 +286,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   );
 
   const hasFinishedAllSegments = step === 'finished';
-  const showYAxis = hasFinishedAllSegments;
 
   const renderAxisTick = useCallback(
     (props: { x: number; y: number; payload: { value: string | number } }) => {
@@ -299,7 +297,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       const isTotalLeader =
         step === 'finished' &&
         hasFinishedAllSegments &&
-        // Only crown users in the TOTAL view (not category-highlight mode)
         !selectedCategoryIdForLegend &&
         totalLeaderNames.has(name);
 
@@ -308,19 +305,31 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       const participant = orderedParticipants.find((row) => row.name === name);
       const avatarUrl = participant?.avatar ?? '';
 
+      const maxLen = isMobile ? 10 : 999;
+      const truncated =
+        isMobile && name.length > maxLen ? `${name.slice(0, maxLen)}.` : name;
+
       return (
         <g>
           <text
             x={x}
-            y={y + 14}
+            y={y + (isDesktop ? 14 : 22)}
             textAnchor="middle"
-            fontSize={12}
+            fontSize={isMobile ? 10 : 12}
             fontWeight={isLeader ? 800 : 500}
             fill={isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR}
+            transform={
+              isMobile && participants.length >= 5
+                ? `rotate(-45 ${x} ${y + (isDesktop ? 14 : 22)})`
+                : undefined
+            }
           >
-            {isLeader ? `👑 ${name}` : name}
+            {isLeader ? `👑 ${truncated}` : truncated}
           </text>
-          {renderAvatar(x, y + 22, name, avatarUrl, isLeader)}
+
+          {/* Avatars also contribute to overlap; keep them on desktop only */}
+          {((isMobile && participants.length < 5) || !isMobile) &&
+            renderAvatar(x, y + 22, name, avatarUrl, isLeader)}
         </g>
       );
     },
@@ -332,6 +341,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       hasFinishedAllSegments,
       selectedCategoryIdForLegend,
       totalLeaderNames,
+      isMobile,
     ]
   );
 
@@ -393,8 +403,8 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
 
   const totalWinnerCardText = useMemo(() => {
     if (!totalWinner) return 'No winner';
-    if (totalWinner.isTie) return `Tie at ${totalWinner.score} total points.`;
-    return `${totalWinner.winners[0]?.name} won with ${totalWinner.score} total points.`;
+    if (totalWinner.isTie) return `Tie at ${totalWinner.score} points.`;
+    return `${totalWinner.winners[0]?.name} won with ${totalWinner.score} points.`;
   }, [totalWinner]);
 
   const selectedCategory = useMemo(() => {
@@ -450,19 +460,17 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         elevation={0}
         sx={{
           width: '100%',
+          height: isDesktop ? '90vh' : '80vh',
           borderRadius: 4,
-          overflow: 'hidden',
+          //overflow: 'scroll',
           border: '1px solid rgba(56, 161, 79, 0.14)',
           background:
             'linear-gradient(180deg, #ffffff 0%, #f6fbf7 45%, #eef8f0 100%)',
           boxShadow: '0 16px 38px rgba(0, 0, 0, 0.08)',
         }}
       >
-        <Box sx={{ p: { xs: 2, sm: 3 }, pb: 1.5 }}>
-          <Stack spacing={1}>
-            <Typography variant="h6" sx={{ fontWeight: 800, color: '#1b5e20' }}>
-              {chartTitle}
-            </Typography>
+        <Box sx={{ pt: { xs: 2, sm: 3 }, px: { xs: 2, sm: 3 } }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
             {step === 'animating' && currentCategoryDuringCalc && (
               <Box
                 sx={{
@@ -511,7 +519,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
             {hasFinishedAllSegments && (
               <Box
                 sx={{
-                  mt: 1,
+                  width: '100%',
                   px: 2,
                   py: 1.5,
                   borderRadius: 3,
@@ -525,9 +533,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                   variant="subtitle1"
                   sx={{ fontWeight: 800, color: '#8a5a00' }}
                 >
-                  🏆 Session Winner
+                  🏆 Winner
                 </Typography>
-                <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>
                   {totalWinnerCardText}
                 </Typography>
               </Box>
@@ -535,33 +543,85 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
           </Stack>
         </Box>
 
-        <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: 2 }}>
+        <Box
+          sx={{
+            height: hasFinishedAllSegments
+              ? isDesktop
+                ? '75vh'
+                : '56vh'
+              : isDesktop
+                ? '85vh'
+                : '72vh',
+            px: { xs: 1.5, sm: 2.5 },
+          }}
+        >
           {step === 'idle' ? (
             <Box
               sx={{
                 width: '100%',
-                height: isMobile ? 430 : 900,
+                height: '100%',
+                padding: 2,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: 3,
                 background:
                   'linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(240,248,242,1) 100%)',
-                border: '1px solid rgba(56, 161, 79, 0.12)',
               }}
             >
               <Typography
                 variant="body1"
-                sx={{ color: '#546e5a', fontWeight: 600 }}
+                sx={{
+                  color: '#546e5a',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                }}
               >
-                Bars are hidden until you start calculating.
+                Press start to watch results calculation. Press skip to view the
+                results.
               </Typography>
+              <div style={{ display: 'flex', gap: '20px', marginTop: 24 }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={startAnimation}
+                  disabled={step !== 'idle'}
+                  sx={{
+                    px: 3.5,
+                    py: 1.4,
+                    fontWeight: 800,
+                    textTransform: 'none',
+                    background:
+                      'linear-gradient(135deg, #38a14f 0%, #2e7d32 100%)',
+                    boxShadow: '0 10px 24px rgba(56, 161, 79, 0.26)',
+                  }}
+                >
+                  {currentButtonLabel}
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="large"
+                  onClick={handleSkip}
+                  disabled={step === 'finished'}
+                  sx={{
+                    px: 3.5,
+                    py: 1.4,
+                    fontWeight: 800,
+                    textTransform: 'none',
+                    borderColor: 'rgba(56, 161, 79, 0.32)',
+                    color: '#2e7d32',
+                    backgroundColor: '#fff',
+                  }}
+                >
+                  Skip
+                </Button>
+              </div>
             </Box>
           ) : (
             <ResponsiveContainer
               width="100%"
-              height={isMobile ? 430 : 900}
-              style={{ marginBottom: -20 }}
+              height="100%"
+              //style={{ marginBottom: -30 }}
             >
               {/* ... existing BarChart rendering stays exactly as-is ... */}
               {/* 1) Stacked totals animation mode */}
@@ -579,10 +639,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                   <XAxis
                     dataKey="name"
                     interval={0}
-                    height={72}
+                    height={isMobile ? 88 : 72}
                     tick={renderAxisTick}
                   />
-                  {showYAxis ? <YAxis allowDecimals={false} /> : null}
 
                   {totalSeries.map((series, idx) => {
                     const isTopSegment = idx === totalSeries.length - 1;
@@ -659,11 +718,10 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                   />
                   <XAxis
                     dataKey="name"
-                    interval={0}
-                    height={72}
+                    interval={isMobile ? 'preserveStartEnd' : 0}
+                    height={isMobile ? 88 : 72}
                     tick={renderAxisTick}
                   />
-                  <YAxis allowDecimals={false} />
                   <Tooltip
                     cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}
                     contentStyle={{
@@ -778,48 +836,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
           </Box>
         )}
       </Paper>
-      <Stack spacing={2.5} alignItems="center" sx={{ width: '100%' }}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          sx={{ width: '100%', justifyContent: 'center' }}
-        >
-          <Button
-            variant="contained"
-            size="large"
-            onClick={startAnimation}
-            disabled={step !== 'idle'}
-            sx={{
-              px: 3.5,
-              py: 1.4,
-              fontWeight: 800,
-              textTransform: 'none',
-              background: 'linear-gradient(135deg, #38a14f 0%, #2e7d32 100%)',
-              boxShadow: '0 10px 24px rgba(56, 161, 79, 0.26)',
-            }}
-          >
-            {currentButtonLabel}
-          </Button>
-
-          <Button
-            variant="outlined"
-            size="large"
-            onClick={handleSkip}
-            disabled={step === 'finished'}
-            sx={{
-              px: 3.5,
-              py: 1.4,
-              fontWeight: 800,
-              textTransform: 'none',
-              borderColor: 'rgba(56, 161, 79, 0.32)',
-              color: '#2e7d32',
-              backgroundColor: '#fff',
-            }}
-          >
-            Skip to Results
-          </Button>
-        </Stack>
-      </Stack>
     </>
   );
 };

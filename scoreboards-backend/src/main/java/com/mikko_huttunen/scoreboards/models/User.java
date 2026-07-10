@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -24,6 +25,7 @@ public class User extends Auditable {
     @Field("auth0Id")
     @JsonIgnore
     @NotNull(message = "Auth0 ID cannot be null")
+    @Indexed
     private String auth0Id;
 
     @Field("name")

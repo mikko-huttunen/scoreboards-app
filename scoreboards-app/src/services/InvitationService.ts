@@ -1,7 +1,7 @@
-import axios from 'axios';
 import type { Invitation } from '../types/Invitation';
 import apiClient from '../api/Interceptor';
 import { PERMISSIONS } from '../constants.ts';
+import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/invitations';
 
@@ -29,13 +29,8 @@ export class InvitationService {
       });
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response) {
-          throw new Error(error.response?.data);
-        }
-        throw new Error(`Failed to create invitation: ${error.message}`);
-      }
-      throw new Error(`Failed to create invitation: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(errorMessage);
     }
   }
 
@@ -48,12 +43,8 @@ export class InvitationService {
       const response = await apiClient.get<Invitation[]>(API_BASE_URL);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch pending invitations: ${error.message}`
-        );
-      }
-      throw new Error(`Failed to fetch pending invitations: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch pending invitations: ${errorMessage}`);
     }
   }
 
@@ -69,10 +60,8 @@ export class InvitationService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to fetch invitation: ${error.message}`);
-      }
-      throw new Error(`Failed to fetch invitation: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to fetch invitation: ${errorMessage}`);
     }
   }
 
@@ -88,10 +77,8 @@ export class InvitationService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Failed to accept invitation: ${error.message}`);
-      }
-      throw new Error(`Failed to accept invitation: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to accept invitation: ${errorMessage}`);
     }
   }
 
@@ -109,13 +96,8 @@ export class InvitationService {
       );
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
-          return null;
-        }
-        throw new Error(`Failed to delete invitation: ${error.message}`);
-      }
-      throw new Error(`Failed to delete invitation: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to delete invitation: ${errorMessage}`);
     }
   }
 }

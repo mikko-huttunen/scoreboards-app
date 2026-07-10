@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Avatar, Box, Paper, Stack, Typography } from '@mui/material';
+import { Avatar, Box, Paper, Typography, useMediaQuery } from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -25,8 +25,6 @@ type ScoreBarChartRow = Record<string, string | number>;
 type Props = {
   loading: boolean;
   data: ScoreBarChartRow[];
-
-  chartTitle?: string;
   barTitle?: string;
 
   direction: 'vertical' | 'horizontal';
@@ -62,7 +60,6 @@ const AVATAR_SIZE = 32;
 export const ScoreBarChart: React.FC<Props> = ({
   loading,
   data,
-  chartTitle,
   direction,
   barTitle,
   series,
@@ -73,6 +70,7 @@ export const ScoreBarChart: React.FC<Props> = ({
   showAvatars = false,
 }) => {
   const isHorizontal = direction === 'horizontal';
+  const isMobile = useMediaQuery('(max-width:600px)');
 
   // When set, only this single point category is shown (isolation mode).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -200,16 +198,21 @@ export const ScoreBarChart: React.FC<Props> = ({
     const { x, y, payload } = props;
     const name = String(payload.value ?? '');
     const isLeader = leaderName != null && name === leaderName;
+
     const avatarUrl = showAvatars ? avatarByName.get(name) : undefined;
     const fill = isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR;
     const fontWeight = isLeader ? 700 : 400;
-    const label = isLeader ? `👑 ${name}` : name;
+
+    const maxLen = isMobile ? 10 : 999;
+    const truncated =
+      isMobile && name.length > maxLen ? `${name.slice(0, maxLen)}.` : name;
+
+    const label = isLeader ? `👑 ${truncated}` : truncated;
 
     if (isHorizontal) {
-      // Names sit on the Y axis (to the left of the chart). The avatar sits
-      // just left of the name, vertically centered on the bar.
       const avatarCx = showAvatars ? x - AVATAR_SIZE / 2 - 4 : x;
       const textX = showAvatars ? avatarCx - AVATAR_SIZE / 2 - 6 : x - 6;
+
       return (
         <g>
           <text
@@ -217,7 +220,7 @@ export const ScoreBarChart: React.FC<Props> = ({
             y={y}
             textAnchor="end"
             dominantBaseline="central"
-            fontSize={12}
+            fontSize={isMobile ? 10 : 12}
             fontWeight={fontWeight}
             fill={fill}
           >
@@ -240,11 +243,16 @@ export const ScoreBarChart: React.FC<Props> = ({
       <g>
         <text
           x={x}
-          y={y + 14}
+          y={y + (!showAvatars ? 22 : 14)}
           textAnchor="middle"
-          fontSize={12}
+          fontSize={isMobile ? 10 : 12}
           fontWeight={fontWeight}
           fill={fill}
+          transform={
+            !showAvatars
+              ? `rotate(-45 ${x} ${y + (!showAvatars ? 22 : 14)})`
+              : undefined
+          }
         >
           {label}
         </text>
@@ -259,12 +267,11 @@ export const ScoreBarChart: React.FC<Props> = ({
       <XAxis
         dataKey={labelKey}
         interval={0}
-        height={showAvatars ? 72 : 28}
+        height={showAvatars ? 72 : isMobile ? 48 : 28}
         tick={renderAxisTick}
       />
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey]);
+  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey, isMobile]);
 
   const yAxis = useMemo(() => {
     if (isHorizontal)
@@ -272,13 +279,12 @@ export const ScoreBarChart: React.FC<Props> = ({
         <YAxis
           dataKey={labelKey}
           type="category"
-          width={showAvatars ? 150 : 100}
+          width={showAvatars ? 150 : isMobile ? 110 : 100}
           tick={renderAxisTick}
         />
       );
     return <YAxis />;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey]);
+  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey, isMobile]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -358,17 +364,6 @@ export const ScoreBarChart: React.FC<Props> = ({
         boxShadow: '0 12px 30px rgba(0, 0, 0, 0.06)',
       }}
     >
-      <Box sx={{ p: { xs: 2, sm: 3 }, pb: 1 }}>
-        <Stack spacing={0.5}>
-          <Typography
-            variant="subtitle1"
-            sx={{ fontWeight: 700, color: '#1b5e20' }}
-          >
-            {chartTitle}
-          </Typography>
-        </Stack>
-      </Box>
-
       {!hasData ? (
         <Box
           sx={{
@@ -386,7 +381,7 @@ export const ScoreBarChart: React.FC<Props> = ({
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 } }}>
+        <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 }, pt: 4 }}>
           {legendToggleEnabled && <CustomLegend />}
           <ResponsiveContainer width="100%" height={430}>
             <BarChart
@@ -397,7 +392,6 @@ export const ScoreBarChart: React.FC<Props> = ({
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
               {xAxis}
-              {yAxis}
 
               <Tooltip
                 cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}

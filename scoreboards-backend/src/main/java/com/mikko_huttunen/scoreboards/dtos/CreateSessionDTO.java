@@ -13,9 +13,11 @@ public class CreateSessionDTO {
     
     @NotBlank(message = "Scoreboard ID cannot be blank")
     private String scoreboardId;
-    
-    @NotBlank(message = "Scoreboard name cannot be blank")
-    private String scoreboardName;
+
+    @NotBlank(message = "Name cannot be blank")
+    private String name;
+
+    private String comment;
     
     @NotNull(message = "Participants cannot be null")
     private Set<String> participants = new HashSet<>();
@@ -31,13 +33,13 @@ public class CreateSessionDTO {
         this.scoreboardId = scoreboardId;
     }
 
-    public String getScoreboardName() {
-        return scoreboardName;
-    }
+    public String getName() { return name; }
 
-    public void setScoreboardName(String scoreboardName) {
-        this.scoreboardName = scoreboardName;
-    }
+    public void setName(String name) { this.name = name; }
+
+    public String getComment() { return comment; }
+
+    public void setComment(String comment) { this.comment = comment; }
 
     public Set<String> getParticipants() {
         return participants;

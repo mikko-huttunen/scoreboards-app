@@ -7,6 +7,7 @@ import java.util.Date;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 /**
@@ -27,8 +28,10 @@ public abstract class Auditable implements Serializable {
     
     @Field("createdBy")
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Indexed
     private String createdBy;
-    
+
+    @Indexed
     @Field("isActive")
     @NotNull(message = "IsActive cannot be null")
     private Boolean isActive = true;

@@ -3,6 +3,7 @@ package com.mikko_huttunen.scoreboards.models;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -22,6 +23,7 @@ public class PointCategory extends Auditable {
     
     @Field("scoreboardId")
     @NotBlank(message = "Scoreboard ID cannot be blank")
+    @Indexed
     private String scoreboardId;
     
     @Field("color")

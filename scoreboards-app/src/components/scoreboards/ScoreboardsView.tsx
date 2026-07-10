@@ -31,7 +31,7 @@ export const ScoreboardsView: React.FC = () => {
     useState<Scoreboard | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useCurrentUser();
-  const { showErrorMessage } = useMessageSnackbar();
+  const { showErrorMessage, showSuccessMessage } = useMessageSnackbar();
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +85,7 @@ export const ScoreboardsView: React.FC = () => {
       setScoreboards(
         scoreboards.filter((sb) => sb.id !== selectedScoreboard.id)
       );
+      showSuccessMessage('Scoreboard deleted');
     } catch (err) {
       showErrorMessage('Failed to delete scoreboard');
     } finally {
@@ -112,6 +113,7 @@ export const ScoreboardsView: React.FC = () => {
       setScoreboards(
         scoreboards.filter((sb) => sb.id !== selectedScoreboard.id)
       );
+      showSuccessMessage('Left the scoreboard');
     } catch (err) {
       showErrorMessage('Failed to leave scoreboard');
     } finally {
@@ -134,6 +136,7 @@ export const ScoreboardsView: React.FC = () => {
       // Small delay to ensure backend has persisted the changes
       await new Promise((resolve) => setTimeout(resolve, 100));
 
+      showSuccessMessage('Invitation accepted');
       const updatedScoreboards =
         await ScoreboardsService.getScoreboardsByCurrentUser();
       setScoreboards(updatedScoreboards);
@@ -165,6 +168,7 @@ export const ScoreboardsView: React.FC = () => {
       setPendingInvitations(
         pendingInvitations.filter((inv) => inv.id !== selectedInvitation.id)
       );
+      showSuccessMessage('Invitation declined');
     } catch (err) {
       showErrorMessage('Failed to decline invitation');
     } finally {

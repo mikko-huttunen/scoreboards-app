@@ -3,6 +3,7 @@ package com.mikko_huttunen.scoreboards.models;
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -21,22 +22,18 @@ public class Invitation extends Auditable {
     
     @Field("receiverId")
     @NotNull(message = "Receiver ID cannot be null")
+    @Indexed
     private String receiverId;
 
-    @Field("receiverName")
-    @NotNull(message = "Receiver name cannot be null")
     private String receiverName;
 
-    @Field("inviterName")
-    @NotNull(message = "Inviter name cannot be null")
     private String inviterName;
     
     @Field("scoreboardId")
     @NotNull(message = "Scoreboard ID cannot be null")
+    @Indexed
     private String scoreboardId;
-    
-    @Field("scoreboardName")
-    @NotNull(message = "Scoreboard name cannot be null")
+
     private String scoreboardName;
 
     @Field("permissions")

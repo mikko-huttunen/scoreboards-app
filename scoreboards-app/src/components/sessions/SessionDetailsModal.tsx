@@ -108,12 +108,15 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
-        Session Details - {session?.scoreboardName}
+        {`${session?.name} - Session Results`}
         {session?.created && (
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
             {format_date(session.created)}
           </Typography>
         )}
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          {session?.comment}
+        </Typography>
       </DialogTitle>
 
       <DialogContent>
@@ -126,7 +129,6 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             loading={false}
             data={chartData}
             barTitle="Points"
-            chartTitle="Participant Scores"
             direction="vertical"
             series={series}
             animationDurationMs={200}

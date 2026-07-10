@@ -23,6 +23,7 @@ import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 export type AddScoresProps = {
   open: boolean;
   onClose: () => void;
+  onScoreSubmit: (resultEntry: ResultEntry) => void;
   session: Session;
   pointCategories: PointCategory[];
 };
@@ -30,6 +31,7 @@ export type AddScoresProps = {
 export const AddScores: React.FC<AddScoresProps> = ({
   open,
   onClose,
+  onScoreSubmit,
   session,
   pointCategories: pointCategoriesProp,
 }) => {
@@ -72,7 +74,6 @@ export const AddScores: React.FC<AddScoresProps> = ({
         if (!resultEntryData) {
           setResultEntry(null);
           setScores(new Map()); // start empty; user will fill scores
-          setError('No result entry found for the session');
           setLoading(false);
           return;
         }
@@ -146,11 +147,6 @@ export const AddScores: React.FC<AddScoresProps> = ({
       return;
     }
 
-    if (!resultEntry) {
-      setError('No result entry loaded for this session');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const resultsData: Result[] = pointCategories.map((cat) => ({
@@ -159,12 +155,22 @@ export const AddScores: React.FC<AddScoresProps> = ({
       }));
       const totalPoints = resultsData.reduce((s, r) => s + r.points, 0);
 
-      await ResultEntryService.updateResultEntry(resultEntry.id, {
-        scoreboardId: session.scoreboardId,
-        sessionId: session.id,
-        results: resultsData,
-        totalPoints,
-      });
+      if (resultEntry) {
+        await ResultEntryService.updateResultEntry(resultEntry.id, {
+          scoreboardId: session.scoreboardId,
+          sessionId: session.id,
+          results: resultsData,
+          totalPoints,
+        });
+      } else {
+        const createdEntry = await ResultEntryService.createResultEntry({
+          scoreboardId: session.scoreboardId,
+          sessionId: session.id,
+          results: resultsData,
+          totalPoints,
+        });
+        onScoreSubmit(createdEntry);
+      }
 
       setSuccess(true);
       setTimeout(() => onClose(), 600);
@@ -175,9 +181,20 @@ export const AddScores: React.FC<AddScoresProps> = ({
     }
   };
 
+  const canSubmit =
+    !submitting &&
+    !success &&
+    pointCategories.length > 0 &&
+    pointCategories.every((cat) => {
+      const score = scores.get(cat.id);
+      if (score === undefined || score === null) return false;
+      if (!Number.isInteger(score) || score < 0) return false;
+      return !errors.has(cat.id);
+    });
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Add Scores - {session?.scoreboardName}</DialogTitle>
+      <DialogTitle>Set Scores</DialogTitle>
       <DialogContent dividers>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -192,7 +209,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
             <form onSubmit={handleSubmit}>
               <Stack spacing={3} sx={{ width: '100%', mt: 1 }}>
                 <Typography variant="h6" sx={{ color: '#1b5e20' }}>
-                  Session: {session?.scoreboardName}
+                  Session
                 </Typography>
 
                 <Stack spacing={2}>
@@ -201,7 +218,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
                       key={category.id}
                       label={category.name}
                       type="text"
-                      value={scores.get(category.id) ?? ''}
+                      value={scores.get(category.id) || ''}
                       onChange={(e) =>
                         handleScoreChange(category.id, e.target.value)
                       }
@@ -243,7 +260,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
         <Button
           onClick={() => handleSubmit()}
           variant="contained"
-          disabled={submitting || success || !resultEntry}
+          disabled={!canSubmit}
           sx={{ backgroundColor: '#38a14f', color: '#fff' }}
         >
           {submitting ? <LoadingSpinner size={20} /> : 'Submit Scores'}

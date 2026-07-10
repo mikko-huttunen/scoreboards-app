@@ -72,6 +72,8 @@ const toCellContent = (value: unknown): React.ReactNode => {
 };
 
 const getCellValue = <T extends DataTableRow>(row: T, header: string) => {
+  console.log('row', row);
+  console.log('header', header);
   if (header in row) {
     return toCellContent(row[header]);
   }
@@ -121,116 +123,13 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
 
   const firstHeader = headers[0];
 
-  const sortedData = useMemo(() => {
-    if (!firstHeader || data.length <= 1) return data;
-
-    const isDateLike =
-      typeof firstHeader === 'string' &&
-      firstHeader.toLowerCase().includes('date');
-
-    const parseCustomDateToMs = (value: unknown): number | null => {
-      // Expected format: 'd/M/yyyy HH:mm'
-      if (value == null) return null;
-      const str = String(value).trim();
-      if (!str) return null;
-
-      const [datePart, timePart] = str.split(' ');
-      if (!datePart || !timePart) return null;
-
-      const [dStr, mStr, yStr] = datePart.split('/');
-      const [hhStr, mmStr] = timePart.split(':');
-
-      const day = Number(dStr);
-      const month = Number(mStr);
-      const year = Number(yStr);
-      const hour = Number(hhStr);
-      const minute = Number(mmStr);
-
-      if (
-        !Number.isFinite(day) ||
-        !Number.isFinite(month) ||
-        !Number.isFinite(year) ||
-        !Number.isFinite(hour) ||
-        !Number.isFinite(minute)
-      ) {
-        return null;
-      }
-
-      // JS Date months are 0-based
-      const dt = new Date(year, month - 1, day, hour, minute, 0, 0);
-      const ms = dt.getTime();
-
-      // Guard against invalid dates
-      if (!Number.isFinite(ms)) return null;
-      return ms;
-    };
-
-    const getSortableValue = (row: T) => {
-      const record = row as unknown as Record<string, unknown>;
-      const raw = record[firstHeader] ?? record[normalizeKey(firstHeader)];
-
-      if (raw == null) return null;
-
-      if (isDateLike) {
-        // raw is typically a formatted string like 'd/M/yyyy HH:mm'
-        if (raw instanceof Date) {
-          const ms = raw.getTime();
-          return Number.isFinite(ms) ? ms : null;
-        }
-
-        const ms = parseCustomDateToMs(raw);
-        return ms;
-      }
-
-      if (typeof raw === 'number') return raw;
-      if (typeof raw === 'boolean') return raw ? 1 : 0;
-
-      const s = String(raw).trim();
-      const n = Number(s);
-
-      // If it's a valid numeric string, sort numerically.
-      if (s !== '' && !Number.isNaN(n) && String(n) === s) return n;
-
-      return s.toLowerCase();
-    };
-
-    const withIndex = data.map((row, idx) => ({ row, idx }));
-
-    withIndex.sort((a, b) => {
-      const av = getSortableValue(a.row);
-      const bv = getSortableValue(b.row);
-
-      // Date sort: latest first (descending by ms)
-      if (isDateLike) {
-        const aMs = typeof av === 'number' ? av : -Infinity;
-        const bMs = typeof bv === 'number' ? bv : -Infinity;
-        if (aMs !== bMs) return bMs - aMs;
-        return a.idx - b.idx;
-      }
-
-      // Numeric sort
-      if (typeof av === 'number' && typeof bv === 'number') {
-        if (av !== bv) return av - bv;
-        return a.idx - b.idx;
-      }
-
-      const aStr = String(av ?? '');
-      const bStr = String(bv ?? '');
-
-      if (aStr !== bStr) return aStr.localeCompare(bStr);
-      return a.idx - b.idx;
-    });
-
-    return withIndex.map(({ row }) => row);
-  }, [data, firstHeader]);
-
   const visibleRows = useMemo(() => {
     if (pageSize <= 0) {
-      return sortedData;
+      return data;
     }
 
     const start = page * pageSize;
-    return sortedData.slice(start, start + pageSize);
+    return data.slice(start, start + pageSize);
   }, [data, page, pageSize]);
 
   const columnCount = headers.length + (hasActions ? 1 : 0);
@@ -336,7 +235,18 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                     colSpan={columnCount}
                     sx={{ color: '#666', textAlign: 'center' }}
                   >
-                    {emptyText}
+                    <Stack
+                      direction="row"
+                      spacing={0}
+                      justifyContent="center"
+                      flexWrap="nowrap"
+                      sx={{
+                        minHeight: 32,
+                        alignItems: 'center',
+                      }}
+                    >
+                      {emptyText}
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -377,63 +287,70 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                       ))}
 
                       {hasActions && (
-                        <TableCell
-                          align="right"
-                          onClick={(event) => event.stopPropagation()}
-                          sx={{ whiteSpace: 'nowrap' }}
-                        >
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                           <Stack
                             direction="row"
                             spacing={0}
                             justifyContent="flex-end"
                             flexWrap="nowrap"
+                            sx={{
+                              minHeight: 32,
+                              alignItems: 'center',
+                            }}
                           >
-                            {showEdit && (
-                              <Tooltip title="Edit">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => onEdit?.(row)}
-                                  aria-label="edit row"
-                                  sx={{
-                                    color: '#38a14f',
-                                  }}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
+                            {hasActions ? (
+                              <>
+                                {showEdit && (
+                                  <Tooltip title="Edit">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        onEdit?.(row);
+                                      }}
+                                      aria-label="edit row"
+                                      sx={{ color: '#38a14f' }}
+                                    >
+                                      <EditIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
 
-                            {showDelete && (
-                              <Tooltip title="Delete">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => onDelete?.(row)}
-                                  aria-label="delete row"
-                                  sx={{
-                                    color: '#38a14f',
-                                  }}
-                                >
-                                  <DeleteIcon />
-                                </IconButton>
-                              </Tooltip>
-                            )}
+                                {showDelete && (
+                                  <Tooltip title="Delete">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        onDelete?.(row);
+                                      }}
+                                      aria-label="delete row"
+                                      sx={{ color: '#38a14f' }}
+                                    >
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
 
-                            {showCustom && (
-                              <Tooltip title={customTooltip ?? null}>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => onCustom?.(row)}
-                                  aria-label="custom row action"
-                                  sx={{
-                                    color: '#38a14f',
-                                  }}
-                                >
-                                  {onCustomIcon ?? (
-                                    <EditIcon fontSize="small" />
-                                  )}
-                                </IconButton>
-                              </Tooltip>
-                            )}
+                                {showCustom && (
+                                  <Tooltip title={customTooltip ?? null}>
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        onCustom?.(row);
+                                      }}
+                                      aria-label="custom row action"
+                                      sx={{ color: '#38a14f' }}
+                                    >
+                                      {onCustomIcon ?? (
+                                        <EditIcon fontSize="small" />
+                                      )}
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </>
+                            ) : null}
                           </Stack>
                         </TableCell>
                       )}

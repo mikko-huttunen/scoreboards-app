@@ -2,9 +2,7 @@ package com.mikko_huttunen.scoreboards.models;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -25,10 +23,10 @@ public class Scoreboard extends Auditable {
     @NotBlank(message = "Scoreboard name cannot be blank")
     private String name;
 
-    @NotEmpty(message = "Memberships cannot be blank")
+    @NotEmpty(message = "Memberships cannot be empty")
     private List<Membership> memberships = new ArrayList<>();
 
-    @NotEmpty(message = "Point categories cannot be null")
+    @NotEmpty(message = "Point categories cannot be empty")
     private List<PointCategory> pointCategories = new ArrayList<>();
 
     private List<Session> sessions = new ArrayList<>();

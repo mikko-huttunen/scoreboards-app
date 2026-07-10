@@ -1,19 +1,22 @@
 import React, { useMemo, useEffect, useState } from 'react';
-import { Box, Paper, Stack, Typography } from '@mui/material';
-import { useParams } from 'react-router-dom';
+import { Box, IconButton, Stack, Typography } from '@mui/material';
+import { useNavigate, useParams } from 'react-router-dom';
 import type { User } from '../../types/User.ts';
-import type { Session } from '../../types/Session.ts';
 import type { PointCategory } from '../../types/PointCategory.ts';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
-import { SessionService } from '../../services/SessionService.ts';
-import { PointCategoryService } from '../../services/PointCategoryService.ts';
-import { ResultEntryService } from '../../services/ResultEntryService.ts';
+import {
+  type SessionData,
+  SessionService,
+} from '../../services/SessionService.ts';
 import { ResultBarChart } from '../common/charts/ResultBarChart.tsx';
 import { useNavigationSpacing } from '../navigation/Navigation';
 import { UserService } from '../../services/UserService.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 export const SessionResultsView: React.FC = () => {
+  const navigate = useNavigate();
   const navigationSpacing = useNavigationSpacing();
   const { scoreboardId, sessionId } = useParams<{
     scoreboardId: string;
@@ -21,12 +24,12 @@ export const SessionResultsView: React.FC = () => {
   }>();
 
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
-
+  const [session, setSession] = useState<SessionData | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
   const [resultEntries, setResultEntries] = useState<ResultEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+
+  const { showErrorMessage } = useMessageSnackbar();
 
   useEffect(() => {
     if (!scoreboardId || !sessionId) return;
@@ -34,31 +37,19 @@ export const SessionResultsView: React.FC = () => {
     const fetchAll = async () => {
       try {
         setLoading(true);
-        setError(null);
 
-        const s = await SessionService.getSessionById(sessionId);
-        if (!s) throw new Error('Session not found');
+        const [sessionData, usersData] = await Promise.all([
+          SessionService.getSessionById(sessionId),
+          UserService.getScoreboardUsers(scoreboardId),
+        ]);
 
-        setSession(s);
-
-        const usersForBoard =
-          await UserService.getScoreboardUsers(scoreboardId);
-        setUsers(usersForBoard);
-
-        const categoriesForBoard =
-          await PointCategoryService.getPointCategoriesByScoreboard(
-            scoreboardId
-          );
-        setPointCategories(categoriesForBoard);
-
-        const entriesForBoard =
-          await ResultEntryService.getResultEntriesByScoreboard(scoreboardId);
-
-        setResultEntries(
-          entriesForBoard.filter((re) => re.sessionId === sessionId)
-        );
+        setSession(sessionData);
+        setPointCategories(sessionData!.pointCategoryDetails);
+        setResultEntries(sessionData!.resultEntryDetails);
+        setUsers(usersData);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load results');
+        showErrorMessage('Failed to load results');
+        navigate(`/scoreboards`);
       } finally {
         setLoading(false);
       }
@@ -83,12 +74,6 @@ export const SessionResultsView: React.FC = () => {
       }));
   }, [session, users]);
 
-  const activePointCategories = useMemo(() => {
-    if (!session) return [];
-    const allowed = new Set<string>(Array.from(session.pointCategories ?? []));
-    return pointCategories.filter((pc) => allowed.has(pc.id));
-  }, [session, pointCategories]);
-
   return (
     <Box
       sx={{
@@ -99,8 +84,8 @@ export const SessionResultsView: React.FC = () => {
     >
       <Box
         sx={{
-          px: { xs: 2, sm: 3 },
-          py: { xs: 3, sm: 4 },
+          px: 2,
+          pt: 2,
           ...navigationSpacing,
         }}
       >
@@ -110,8 +95,6 @@ export const SessionResultsView: React.FC = () => {
           sx={{
             width: '100%',
             minHeight: 0,
-            // Extra guard: ensure content never slips under the desktop drawer.
-            pl: navigationSpacing.pl,
             boxSizing: 'border-box',
           }}
         >
@@ -119,7 +102,7 @@ export const SessionResultsView: React.FC = () => {
             <Box
               sx={{
                 width: '100%',
-                minHeight: { xs: 360, sm: 420 },
+                //minHeight: { xs: 360, sm: 420 },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -127,19 +110,30 @@ export const SessionResultsView: React.FC = () => {
             >
               <LoadingSpinner />
             </Box>
-          ) : error || !session ? (
-            <Paper sx={{ p: 3, width: '100%', maxWidth: 720 }}>
-              <Typography variant="h6" color="error">
-                {error || 'Session not found'}
-              </Typography>
-            </Paper>
           ) : (
-            <Stack spacing={2} sx={{ width: '100%' }}>
+            <Stack spacing={2} sx={{ width: '100%', height: 'auto' }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <IconButton
+                  onClick={() => navigate(`/scoreboards/${scoreboardId}`)}
+                  sx={{ color: '#1b5e20' }}
+                  aria-label="back to scoreboards"
+                >
+                  <ArrowBackIcon />
+                </IconButton>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    color: '#1b5e20',
+                    fontSize: { xs: '1.5rem', sm: '2rem' },
+                  }}
+                >
+                  Session results
+                </Typography>
+              </Stack>
               <ResultBarChart
                 participants={participants}
                 results={resultEntries}
-                pointCategories={activePointCategories}
-                chartTitle={`Results - ${session.scoreboardName}`}
+                pointCategories={pointCategories}
               />
             </Stack>
           )}

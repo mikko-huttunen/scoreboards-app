@@ -25,7 +25,7 @@ const DrawerContext = createContext<{
 export const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isDesktop = useMediaQuery('(min-width:1000px)');
+  const isDesktop = useMediaQuery('(min-width:900px)');
   const [drawerOpen, setDrawerOpen] = useState(true);
   const drawerWidth = 220;
 
@@ -144,7 +144,7 @@ export const Navigation: React.FC = () => {
 };
 
 export const useNavigationSpacing = () => {
-  const isDesktop = useMediaQuery('(min-width:1000px)');
+  const isDesktop = useMediaQuery('(min-width:900px)');
   const drawerWidth = 220;
   const drawerContext = useContext(DrawerContext);
   const drawerOpen = drawerContext?.drawerOpen ?? true;
