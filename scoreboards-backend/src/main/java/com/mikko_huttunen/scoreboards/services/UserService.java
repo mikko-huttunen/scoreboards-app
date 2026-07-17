@@ -2,10 +2,12 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mikko_huttunen.scoreboards.Constants.Types;
+import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +15,9 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.RequestBody;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -34,6 +38,7 @@ public class UserService {
     private final ScoreboardService scoreboardService;
     private final UserRepository userRepository;
     private final CurrentUserContext currentUserContext;
+    private final TimerService timerService;
     
     @Autowired
     public UserService(
@@ -42,13 +47,14 @@ public class UserService {
             QueryService queryService,
             ScoreboardService scoreboardService,
             UserRepository userRepository,
-            CurrentUserContext currentUserContext) {
+            CurrentUserContext currentUserContext, TimerService timerService) {
         this.auth0ManagementService = auth0ManagementService;
         this.authProvider = authProvider;
         this.queryService = queryService;
         this.scoreboardService = scoreboardService;
         this.userRepository = userRepository;
         this.currentUserContext = currentUserContext;
+        this.timerService = timerService;
     }
     
     /**
@@ -63,6 +69,7 @@ public class UserService {
         JsonNode auth0User = auth0ManagementService.getUser(auth0UserId);
 
         String email = auth0User.get("email").asText();
+        Boolean isEmailVerified = auth0User.get("email_verified").asBoolean();
         String name = auth0User.get("name").asText();
         String avatar = auth0User.get("picture").asText();
 
@@ -73,7 +80,11 @@ public class UserService {
         user.setId(UUID.randomUUID().toString());
         user.setAuth0Id(auth0UserId);
         user.setEmail(email.trim().toLowerCase());
-        user.setName(name != null && !name.trim().isEmpty() ? name : email);
+        user.setEmailVerified(isEmailVerified);
+
+        String username = name.length() > 15 ? name.substring(0, 15) : name;
+        user.setName(username);
+
         user.setAvatar(avatar);
         user.setCreated(now);
         user.setLastModified(now);
@@ -130,7 +141,11 @@ public class UserService {
 
         String name = userData.get("name");
 
-        auth0ManagementService.updateUser(user.getAuth0Id(), name);
+        if (name.length() > 15) {
+            logger.error("User name cannot be longer than 15 characters");
+            throw new IllegalArgumentException("User name cannot be longer than 15 characters");
+        }
+
         Optional<User> updatedUserOpt = queryService.updateById(user.getId(), User.class, userToUpdate ->
                 userToUpdate.setName(name));
 
@@ -160,6 +175,34 @@ public class UserService {
         User deletedUser = queryService.deleteById(user.getId(), User.class);
         logger.info("Successfully deleted user with ID: {}", deletedUser.getId());
         return deletedUser;
+    }
+
+    /**
+     * Resend email verification email for the current authenticated user.
+     */
+    public void resendEmailVerification(String auth0Id) {
+        logger.info("Resending verification email for user with Auth0 ID: {}", auth0Id);
+
+        long remainingTime = timerService.getRemainingTime(auth0Id).getSeconds();
+        if (remainingTime > 0) {
+            logger.info("User with Auth0 ID: {} has already been sent a verification email. Resend timer: {} seconds",
+                    auth0Id, remainingTime);
+            throw new IllegalArgumentException("User has already been sent a verification email");
+        }
+
+        auth0ManagementService.resendEmailVerification(auth0Id);
+        timerService.startTimer(auth0Id, 60);
+
+        logger.info("Successfully resent verification email for user with Auth0 ID: {}", auth0Id);
+    }
+
+    public Long getResendTimer(String userId) {
+        logger.info("Getting resend timer for user with ID: {}", userId);
+
+        Long remainingTime = timerService.getRemainingTime(userId).getSeconds();
+
+        logger.info("Resend timer for user with ID: {} is {} seconds", userId, remainingTime);
+        return remainingTime;
     }
 }
 

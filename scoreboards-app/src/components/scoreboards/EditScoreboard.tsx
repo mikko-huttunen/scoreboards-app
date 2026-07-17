@@ -21,7 +21,7 @@ export const EditScoreboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const { showErrorMessage } = useMessageSnackbar();
   const { user } = useCurrentUser();
-  let isCreator = false;
+  const [isCreator, setIsCreator] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -33,12 +33,12 @@ export const EditScoreboard: React.FC = () => {
         const scoreboardData =
           await ScoreboardsService.getScoreboardById(scoreboardId);
 
-        isCreator = scoreboardData?.createdBy === user.id;
+        const isCreator = scoreboardData?.createdBy === user.id;
         if (!isCreator) {
           navigate(`/scoreboards/${scoreboardId}`);
           return;
         }
-        isCreator = true;
+        setIsCreator(isCreator);
 
         const hasPendingSessions = scoreboardData?.sessions.find(
           (s) => s.isPending
@@ -64,7 +64,7 @@ export const EditScoreboard: React.FC = () => {
   }, [scoreboardId, user]);
 
   if (loading || !isCreator) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={64} screenCentered />;
   }
 
   return (
@@ -96,7 +96,10 @@ export const EditScoreboard: React.FC = () => {
             </IconButton>
             <Typography
               variant="h4"
-              sx={{ color: '#1b5e20', fontSize: { xs: '1.5rem', sm: '2rem' } }}
+              sx={{
+                color: '#1b5e20',
+                fontSize: { xs: '1.5rem', sm: '2rem' },
+              }}
             >
               Edit Scoreboard
             </Typography>

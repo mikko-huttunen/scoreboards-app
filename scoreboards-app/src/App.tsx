@@ -10,12 +10,13 @@ import ProtectedRoute from './components/authentication/ProtectedRoute';
 import { useAxiosInterceptors } from './api/Interceptor';
 import { Navigation } from './components/navigation/Navigation.tsx';
 import { SessionResultsView } from './components/sessions/SessionResultsView.tsx';
+import EmailVerificationView from './components/authentication/EmailVerificationView.tsx';
 
 function App() {
   useAxiosInterceptors();
 
   const location = useLocation();
-  const pathsWithNoNavigation = ['/login', '/'];
+  const pathsWithNoNavigation = ['/login', '/', '/verify-email'];
   const showNavigation = !pathsWithNoNavigation.includes(location.pathname);
   return (
     <>
@@ -24,6 +25,8 @@ function App() {
         <Route path="/" element={<RootRedirect />} />
 
         <Route path="/login" element={<LoginView />} />
+
+        <Route path="/verify-email" element={<EmailVerificationView />} />
 
         <Route
           path="/profile"

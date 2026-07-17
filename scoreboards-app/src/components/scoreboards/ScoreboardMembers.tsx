@@ -5,7 +5,7 @@ import { Avatar, Box, Stack } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import type { Scoreboard } from '../../types/Scoreboard.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
-import { hasSessionsPermission, isOwner } from '../../utils/Utils.ts';
+import { isOwner } from '../../utils/Utils.ts';
 import { InviteUserModal } from '../invitations/InviteUserModal.tsx';
 import type { Invitation } from '../../types/Invitation.ts';
 import { ScoreboardsService } from '../../services/ScoreboardService.ts';
@@ -36,13 +36,16 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
+  const isCreator = isOwner(scoreboard.memberships, user?.id);
 
   const canDelete = (rowUser: User) => {
-    if (disableActions) return false;
-    if (isOwner(scoreboard.memberships, rowUser.id)) return false;
+    if (!isCreator) return false;
     //User is self
-    if (rowUser.id === user?.id) return false;
-    return hasSessionsPermission(scoreboard.memberships, user?.id);
+    return rowUser.id !== user?.id;
+  };
+
+  const canAdd = () => {
+    return !disableActions || users.length < 10;
   };
 
   const openInviteUserModal = () => {
@@ -146,8 +149,11 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
         headers={['Name']}
         data={data}
         canDelete={(row) => canDelete(row.user)}
+        disableDelete={disableActions}
         onDelete={(row) => openRemoveUserModal(row.user)}
-        canAdd={isOwner(scoreboard.memberships, user?.id)}
+        canAdd={isOwner(scoreboard.memberships, user?.id) && canAdd}
+        disableAdd={!canAdd}
+        addTooltip={!canAdd ? 'Maximum number of users reached' : ''}
         onAdd={openInviteUserModal}
         emptyText="No users"
         pageSize={10}

@@ -52,6 +52,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   };
 
   const openAddScoresModal = (session: Session) => {
+    if (!Array.from(session.participants).includes(user!.id)) return;
     setSelectedSession(session);
     setAddScoresModalOpen(true);
   };

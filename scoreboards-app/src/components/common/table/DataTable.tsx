@@ -32,14 +32,23 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   showHighlight?: boolean;
   canCreate?: boolean | ((row: T) => boolean);
   onCreate?: () => void | Promise<void> | null;
+  disableCreate?: boolean;
+  createTooltip?: string;
   canAdd?: boolean | ((row: T) => boolean);
   onAdd?: () => void | Promise<void> | null;
+  disableAdd?: boolean;
+  addTooltip?: string;
   canDelete?: boolean | ((row: T) => boolean);
   onDelete?: (row: T) => void | Promise<void> | null;
+  disableDelete?: boolean;
+  deleteTooltip?: string;
   canEdit?: boolean | ((row: T) => boolean);
   onEdit?: (row: T) => void | Promise<void> | null;
+  disableEdit?: boolean;
+  editTooltip?: string;
   canCustom?: boolean | ((row: T) => boolean);
   onCustom?: (row: T) => void | Promise<void> | null;
+  disableCustom?: boolean;
   onCustomIcon?: React.ReactNode;
   customTooltip?: string;
   pageSize?: number;
@@ -72,8 +81,6 @@ const toCellContent = (value: unknown): React.ReactNode => {
 };
 
 const getCellValue = <T extends DataTableRow>(row: T, header: string) => {
-  console.log('row', row);
-  console.log('header', header);
   if (header in row) {
     return toCellContent(row[header]);
   }
@@ -103,14 +110,23 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   showHighlight = false,
   onCreate,
   canCreate = false,
+  disableCreate = false,
+  createTooltip,
   onAdd,
   canAdd = false,
+  disableAdd = false,
+  addTooltip,
   onDelete,
   canDelete = false,
+  disableDelete = false,
+  deleteTooltip,
   onEdit,
   canEdit = false,
+  disableEdit = false,
+  editTooltip,
   onCustom,
   canCustom = false,
+  disableCustom = false,
   onCustomIcon,
   customTooltip,
   pageSize = 10,
@@ -120,8 +136,6 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   const [page, setPage] = useState(0);
 
   const hasActions = canEdit || canDelete || canCustom;
-
-  const firstHeader = headers[0];
 
   const visibleRows = useMemo(() => {
     if (pageSize <= 0) {
@@ -177,33 +191,39 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             )}
 
             {canCreate && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => onCreate?.()}
-                sx={{
-                  backgroundColor: '#38a14f',
-                  color: '#ffffff',
-                  ':hover': { backgroundColor: '#2d7f3d' },
-                }}
-              >
-                Create new
-              </Button>
+              <Tooltip title={createTooltip}>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => onCreate?.()}
+                  disabled={disableCreate}
+                  sx={{
+                    backgroundColor: '#38a14f',
+                    color: '#ffffff',
+                    ':hover': { backgroundColor: '#2d7f3d' },
+                  }}
+                >
+                  Create new
+                </Button>
+              </Tooltip>
             )}
 
             {canAdd && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => onAdd?.()}
-                sx={{
-                  backgroundColor: '#38a14f',
-                  color: '#ffffff',
-                  ':hover': { backgroundColor: '#2d7f3d' },
-                }}
-              >
-                Add
-              </Button>
+              <Tooltip title={addTooltip}>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => onAdd?.()}
+                  disabled={disableAdd}
+                  sx={{
+                    backgroundColor: '#38a14f',
+                    color: '#ffffff',
+                    ':hover': { backgroundColor: '#2d7f3d' },
+                  }}
+                >
+                  Add
+                </Button>
+              </Tooltip>
             )}
           </Stack>
         )}
@@ -301,13 +321,14 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                             {hasActions ? (
                               <>
                                 {showEdit && (
-                                  <Tooltip title="Edit">
+                                  <Tooltip title={editTooltip ?? 'Edit'}>
                                     <IconButton
                                       size="small"
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         onEdit?.(row);
                                       }}
+                                      disabled={disableEdit}
                                       aria-label="edit row"
                                       sx={{ color: '#38a14f' }}
                                     >
@@ -317,13 +338,14 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                                 )}
 
                                 {showDelete && (
-                                  <Tooltip title="Delete">
+                                  <Tooltip title={deleteTooltip ?? 'Delete'}>
                                     <IconButton
                                       size="small"
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         onDelete?.(row);
                                       }}
+                                      disabled={disableDelete}
                                       aria-label="delete row"
                                       sx={{ color: '#38a14f' }}
                                     >
@@ -340,6 +362,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                                         event.stopPropagation();
                                         onCustom?.(row);
                                       }}
+                                      disabled={disableCustom}
                                       aria-label="custom row action"
                                       sx={{ color: '#38a14f' }}
                                     >

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Avatar, Box, Paper, Typography, useMediaQuery } from '@mui/material';
 import {
   Bar,
@@ -7,7 +7,6 @@ import {
   Cell,
   ResponsiveContainer,
   XAxis,
-  YAxis,
   Tooltip,
   LabelList,
   type LegendProps,
@@ -55,7 +54,7 @@ type Props = {
 const HIGHLIGHT_COLOR = '#ffb300';
 const LEADER_TEXT_COLOR = '#1b5e20';
 const DEFAULT_TEXT_COLOR = '#555';
-const AVATAR_SIZE = 32;
+const AVATAR_SIZE = 34;
 
 export const ScoreBarChart: React.FC<Props> = ({
   loading,
@@ -70,7 +69,15 @@ export const ScoreBarChart: React.FC<Props> = ({
   showAvatars = false,
 }) => {
   const isHorizontal = direction === 'horizontal';
-  const isMobile = useMediaQuery('(max-width:600px)');
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const isSmallMobile = useMediaQuery('(max-width:600px)');
+  const truncateWidths = isMobile && data.length > 5;
+  const rotateNames = useMediaQuery('(max-width:1400px)') && data.length > 8;
+
+  const avatarSize = truncateWidths ? 26 : AVATAR_SIZE;
+  const avatarFontSize = truncateWidths ? 12 : 14;
+  const avatarYSpacing =
+    truncateWidths || isSmallMobile || rotateNames ? 40 : 22;
 
   // When set, only this single point category is shown (isolation mode).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -106,8 +113,6 @@ export const ScoreBarChart: React.FC<Props> = ({
     });
   }, [data, visibleKeys]);
 
-  // Identify the leader (most points across the visible categories) so we can
-  // highlight their name and bar.
   const leaderName = useMemo(() => {
     let best: { name: string; total: number } | null = null;
     for (const row of computedData) {
@@ -120,6 +125,7 @@ export const ScoreBarChart: React.FC<Props> = ({
   }, [computedData, labelKey]);
 
   const avatarByName = useMemo(() => {
+    // Ensure O(1) lookup by tick renders.
     const map = new Map<string, string>();
     for (const row of data) {
       const name = String(row[labelKey] ?? '');
@@ -156,110 +162,116 @@ export const ScoreBarChart: React.FC<Props> = ({
   // be the one that gets them — not the last series (which may be hidden).
   const topVisibleKey = selectedKey ?? series[series.length - 1]?.key;
 
-  const renderAvatar = (
-    cx: number,
-    cy: number,
-    name: string,
-    avatarUrl: string | undefined,
-    isLeader: boolean
-  ) => (
-    <foreignObject
-      x={cx - AVATAR_SIZE / 2}
-      y={cy}
-      width={AVATAR_SIZE}
-      height={AVATAR_SIZE}
-      style={{ overflow: 'visible' }}
-    >
-      <Avatar
-        src={avatarUrl || undefined}
-        sx={{
-          width: AVATAR_SIZE,
-          height: AVATAR_SIZE,
-          fontSize: 14,
-          bgcolor: '#38a14f',
-          border: isLeader ? `2px solid ${HIGHLIGHT_COLOR}` : undefined,
-          boxShadow: isLeader
-            ? '0 0 8px rgba(255,179,0,0.65)'
-            : '0 1px 3px rgba(0,0,0,0.18)',
-        }}
+  const renderAvatar = useCallback(
+    (
+      cx: number,
+      cy: number,
+      name: string,
+      avatarUrl: string | undefined,
+      isLeader: boolean
+    ) => (
+      <foreignObject
+        x={cx - avatarSize / 2}
+        y={cy}
+        width={avatarSize}
+        height={avatarSize}
+        style={{ overflow: 'visible' }}
       >
-        {name.charAt(0).toUpperCase() || '?'}
-      </Avatar>
-    </foreignObject>
+        <Avatar
+          src={avatarUrl || undefined}
+          sx={{
+            width: avatarSize,
+            height: avatarSize,
+            fontSize: 14,
+            bgcolor: '#38a14f',
+            border: isLeader ? `2px solid ${HIGHLIGHT_COLOR}` : undefined,
+            boxShadow: isLeader
+              ? '0 0 8px rgba(255,179,0,0.65)'
+              : '0 1px 3px rgba(0,0,0,0.18)',
+          }}
+        >
+          {name.charAt(0).toUpperCase() || '?'}
+        </Avatar>
+      </foreignObject>
+    ),
+    [avatarSize, avatarFontSize]
   );
 
-  // Custom axis tick: renders the user's name, highlights the leader, and
-  // (when enabled) shows the user's avatar below their name.
-  const renderAxisTick = (props: {
-    x: number;
-    y: number;
-    payload: { value: string | number };
-  }) => {
-    const { x, y, payload } = props;
-    const name = String(payload.value ?? '');
-    const isLeader = leaderName != null && name === leaderName;
+  const renderAxisTick = useCallback(
+    (props: { x: number; y: number; payload: { value: string | number } }) => {
+      const { x, y, payload } = props;
+      const name = String(payload.value ?? '');
+      const isLeader = leaderName != null && name === leaderName;
 
-    const avatarUrl = showAvatars ? avatarByName.get(name) : undefined;
-    const fill = isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR;
-    const fontWeight = isLeader ? 700 : 400;
+      const avatarUrl = showAvatars ? avatarByName.get(name) : undefined;
+      const fill = isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR;
+      const fontWeight = isLeader ? 700 : 400;
 
-    const maxLen = isMobile ? 10 : 999;
-    const truncated =
-      isMobile && name.length > maxLen ? `${name.slice(0, maxLen)}.` : name;
+      const maxLen = truncateWidths || isSmallMobile || rotateNames ? 8 : 999;
+      const truncated =
+        (truncateWidths || isSmallMobile || rotateNames) && name.length > maxLen
+          ? `${name.slice(0, maxLen)}.`
+          : name;
 
-    const label = isLeader ? `👑 ${truncated}` : truncated;
+      const label = isLeader ? `👑 ${truncated}` : truncated;
 
-    if (isHorizontal) {
-      const avatarCx = showAvatars ? x - AVATAR_SIZE / 2 - 4 : x;
-      const textX = showAvatars ? avatarCx - AVATAR_SIZE / 2 - 6 : x - 6;
+      const rotateLabel = truncateWidths || isSmallMobile || rotateNames;
+      const labelYOffset = rotateLabel ? 22 : 14;
+
+      if (isHorizontal) {
+        const avatarCx = showAvatars ? x - AVATAR_SIZE / 2 - 4 : x;
+        const textX = showAvatars ? avatarCx - AVATAR_SIZE / 2 - 6 : x - 6;
+
+        return (
+          <g>
+            <text
+              x={textX}
+              y={y + labelYOffset}
+              textAnchor="end"
+              dominantBaseline="central"
+              fontSize={rotateLabel ? 10 : 12}
+              fontWeight={fontWeight}
+              fill={fill}
+              transform={rotateLabel ? `rotate(-45 ${x} ${y + 22})` : undefined}
+            >
+              {label}
+            </text>
+            {showAvatars &&
+              renderAvatar(x, y + avatarYSpacing, name, avatarUrl, isLeader)}
+          </g>
+        );
+      }
 
       return (
         <g>
           <text
-            x={textX}
-            y={y}
-            textAnchor="end"
-            dominantBaseline="central"
-            fontSize={isMobile ? 10 : 12}
+            x={x}
+            y={y + labelYOffset}
+            textAnchor="middle"
+            fontSize={rotateLabel ? 10 : 12}
             fontWeight={fontWeight}
             fill={fill}
+            transform={rotateLabel ? `rotate(-45 ${x} ${y + 22})` : undefined}
           >
             {label}
           </text>
           {showAvatars &&
-            renderAvatar(
-              avatarCx,
-              y - AVATAR_SIZE / 2,
-              name,
-              avatarUrl,
-              isLeader
-            )}
+            renderAvatar(x, y + avatarYSpacing, name, avatarUrl, isLeader)}
         </g>
       );
-    }
-
-    // Names sit on the X axis (below the chart); the avatar sits below the name.
-    return (
-      <g>
-        <text
-          x={x}
-          y={y + (!showAvatars ? 22 : 14)}
-          textAnchor="middle"
-          fontSize={isMobile ? 10 : 12}
-          fontWeight={fontWeight}
-          fill={fill}
-          transform={
-            !showAvatars
-              ? `rotate(-45 ${x} ${y + (!showAvatars ? 22 : 14)})`
-              : undefined
-          }
-        >
-          {label}
-        </text>
-        {showAvatars && renderAvatar(x, y + 22, name, avatarUrl, isLeader)}
-      </g>
-    );
-  };
+    },
+    [
+      avatarByName,
+      renderAvatar,
+      truncateWidths,
+      isHorizontal,
+      isSmallMobile,
+      rotateNames,
+      showAvatars,
+      leaderName,
+      avatarYSpacing,
+    ]
+  );
 
   const xAxis = useMemo(() => {
     if (isHorizontal) return <XAxis type="number" allowDecimals={false} />;
@@ -267,12 +279,13 @@ export const ScoreBarChart: React.FC<Props> = ({
       <XAxis
         dataKey={labelKey}
         interval={0}
-        height={showAvatars ? 72 : isMobile ? 48 : 28}
+        height={72}
         tick={renderAxisTick}
       />
     );
-  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey, isMobile]);
+  }, [isHorizontal, labelKey, isMobile, renderAxisTick]);
 
+  /* Might be needed later
   const yAxis = useMemo(() => {
     if (isHorizontal)
       return (
@@ -284,73 +297,81 @@ export const ScoreBarChart: React.FC<Props> = ({
         />
       );
     return <YAxis />;
-  }, [isHorizontal, showAvatars, leaderName, avatarByName, labelKey, isMobile]);
+  }, [isHorizontal, labelKey, showAvatars, isMobile, renderAxisTick]);
+  */
+
+  const Legend = useMemo(() => {
+    if (!legendToggleEnabled) return null;
+
+    const CustomLegend: React.FC<LegendProps> = () => {
+      // depends on selectedKey + series + selectSeries
+      return (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            marginBottom: 12,
+            padding: '0 4px',
+          }}
+        >
+          {series.map((s) => {
+            const isDimmed = selectedKey !== null && selectedKey !== s.key;
+
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => selectSeries(s.key)}
+                style={{
+                  cursor: legendToggleEnabled ? 'pointer' : 'default',
+                  background: isDimmed ? 'rgba(0,0,0,0.03)' : '#fff',
+                  border:
+                    selectedKey === s.key
+                      ? `1px solid ${s.color}`
+                      : '1px solid rgba(0,0,0,0.10)',
+                  borderRadius: 999,
+                  padding: '7px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  opacity: isDimmed ? 0.45 : 1,
+                  pointerEvents: legendToggleEnabled ? 'auto' : 'none',
+                  transition: 'all 160ms ease',
+                }}
+                aria-pressed={selectedKey === s.key}
+              >
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: s.color,
+                    display: 'inline-block',
+                    boxShadow: '0 0 0 2px rgba(255,255,255,0.9) inset',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 12,
+                    userSelect: 'none',
+                    fontWeight: selectedKey === s.key ? 700 : 400,
+                  }}
+                >
+                  {s.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    };
+
+    return <CustomLegend />;
+  }, [legendToggleEnabled, selectedKey, series, selectSeries]);
 
   if (loading) return <LoadingSpinner />;
-
-  const CustomLegend: React.FC<LegendProps> = () => {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 10,
-          marginBottom: 12,
-          padding: '0 4px',
-        }}
-      >
-        {series.map((s) => {
-          const isDimmed = selectedKey !== null && selectedKey !== s.key;
-
-          return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => selectSeries(s.key)}
-              style={{
-                cursor: legendToggleEnabled ? 'pointer' : 'default',
-                background: isDimmed ? 'rgba(0,0,0,0.03)' : '#fff',
-                border:
-                  selectedKey === s.key
-                    ? `1px solid ${s.color}`
-                    : '1px solid rgba(0,0,0,0.10)',
-                borderRadius: 999,
-                padding: '7px 12px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                opacity: isDimmed ? 0.45 : 1,
-                pointerEvents: legendToggleEnabled ? 'auto' : 'none',
-                transition: 'all 160ms ease',
-              }}
-              aria-pressed={selectedKey === s.key}
-            >
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 999,
-                  background: s.color,
-                  display: 'inline-block',
-                  boxShadow: '0 0 0 2px rgba(255,255,255,0.9) inset',
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 12,
-                  userSelect: 'none',
-                  fontWeight: selectedKey === s.key ? 700 : 400,
-                }}
-              >
-                {s.title}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
 
   return (
     <Paper
@@ -381,8 +402,8 @@ export const ScoreBarChart: React.FC<Props> = ({
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 }, pt: 4 }}>
-          {legendToggleEnabled && <CustomLegend />}
+        <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: 1, pt: 4 }}>
+          {Legend}
           <ResponsiveContainer width="100%" height={430}>
             <BarChart
               data={computedData}
@@ -420,11 +441,8 @@ export const ScoreBarChart: React.FC<Props> = ({
                     fill={s.color}
                     stackId="stack"
                     hide={isHidden}
-                    barSize={28}
-                    maxBarSize={30}
+                    maxBarSize={100}
                     radius={isTopSegment ? [7, 7, 0, 0] : [0, 0, 0, 0]}
-                    // Animate only during the initial staggered reveal. After
-                    // that, legend toggles update bars instantly.
                     isAnimationActive={!animationComplete}
                     animationDuration={
                       animationComplete ? 0 : animationDurationMs
@@ -438,8 +456,8 @@ export const ScoreBarChart: React.FC<Props> = ({
                       const rowLabel = String(row[labelKey] ?? '');
                       const isLeader =
                         leaderName != null && rowLabel === leaderName;
-                      // Gold edges appear only once loaded.
                       const showGlow = isLeader && animationComplete;
+
                       return (
                         <Cell
                           key={`${s.key}-${rowLabel}`}

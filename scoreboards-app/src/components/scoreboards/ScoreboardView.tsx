@@ -244,7 +244,6 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
           text={`Are you sure you want to leave the scoreboard ${scoreboard?.name}? You will no longer
            have access to it.`}
           confirmLabel="Leave"
-          confirmColor="warning"
           loading={isProcessing}
           onConfirm={handleLeaveScoreboardConfirm}
         />
@@ -272,7 +271,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
 
   // If access check is complete, and user doesn't have access (redirect is in progress)
   if (!scoreboard || !hasAccess) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={64} screenCentered />;
   }
 
   return (

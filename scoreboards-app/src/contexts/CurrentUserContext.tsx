@@ -27,7 +27,7 @@ export function CurrentUserProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated } = useAuth0();
+  const { isAuthenticated, user: auth0User, logout } = useAuth0();
   const { showErrorMessage } = useMessageSnackbar();
 
   const [user, setUser] = useState<User | null>(null);
@@ -48,21 +48,25 @@ export function CurrentUserProvider({
     } catch (e) {
       setUser(null);
       showErrorMessage('Failed to load user');
+      await logout({
+        logoutParams: { returnTo: `${window.location.origin}/login` },
+      });
     } finally {
       setIsLoadingUser(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, showErrorMessage]);
 
   useEffect(() => {
-    // Only fetch once auth state flips to authenticated
-    if (isAuthenticated) {
+    // Only fetch once auth state flips to authenticated (and email is verified)
+    if (isAuthenticated && auth0User?.email_verified) {
       void refreshUser();
-    } else {
-      // When not authenticated yet, wait (don’t show error)
-      setUser(null);
-      setIsLoadingUser(true);
+      return;
     }
-  }, [isAuthenticated, refreshUser]);
+
+    // When not authenticated or not verified, don't keep stale user loaded
+    setUser(null);
+    setIsLoadingUser(true);
+  }, [isAuthenticated, auth0User?.email_verified, refreshUser]);
 
   const value = useMemo<CurrentUserContextValue>(
     () => ({

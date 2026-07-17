@@ -103,7 +103,7 @@ public class InvitationController {
     public ResponseEntity<Invitation> deleteInvitation(@PathVariable String id) {
         logger.info("DELETE /api/invitations/{} - Deleting invitation", id);
 
-        Invitation deleted = invitationService.deleteInvitations(Set.of(id)).getFirst();
+        Invitation deleted = invitationService.deleteInvitations(Set.of(id)).get(0);
 
         return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }

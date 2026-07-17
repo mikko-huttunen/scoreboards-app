@@ -48,7 +48,7 @@ export class SessionService {
       return response.data;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      throw new Error(`Failed to create session: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 
@@ -121,7 +121,7 @@ export class SessionService {
       return response.data;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      throw new Error(`Failed to delete session: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 
@@ -138,7 +138,7 @@ export class SessionService {
       return response.data;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      throw new Error(`Failed to finish session: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 }

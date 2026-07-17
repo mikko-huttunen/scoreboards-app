@@ -71,10 +71,40 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   const [revealedSegmentCount, setRevealedSegmentCount] = useState<number>(0);
   const [selectedCategoryIdForLegend, setSelectedCategoryIdForLegend] =
     useState<string | null>(null);
-  const isDesktop = useMediaQuery('(min-width:600px)');
-  const isMobile = !isDesktop;
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const isSmallMobile = useMediaQuery('(max-width:600px)');
+  const truncateWidths = isMobile && participants.length > 5;
+  const rotateNames =
+    useMediaQuery('(max-width:1400px)') && participants.length > 8;
 
   const segmentRevealDelayMs = 2000;
+
+  const avatarSize = truncateWidths ? 26 : AVATAR_SIZE;
+  const avatarFontSize = truncateWidths ? 12 : 14;
+  const avatarYSpacing =
+    truncateWidths || isSmallMobile || rotateNames ? 40 : 22;
+
+  const presentCategoryIdsFromResults = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const entry of results ?? []) {
+      if (entry.isPending) continue;
+      if (entry.isActive === false) continue;
+
+      for (const r of entry.results ?? []) {
+        if (r?.pointCategoryId) ids.add(r.pointCategoryId);
+      }
+    }
+
+    return ids;
+  }, [results]);
+
+  const effectivePointCategories = useMemo(() => {
+    // Only keep categories that actually appear in this session's result data
+    return pointCategories.filter((c) =>
+      presentCategoryIdsFromResults.has(c.id)
+    );
+  }, [pointCategories, presentCategoryIdsFromResults]);
 
   const userById = useMemo(
     () =>
@@ -102,9 +132,11 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       });
     }
 
+    const presentCategoryIds = new Set(pointCategories.map((c) => c.id));
+
     for (const entry of results ?? []) {
       if (entry.isPending) continue;
-      if (entry.isActive === false) continue;
+      if (!entry.isActive) continue;
 
       const participant = userById.get(entry.userId);
       const participantName =
@@ -119,6 +151,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       };
 
       for (const result of entry.results ?? []) {
+        // Only count points for point categories that exist in the session
+        if (!presentCategoryIds.has(result.pointCategoryId)) continue;
+
         const prev = existing.categories.get(result.pointCategoryId) ?? 0;
         const next = prev + (result.points ?? 0);
         existing.categories.set(result.pointCategoryId, next);
@@ -129,7 +164,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     }
 
     return totals;
-  }, [participants, results, userById]);
+  }, [participants, results, userById, pointCategories]);
 
   const orderedParticipants = useMemo(() => {
     return Array.from(totalsByUserId.entries())
@@ -140,12 +175,21 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         total: value.total,
         categories: value.categories,
       }))
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [totalsByUserId]);
+
+  const avatarUrlByName = useMemo(() => {
+    // Faster lookup for axis ticks (avoids orderedParticipants.find(...) per tick).
+    const map = new Map<string, string>();
+    for (const p of orderedParticipants) {
+      if (p.name) map.set(p.name, p.avatar ?? '');
+    }
+    return map;
+  }, [orderedParticipants]);
 
   const hasData =
     participants.length > 0 &&
-    pointCategories.length > 0 &&
+    effectivePointCategories.length > 0 &&
     orderedParticipants.length > 0;
 
   const categoryLeadersById = useMemo(() => {
@@ -205,12 +249,12 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
 
   const totalSeries = useMemo(
     () =>
-      pointCategories.map((category) => ({
+      effectivePointCategories.map((category) => ({
         key: category.id,
         title: category.name,
         color: category.color,
       })),
-    [pointCategories]
+    [effectivePointCategories]
   );
 
   const totalChartData = useMemo<TotalChartRow[]>(() => {
@@ -222,7 +266,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         __grandTotal: 0,
       };
 
-      for (const category of pointCategories) {
+      for (const category of effectivePointCategories) {
         const v = Number(participant.categories.get(category.id) ?? 0);
 
         row[category.id] = v;
@@ -232,7 +276,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       row.__grandTotal = grandTotal;
       return row;
     });
-  }, [orderedParticipants, pointCategories]);
+  }, [orderedParticipants, effectivePointCategories]);
 
   // If we are in “category highlight” mode, we highlight category leaders only (after finished).
   const currentCategoryLeaderNames = useMemo(() => {
@@ -259,18 +303,18 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       isLeader: boolean
     ) => (
       <foreignObject
-        x={cx - AVATAR_SIZE / 2}
+        x={cx - avatarSize / 2}
         y={cy}
-        width={AVATAR_SIZE}
-        height={AVATAR_SIZE}
+        width={avatarSize}
+        height={avatarSize}
         style={{ overflow: 'visible' }}
       >
         <Avatar
           src={avatarUrl || undefined}
           sx={{
-            width: AVATAR_SIZE,
-            height: AVATAR_SIZE,
-            fontSize: 14,
+            width: avatarSize,
+            height: avatarSize,
+            fontSize: avatarFontSize,
             bgcolor: '#38a14f',
             border: isLeader ? `2px solid ${HIGHLIGHT_COLOR}` : undefined,
             boxShadow: isLeader
@@ -282,7 +326,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         </Avatar>
       </foreignObject>
     ),
-    []
+    [avatarSize, avatarFontSize]
   );
 
   const hasFinishedAllSegments = step === 'finished';
@@ -302,46 +346,49 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
 
       const isLeader = isCategoryLeader || isTotalLeader;
 
-      const participant = orderedParticipants.find((row) => row.name === name);
-      const avatarUrl = participant?.avatar ?? '';
+      // O(1) lookup instead of orderedParticipants.find(...) (O(n) per tick)
+      const avatarUrl = avatarUrlByName.get(name) ?? '';
 
-      const maxLen = isMobile ? 10 : 999;
+      const maxLen = truncateWidths || isSmallMobile || rotateNames ? 8 : 999;
       const truncated =
-        isMobile && name.length > maxLen ? `${name.slice(0, maxLen)}.` : name;
+        (truncateWidths || isSmallMobile || rotateNames) && name.length > maxLen
+          ? `${name.slice(0, maxLen)}.`
+          : name;
 
       return (
         <g>
           <text
             x={x}
-            y={y + (isDesktop ? 14 : 22)}
+            y={y + (truncateWidths || isSmallMobile || rotateNames ? 22 : 14)}
             textAnchor="middle"
-            fontSize={isMobile ? 10 : 12}
+            fontSize={truncateWidths || isSmallMobile || rotateNames ? 10 : 12}
             fontWeight={isLeader ? 800 : 500}
             fill={isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR}
             transform={
-              isMobile && participants.length >= 5
-                ? `rotate(-45 ${x} ${y + (isDesktop ? 14 : 22)})`
+              truncateWidths || isSmallMobile || rotateNames
+                ? `rotate(-45 ${x} ${y + 22})`
                 : undefined
             }
           >
             {isLeader ? `👑 ${truncated}` : truncated}
           </text>
 
-          {/* Avatars also contribute to overlap; keep them on desktop only */}
-          {((isMobile && participants.length < 5) || !isMobile) &&
-            renderAvatar(x, y + 22, name, avatarUrl, isLeader)}
+          {renderAvatar(x, y + avatarYSpacing, name, avatarUrl, isLeader)}
         </g>
       );
     },
     [
-      leaderNameForAxis,
-      orderedParticipants,
-      renderAvatar,
       step,
+      leaderNameForAxis,
       hasFinishedAllSegments,
       selectedCategoryIdForLegend,
       totalLeaderNames,
-      isMobile,
+      avatarUrlByName, // new
+      renderAvatar,
+      truncateWidths,
+      rotateNames,
+      isSmallMobile,
+      avatarYSpacing,
     ]
   );
 
@@ -395,6 +442,21 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     return totalSeries[idx] ?? null;
   }, [revealedSegmentCount, step, totalSeries]);
 
+  const currentCategoryIndexLabel = useMemo(() => {
+    if (step !== 'animating' || !currentCategoryDuringCalc) return null;
+    const currentIdx = totalSeries.findIndex(
+      (c) => c.key === currentCategoryDuringCalc.key
+    );
+    if (currentIdx < 0) return null;
+    const total = effectivePointCategories.length || totalSeries.length;
+    return `${currentIdx + 1}/${total}`;
+  }, [
+    step,
+    currentCategoryDuringCalc,
+    totalSeries,
+    effectivePointCategories.length,
+  ]);
+
   const currentButtonLabel = useMemo(() => {
     if (step === 'idle') return 'Start';
     if (step === 'animating') return 'Revealing…';
@@ -410,9 +472,11 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   const selectedCategory = useMemo(() => {
     if (!selectedCategoryIdForLegend) return null;
     return (
-      pointCategories.find((c) => c.id === selectedCategoryIdForLegend) ?? null
+      effectivePointCategories.find(
+        (c) => c.id === selectedCategoryIdForLegend
+      ) ?? null
     );
-  }, [pointCategories, selectedCategoryIdForLegend]);
+  }, [effectivePointCategories, selectedCategoryIdForLegend]);
 
   const selectedCategoryData = useMemo<CategoryChartRow[]>(() => {
     if (!selectedCategory) return [];
@@ -430,7 +494,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         sx={{
           width: '100%',
           borderRadius: 4,
-          overflow: 'hidden',
           border: '1px solid rgba(56, 161, 79, 0.14)',
           background:
             'linear-gradient(180deg, #ffffff 0%, #f6fbf7 45%, #eef8f0 100%)',
@@ -460,9 +523,8 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         elevation={0}
         sx={{
           width: '100%',
-          height: isDesktop ? '90vh' : '80vh',
+          height: isMobile ? '83vh' : '92vh',
           borderRadius: 4,
-          //overflow: 'scroll',
           border: '1px solid rgba(56, 161, 79, 0.14)',
           background:
             'linear-gradient(180deg, #ffffff 0%, #f6fbf7 45%, #eef8f0 100%)',
@@ -495,12 +557,28 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                     }}
                   />
                   <Stack spacing={0}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ color: 'text.secondary', fontWeight: 700 }}
-                    >
-                      Current category
-                    </Typography>
+                    <Stack direction="row" alignItems="baseline" spacing={1}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ color: 'text.secondary', fontWeight: 700 }}
+                      >
+                        Current category
+                      </Typography>
+
+                      {currentCategoryIndexLabel && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: '#1b5e20',
+                            fontWeight: 800,
+                            ml: 0.5,
+                          }}
+                        >
+                          {currentCategoryIndexLabel}
+                        </Typography>
+                      )}
+                    </Stack>
+
                     <Typography
                       variant="subtitle1"
                       sx={{
@@ -546,12 +624,12 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         <Box
           sx={{
             height: hasFinishedAllSegments
-              ? isDesktop
-                ? '75vh'
-                : '56vh'
-              : isDesktop
-                ? '85vh'
-                : '72vh',
+              ? isMobile
+                ? '60vh'
+                : '78vh'
+              : isMobile
+                ? '74vh'
+                : '88vh',
             px: { xs: 1.5, sm: 2.5 },
           }}
         >
@@ -602,7 +680,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                   variant="outlined"
                   size="large"
                   onClick={handleSkip}
-                  disabled={step === 'finished'}
+                  disabled={step !== 'idle'}
                   sx={{
                     px: 3.5,
                     py: 1.4,
@@ -618,17 +696,23 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
               </div>
             </Box>
           ) : (
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-              //style={{ marginBottom: -30 }}
-            >
+            <ResponsiveContainer width="100%" height="100%">
               {/* ... existing BarChart rendering stays exactly as-is ... */}
               {/* 1) Stacked totals animation mode */}
               {!selectedCategoryIdForLegend || !hasFinishedAllSegments ? (
                 <BarChart
                   data={totalChartData}
-                  margin={{ top: 24, right: 24, left: 8, bottom: 20 }}
+                  margin={{
+                    top: 24,
+                    right: 24,
+                    left: 8,
+                    bottom:
+                      hasFinishedAllSegments && !isMobile
+                        ? 20
+                        : isMobile
+                          ? 0
+                          : 50,
+                  }}
                   layout="horizontal"
                   barCategoryGap="35%"
                 >
@@ -654,8 +738,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                         name={series.title}
                         fill={series.color}
                         stackId="total"
-                        barSize={28}
-                        maxBarSize={30}
+                        maxBarSize={100}
                         radius={isTopSegment ? [7, 7, 0, 0] : [0, 0, 0, 0]}
                         isAnimationActive={
                           step === 'animating' || step === 'finished'
@@ -718,7 +801,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                   />
                   <XAxis
                     dataKey="name"
-                    interval={isMobile ? 'preserveStartEnd' : 0}
+                    interval={0}
                     height={isMobile ? 88 : 72}
                     tick={renderAxisTick}
                   />
@@ -740,8 +823,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                     dataKey="points"
                     name={selectedCategory?.name ?? 'Points'}
                     fill={selectedCategory?.color ?? '#38a14f'}
-                    barSize={34}
-                    maxBarSize={40}
+                    maxBarSize={100}
                     radius={[8, 8, 0, 0]}
                     isAnimationActive={false}
                   >
@@ -778,10 +860,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
             <Stack spacing={1.5} alignItems="flex-start">
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
+                spacing={1}
                 sx={{
                   flexWrap: 'wrap',
-                  // ensures the legend buttons wrap based on available horizontal space
                   display: 'inline-block',
                 }}
               >
@@ -827,7 +908,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                       <span style={{ fontSize: 12, fontWeight: 800 }}>
                         {s.title}
                       </span>
-                      {/* No leader score / no-points text in legend */}
                     </button>
                   );
                 })}

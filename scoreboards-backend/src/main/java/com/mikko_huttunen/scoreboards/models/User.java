@@ -37,6 +37,11 @@ public class User extends Auditable {
     @NotNull(message = "Email cannot be null")
     @Email(message = "Email must be a valid email address")
     private String email;
+
+    @Field("emailVerified")
+    @JsonIgnore
+    @NotNull(message = "Email verified cannot be null")
+    private Boolean emailVerified;
     
     @Field("avatar")
     private String avatar;
@@ -71,6 +76,10 @@ public class User extends Auditable {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    public Boolean getEmailVerified() { return emailVerified; }
+
+    public void setEmailVerified(Boolean emailVerified) { this.emailVerified = emailVerified; }
 
     public String getAvatar() {
         return avatar;

@@ -61,7 +61,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useCurrentUser();
-  const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
+  const { showSuccessMessage } = useMessageSnackbar();
 
   const [name, setName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
@@ -200,7 +200,6 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       }
       onClose();
     } catch (err) {
-      showErrorMessage('Failed to create session');
       console.error('Error creating session:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
     } finally {

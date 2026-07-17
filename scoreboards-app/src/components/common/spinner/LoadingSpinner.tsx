@@ -1,6 +1,5 @@
 import CircularProgress from '@mui/material/CircularProgress';
 import { Box, Typography } from '@mui/material';
-import React from 'react';
 import { useNavigationSpacing } from '../../navigation/Navigation.tsx';
 
 export type LoadingSpinnerProps = {

@@ -23,11 +23,19 @@ export const SessionResultsView: React.FC = () => {
     sessionId: string;
   }>();
 
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
-  const [resultEntries, setResultEntries] = useState<ResultEntry[]>([]);
+  const [data, setData] = useState<{
+    loading: boolean;
+    session: SessionData | null;
+    users: User[];
+    pointCategories: PointCategory[];
+    resultEntries: ResultEntry[];
+  }>({
+    loading: true,
+    session: null,
+    users: [],
+    pointCategories: [],
+    resultEntries: [],
+  });
 
   const { showErrorMessage } = useMessageSnackbar();
 
@@ -36,35 +44,37 @@ export const SessionResultsView: React.FC = () => {
 
     const fetchAll = async () => {
       try {
-        setLoading(true);
+        setData((prev) => ({ ...prev, loading: true }));
 
         const [sessionData, usersData] = await Promise.all([
           SessionService.getSessionById(sessionId),
           UserService.getScoreboardUsers(scoreboardId),
         ]);
 
-        setSession(sessionData);
-        setPointCategories(sessionData!.pointCategoryDetails);
-        setResultEntries(sessionData!.resultEntryDetails);
-        setUsers(usersData);
+        setData({
+          loading: false,
+          session: sessionData,
+          users: usersData,
+          pointCategories: sessionData!.pointCategoryDetails,
+          resultEntries: sessionData!.resultEntryDetails,
+        });
       } catch (e) {
         showErrorMessage('Failed to load results');
         navigate(`/scoreboards`);
-      } finally {
-        setLoading(false);
       }
     };
 
     fetchAll();
-  }, [scoreboardId, sessionId]);
+  }, [scoreboardId, sessionId, navigate, showErrorMessage]);
 
   const participants = useMemo(() => {
-    if (!session) return [];
+    if (!data.session) return [];
 
     const participantIds = new Set<string>(
-      Array.from(session.participants ?? [])
+      Array.from(data.session.participants ?? [])
     );
-    return users
+
+    return data.users
       .filter((u) => participantIds.has(u.id))
       .map((u) => ({
         id: u.id,
@@ -72,7 +82,14 @@ export const SessionResultsView: React.FC = () => {
         email: u.email,
         avatar: u.avatar,
       }));
-  }, [session, users]);
+  }, [data.session, data.users]);
+
+  const filteredResults = useMemo(() => {
+    const participantIds = new Set<string>(participants.map((p) => p.id));
+    return (data.resultEntries ?? []).filter((re) =>
+      participantIds.has(re.userId)
+    );
+  }, [data.resultEntries, participants]);
 
   return (
     <Box
@@ -98,11 +115,10 @@ export const SessionResultsView: React.FC = () => {
             boxSizing: 'border-box',
           }}
         >
-          {loading ? (
+          {data.loading ? (
             <Box
               sx={{
                 width: '100%',
-                //minHeight: { xs: 360, sm: 420 },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -120,6 +136,7 @@ export const SessionResultsView: React.FC = () => {
                 >
                   <ArrowBackIcon />
                 </IconButton>
+
                 <Typography
                   variant="h4"
                   sx={{
@@ -130,10 +147,11 @@ export const SessionResultsView: React.FC = () => {
                   Session results
                 </Typography>
               </Stack>
+
               <ResultBarChart
                 participants={participants}
-                results={resultEntries}
-                pointCategories={pointCategories}
+                results={filteredResults}
+                pointCategories={data.pointCategories}
               />
             </Stack>
           )}

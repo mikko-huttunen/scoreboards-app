@@ -20,6 +20,7 @@ import type { Scoreboard } from '../../types/Scoreboard';
 import './ScoreboardForm.css';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
 
 type PointCategoryFormData = {
   id?: string;
@@ -54,6 +55,16 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const { showErrorMessage, showSuccessMessage } = useMessageSnackbar();
 
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<ScoreboardData | null>(
+    null
+  );
+
+  const MAX_NAME_LENGTH = 20;
+  const MAX_POINT_CATEGORIES = 10;
+
+  const isNameTooLong = name.trim().length > MAX_NAME_LENGTH;
+
   useEffect(() => {
     setName(scoreboard?.name ?? '');
 
@@ -72,7 +83,7 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
   };
 
   const handleAddPointCategory = () => {
-    if (pointCategoryForms.length >= 20) return;
+    if (pointCategoryForms.length >= MAX_POINT_CATEGORIES) return;
     setPointCategoryForms([
       ...pointCategoryForms,
       { name: '', color: '#38a14f' },
@@ -103,6 +114,8 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
     const newErrors: { name?: string; pointCategories?: string } = {};
 
     if (!name.trim()) newErrors.name = 'Scoreboard name is required';
+    if (isNameTooLong)
+      newErrors.name = `Scoreboard name cannot be longer than ${MAX_NAME_LENGTH} characters`;
 
     const validCategories = pointCategoryForms.filter(
       (cat) => cat.name.trim() && cat.color.trim()
@@ -132,6 +145,14 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
       newErrors.pointCategories = 'All point categories must have a name';
     }
 
+    const tooLongCategoryNames = pointCategoryForms.filter(
+      (cat) => cat.name.trim().length > MAX_NAME_LENGTH
+    );
+
+    if (tooLongCategoryNames.length > 0) {
+      newErrors.pointCategories = `Point category names cannot be longer than ${MAX_NAME_LENGTH} characters`;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -141,49 +162,75 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
 
     if (!validateForm()) return;
 
+    const validCategories = pointCategoryForms
+      .filter((cat) => cat.name.trim() && cat.color.trim())
+      .map((cat) => ({
+        id: cat.id,
+        name: cat.name.trim(),
+        color: cat.color.trim(),
+      }));
+
+    const payload: ScoreboardData = {
+      name: name.trim(),
+      pointCategories: validCategories,
+    };
+
+    // When editing, confirm before saving
+    if (isEditing && scoreboard) {
+      setPendingPayload(payload);
+      setConfirmOpen(true);
+      return;
+    }
+
+    // Creating stays the same (no confirmation required by your request)
     setSubmitting(true);
 
     try {
-      const validCategories = pointCategoryForms
-        .filter((cat) => cat.name.trim() && cat.color.trim())
-        .map((cat) => ({
-          id: cat.id,
-          name: cat.name.trim(),
-          color: cat.color.trim(),
-        }));
-
-      const payload: ScoreboardData = {
-        name: name.trim(),
-        pointCategories: validCategories,
-      };
-
-      if (isEditing && scoreboard) {
-        const updated = await ScoreboardsService.updateScoreboard(
-          scoreboard.id,
-          payload
-        );
-
-        showSuccessMessage('Scoreboard updated');
-        if (updated) {
-          onSuccess
-            ? onSuccess(updated)
-            : navigate(`/scoreboards/${updated.id}`);
-        }
-      } else {
-        const created = await ScoreboardsService.createScoreboard(payload);
-        showSuccessMessage('Scoreboard created');
-        onSuccess ? onSuccess(created) : navigate('/scoreboards');
-      }
+      const created = await ScoreboardsService.createScoreboard(payload);
+      showSuccessMessage('Scoreboard created');
+      onSuccess ? onSuccess(created) : navigate('/scoreboards');
     } catch (error) {
-      showErrorMessage(
-        isEditing
-          ? 'Failed to update scoreboard'
-          : 'Failed to create scoreboard'
-      );
+      showErrorMessage('Failed to create scoreboard');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleConfirmUpdate = async () => {
+    if (!pendingPayload || !scoreboard) return;
+
+    setSubmitting(true);
+    try {
+      const updated = await ScoreboardsService.updateScoreboard(
+        scoreboard.id,
+        pendingPayload
+      );
+
+      showSuccessMessage('Scoreboard updated');
+      if (updated) {
+        onSuccess ? onSuccess(updated) : navigate(`/scoreboards/${updated.id}`);
+      }
+    } catch (error) {
+      showErrorMessage('Failed to update scoreboard');
+    } finally {
+      setSubmitting(false);
+      setConfirmOpen(false);
+      setPendingPayload(null);
+    }
+  };
+
+  const hasTooLongCategoryName = pointCategoryForms.some(
+    (cat) => cat.name.trim().length > MAX_NAME_LENGTH
+  );
+
+  const isSubmitDisabled =
+    submitting ||
+    !name.trim() ||
+    isNameTooLong ||
+    hasTooLongCategoryName ||
+    pointCategoryForms.filter((cat) => cat.name.trim() && cat.color.trim())
+      .length === 0 ||
+    pointCategoryForms.some((cat) => cat.color.trim() && !cat.name.trim());
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
@@ -195,14 +242,35 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
           maxWidth: { xs: '100%', sm: 'min(1200px, 100%)' },
         }}
       >
+        <ConfirmDialog
+          open={confirmOpen}
+          onCancel={() => {
+            if (!submitting) {
+              setConfirmOpen(false);
+              setPendingPayload(null);
+            }
+          }}
+          title="Update Scoreboard"
+          text="Please note that deleting point categories will delete the associated results.
+          Are you sure you want to save these changes to the scoreboard?"
+          confirmLabel="Update"
+          confirmColor="success"
+          loading={submitting}
+          confirmDisabled={submitting}
+          onConfirm={handleConfirmUpdate}
+        />
         <form onSubmit={handleSubmit}>
           <Stack spacing={3} sx={{ width: '100%' }}>
             <TextField
               label="Scoreboard Name"
               value={name}
               onChange={handleNameChange}
-              error={!!errors.name}
-              helperText={errors.name}
+              error={!!errors.name || isNameTooLong}
+              helperText={
+                isNameTooLong
+                  ? `Scoreboard name cannot be longer than ${MAX_NAME_LENGTH} characters.`
+                  : (errors.name ?? undefined)
+              }
               required
               fullWidth
               disabled={submitting}
@@ -224,80 +292,94 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
                 <Alert severity="error">{errors.pointCategories}</Alert>
               )}
 
-              <Stack spacing={2}>
-                {pointCategoryForms.map((category, index) => (
-                  <Paper
-                    key={index}
-                    elevation={0}
-                    sx={{ p: { xs: 1.5, sm: 2 }, backgroundColor: '#f5f5f5' }}
-                  >
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={{ xs: 1.5, sm: 2 }}
-                      alignItems={{ xs: 'stretch', sm: 'center' }}
-                    >
-                      <TextField
-                        label="Category Name"
-                        value={category.name}
-                        onChange={(e) =>
-                          handlePointCategoryChange(
-                            index,
-                            'name',
-                            e.target.value
-                          )
-                        }
-                        required
-                        fullWidth
-                        disabled={submitting}
-                        size="small"
-                      />
+              <Stack spacing={1}>
+                {pointCategoryForms.map((category, index) => {
+                  const isCategoryNameTooLong =
+                    category.name.trim().length > MAX_NAME_LENGTH;
 
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          justifyContent: {
-                            xs: 'space-between',
-                            sm: 'flex-start',
-                          },
-                        }}
+                  return (
+                    <Paper
+                      key={index}
+                      elevation={0}
+                      sx={{ p: { xs: 1.5, sm: 2 }, backgroundColor: '#f5f5f5' }}
+                    >
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1}
+                        alignItems={{ xs: 'stretch', sm: 'flex-start' }}
                       >
-                        <input
-                          id={`color-input-${index}`}
-                          type="color"
-                          value={category.color}
+                        <TextField
+                          label="Category Name"
+                          value={category.name}
                           onChange={(e) =>
                             handlePointCategoryChange(
                               index,
-                              'color',
+                              'name',
                               e.target.value
                             )
                           }
+                          required
+                          fullWidth
                           disabled={submitting}
-                          className="color-input"
+                          size="small"
+                          error={isCategoryNameTooLong}
+                          helperText={
+                            isCategoryNameTooLong
+                              ? `Category name cannot be longer than ${MAX_NAME_LENGTH} characters.`
+                              : undefined
+                          }
                         />
 
-                        <IconButton
-                          onClick={() => handleRemovePointCategory(index)}
-                          disabled={
-                            pointCategoryForms.length <= 1 || submitting
-                          }
-                          color="error"
-                          size="small"
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            justifyContent: {
+                              xs: 'space-between',
+                              sm: 'flex-start',
+                            },
+                          }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                ))}
+                          <input
+                            id={`color-input-${index}`}
+                            type="color"
+                            value={category.color}
+                            onChange={(e) =>
+                              handlePointCategoryChange(
+                                index,
+                                'color',
+                                e.target.value
+                              )
+                            }
+                            disabled={submitting}
+                            className="color-input"
+                          />
+
+                          <IconButton
+                            onClick={() => handleRemovePointCategory(index)}
+                            disabled={
+                              pointCategoryForms.length <= 1 || submitting
+                            }
+                            sx={{ color: '#38a14f' }}
+                            size="small"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </Stack>
+                    </Paper>
+                  );
+                })}
               </Stack>
 
               <Button
                 startIcon={<AddIcon />}
                 onClick={handleAddPointCategory}
-                disabled={pointCategoryForms.length >= 20 || submitting}
+                disabled={
+                  pointCategoryForms.length >= MAX_POINT_CATEGORIES ||
+                  submitting
+                }
                 size="small"
                 sx={{
                   backgroundColor: '#38a14f',
@@ -309,58 +391,49 @@ export const ScoreboardForm: React.FC<ScoreboardFormProps> = ({
               </Button>
 
               <Typography variant="caption" sx={{ color: '#666' }}>
-                {pointCategoryForms.length} of 20 categories (minimum 1
-                required)
+                {pointCategoryForms.length} of {MAX_POINT_CATEGORIES} categories
+                (minimum 1 required)
               </Typography>
-            </Stack>
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={2}
-              justifyContent="flex-end"
-              sx={{ width: '100%' }}
-            >
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={
-                  submitting ||
-                  !name.trim() ||
-                  pointCategoryForms.filter(
-                    (cat) => cat.name.trim() && cat.color.trim()
-                  ).length === 0 ||
-                  pointCategoryForms.some(
-                    (cat) => cat.color.trim() && !cat.name.trim()
-                  )
-                }
-                sx={{
-                  backgroundColor: '#38a14f',
-                  color: '#ffffff',
-                  ':hover': { backgroundColor: '#2d7f3d' },
-                }}
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                justifyContent="flex-end"
+                sx={{ width: '100%' }}
               >
-                {submitting ? (
-                  <LoadingSpinner size={24} />
-                ) : isEditing ? (
-                  'Update Scoreboard'
-                ) : (
-                  'Create Scoreboard'
-                )}
-              </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={isSubmitDisabled}
+                  sx={{
+                    backgroundColor: '#38a14f',
+                    color: '#ffffff',
+                    ':hover': { backgroundColor: '#2d7f3d' },
+                  }}
+                >
+                  {submitting ? (
+                    <LoadingSpinner size={24} />
+                  ) : isEditing ? (
+                    'Update Scoreboard'
+                  ) : (
+                    'Create Scoreboard'
+                  )}
+                </Button>
 
-              <Button
-                onClick={() =>
-                  navigate(
-                    isEditing && scoreboard
-                      ? `/scoreboards/${scoreboard.id}`
-                      : '/scoreboards'
-                  )
-                }
-                disabled={submitting}
-                variant="outlined"
-              >
-                Cancel
-              </Button>
+                <Button
+                  onClick={() =>
+                    navigate(
+                      isEditing && scoreboard
+                        ? `/scoreboards/${scoreboard.id}`
+                        : '/scoreboards'
+                    )
+                  }
+                  disabled={submitting}
+                  variant="outlined"
+                >
+                  Cancel
+                </Button>
+              </Stack>
             </Stack>
           </Stack>
         </form>

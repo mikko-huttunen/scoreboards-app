@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Stack, Typography, useMediaQuery } from '@mui/material';
+import { Stack, Typography } from '@mui/material';
 import { ScoreBarChart } from '../common/charts/ScoreBarChart';
 import type { Session } from '../../types/Session';
 import type { User } from '../../types/User';
@@ -31,7 +31,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
   chartTitle = 'Leaderboard',
   isLoading = false,
 }) => {
-  const isMobile = useMediaQuery('(max-width:600px)');
   const leaderboardChartData = useMemo<LeaderboardRow[]>(() => {
     if (!sessions?.length || !pointCategories?.length) return [];
 
@@ -52,6 +51,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       if (entry.isPending) continue;
       if (!entry.isActive) continue;
 
+      // Skip entries whose user isn't a (known) member of this scoreboard
+      if (!userById.has(entry.userId)) continue;
+
       const list = entriesBySession.get(entry.sessionId) ?? [];
       list.push(entry);
       entriesBySession.set(entry.sessionId, list);
@@ -63,9 +65,12 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       if (entry.isPending) continue;
       if (!entry.isActive) continue;
 
+      // Skip entries whose user isn't a (known) member of this scoreboard
       const user = userById.get(entry.userId);
-      const displayName = user?.name || user?.email || '[Removed user]';
-      const avatar = user?.avatar || '';
+      if (!user) continue;
+
+      const displayName = user.name || user.email || '[Removed user]';
+      const avatar = user.avatar || '';
 
       const existing = totalsByUserId.get(entry.userId) ?? {
         name: displayName,
@@ -88,7 +93,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       const totalsThisSession = new Map<string, number>();
 
       for (const entry of entries) {
-        // Sum all points from all results for this user in this session
+        // entries were already filtered above to contain only members
         let sum = 0;
         for (const r of entry.results ?? []) {
           sum += r.points ?? 0;
@@ -98,8 +103,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         if (sum > bestTotal) bestTotal = sum;
       }
 
-      // If bestTotal is <= 0, we still "award" wins to max users; adjust if you
-      // want to require positive points.
       for (const [userId, total] of totalsThisSession.entries()) {
         if (total === bestTotal) {
           winsByUserId.set(userId, (winsByUserId.get(userId) ?? 0) + 1);
@@ -125,17 +128,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       }
     );
 
-    chartRows.sort((a, b) => {
-      const aTotal = pointCategories.reduce(
-        (sum, pc) => sum + Number(a[pc.name] ?? 0),
-        0
-      );
-      const bTotal = pointCategories.reduce(
-        (sum, pc) => sum + Number(b[pc.name] ?? 0),
-        0
-      );
-      return bTotal - aTotal;
-    });
+    chartRows.sort((a, b) => a.name.localeCompare(b.name));
 
     return chartRows;
   }, [sessions, users, pointCategories, resultEntries]);
@@ -178,7 +171,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         series={leaderboardSeries}
         animationDurationMs={200}
         legendToggleEnabled
-        showAvatars={(isMobile && users.length < 5) || !isMobile}
+        showAvatars={true}
         emptyText={emptyText}
       />
     </Stack>

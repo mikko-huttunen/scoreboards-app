@@ -245,7 +245,7 @@ public class SessionService {
         logger.info("Checking if user {} is participating in session", userId);
 
         Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
-                .and("participants").in(userId));
+                .and("participants").in(userId).and("isPending").is(true));
         List<Session> sessions = queryService.find(query, Session.class, false);
         return !sessions.isEmpty();
     }

@@ -46,7 +46,12 @@ public class ResultEntryService {
         Optional<Session> sessionOpt = queryService.findById(dto.getSessionId(), Session.class, true);
         Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
         if (!session.getIsPending() || !session.getIsActive()) {
-            throw new IllegalArgumentException("Session has been finished or deleted");
+            throw new IllegalArgumentException("Session is finished or deleted");
+        }
+
+        Set<String> participants = session.getParticipants();
+        if (!participants.contains(currentUser.getId())) {
+            throw new IllegalArgumentException("User is not a participant of this session");
         }
 
         ResultEntry resultEntry = new ResultEntry();
@@ -125,7 +130,12 @@ public class ResultEntryService {
         Optional<Session> sessionOpt = queryService.findById(dto.getSessionId(), Session.class, true);
         Session session = sessionOpt.orElseThrow(() -> new IllegalArgumentException("Session not found"));
         if (!session.getIsPending() || !session.getIsActive()) {
-            throw new IllegalArgumentException("Session has been finished or deleted");
+            throw new IllegalArgumentException("Session is finished or deleted");
+        }
+
+        Set<String> participants = session.getParticipants();
+        if (!participants.contains(currentUser.getId())) {
+            throw new IllegalArgumentException("User is not a participant of this session");
         }
 
         Set<Result> results = dto.getResults();

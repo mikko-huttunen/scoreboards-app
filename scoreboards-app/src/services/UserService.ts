@@ -62,4 +62,36 @@ export class UserService {
       throw new Error(`Failed to delete user: ${errorMessage}`);
     }
   }
+
+  static async resendVerificationEmail(
+    userId: string | undefined
+  ): Promise<number> {
+    if (!userId) return 0;
+    try {
+      const response = await apiClient.post(
+        `${API_BASE_URL}/user/resend-verification-email`,
+        {
+          auth0Id: userId,
+        }
+      );
+      return response.data;
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to resend verification email: ${errorMessage}`);
+    }
+  }
+
+  static async checkResendTimer(userId: string | undefined): Promise<number> {
+    if (!userId) return 0;
+
+    try {
+      const response = await apiClient.get(
+        `${API_BASE_URL}/user/resend-timer/${userId}`
+      );
+      return response.data;
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      throw new Error(`Failed to check resend timer: ${errorMessage}`);
+    }
+  }
 }

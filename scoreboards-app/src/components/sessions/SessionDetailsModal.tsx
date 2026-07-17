@@ -71,12 +71,18 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
 
     const userById = new Map<string, User>(users.map((u) => [u.id, u]));
 
+    // Only include results that belong to users in the provided `users` list
+    const memberEntriesForSession = entriesForSession.filter((entry) =>
+      userById.has(entry.userId)
+    );
+
     const resultsByUserName = new Map<string, Result[]>();
 
-    for (const entry of entriesForSession) {
+    for (const entry of memberEntriesForSession) {
       const user = userById.get(entry.userId);
       const name = user?.name || user?.email || '[Removed user]';
       const resultsArray = entry.results;
+
       if (!resultsByUserName.has(name)) resultsByUserName.set(name, []);
       resultsByUserName.set(name, [
         ...(resultsByUserName.get(name) ?? []),

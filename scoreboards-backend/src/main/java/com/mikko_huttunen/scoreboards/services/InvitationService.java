@@ -63,6 +63,12 @@ public class InvitationService {
 
         Scoreboard scoreboard = scoreboardService.getScoreboardById(scoreboardId);
 
+        //Check if scoreboard has reached the maximum number of members
+        if (scoreboard.getMemberships().size() >= 10) {
+            logger.error("Scoreboard {} has reached the maximum number of members", scoreboardId);
+            throw new IllegalArgumentException("Scoreboard has reached the maximum number of members");
+        }
+
         //Verify the inviter is the creator of the scoreboard
         if (!scoreboard.getCreatedBy().equals(inviter.getId())) {
             logger.error("User {} is not the creator of the scoreboard {}", inviter.getId(), scoreboardId);
@@ -145,38 +151,37 @@ public class InvitationService {
     public Invitation acceptInvitation(String invitationId) {
         logger.info("Accepting invitation {}", invitationId);
 
-        try {
-            Invitation invitation = getInvitationById(invitationId);
+        Invitation invitation = getInvitationById(invitationId);
 
-            User user = currentUserContext.requireCurrentUser();
-
-            Membership membership = new Membership();
-            membership.setScoreboardId(invitation.getScoreboardId());
-            membership.setUserId(invitation.getReceiverId());
-            membership.setPermissions(invitation.getPermissions());
-
-            boolean userHasMembership = user.getMemberships().stream().anyMatch(ms ->
-                    ms.getScoreboardId().equals(invitation.getScoreboardId()));
-
-            if (userHasMembership) {
-                logger.error("User {} already has a membership to the scoreboard {}",
-                        user.getId(), invitation.getScoreboardId());
-                deleteInvitations(Set.of(invitationId));
-                throw new IllegalArgumentException("User is already a member of this scoreboard");
-            }
-
-            queryService.create(membership);
-
-            //Delete invitation after it's accepted
-            Invitation deletedInvitation = deleteInvitations(Set.of(invitationId)).getFirst();
-
-            logger.info("Successfully accepted invitation {}", deletedInvitation.getId());
-            return deletedInvitation;
-        } catch (IllegalArgumentException e) {
-            logger.error("Failed to accept invitation {}", invitationId, e);
+        Scoreboard scoreboard = scoreboardService.getScoreboardById(invitation.getScoreboardId());
+        if (scoreboard.getMemberships().size() >= 10) {
+            logger.error("Scoreboard {} has reached the maximum number of members", invitation.getScoreboardId());
             deleteInvitations(Set.of(invitationId));
-            throw new IllegalArgumentException("Failed to accept invitation", e);
+            throw new IllegalArgumentException("Scoreboard has reached the maximum number of members");
         }
+
+        boolean userHasMembership = scoreboard.getMemberships().stream().anyMatch(ms ->
+                ms.getScoreboardId().equals(invitation.getScoreboardId()));
+
+        if (userHasMembership) {
+            logger.error("User {} already has a membership to the scoreboard {}",
+                    invitation.getReceiverId(), invitation.getScoreboardId());
+            deleteInvitations(Set.of(invitationId));
+            throw new IllegalArgumentException("User is already a member of this scoreboard");
+        }
+
+        Membership membership = new Membership();
+        membership.setScoreboardId(invitation.getScoreboardId());
+        membership.setUserId(invitation.getReceiverId());
+        membership.setPermissions(invitation.getPermissions());
+
+        queryService.create(membership);
+
+        //Delete invitation after it's accepted
+        Invitation deletedInvitation = deleteInvitations(Set.of(invitationId)).get(0);
+
+        logger.info("Successfully accepted invitation {}", deletedInvitation.getId());
+        return deletedInvitation;
     }
     
     /**

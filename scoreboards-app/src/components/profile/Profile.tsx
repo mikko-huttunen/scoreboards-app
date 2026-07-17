@@ -20,7 +20,7 @@ export const ProfileView: React.FC = () => {
   const { user: auth0User, logout } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
   const [username, setUsername] = useState<string>('');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarFile] = useState<File | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -31,8 +31,11 @@ export const ProfileView: React.FC = () => {
     return auth0User?.picture ?? undefined;
   }, [avatarFile, user?.avatar, auth0User?.picture]);
 
+  const isUsernameTooLong = username.length > 15;
+
   const handleSave = async () => {
     if (saving || !user) return;
+    if (isUsernameTooLong) return;
     setSaving(true);
     try {
       await UserService.updateCurrentUser(username);
@@ -50,7 +53,9 @@ export const ProfileView: React.FC = () => {
     try {
       await UserService.deleteCurrentUser();
       setConfirmOpen(false);
-      await logout({ logoutParams: { returnTo: window.location.origin } });
+      await logout({
+        logoutParams: { returnTo: `${window.location.origin}/login` },
+      });
     } catch (err) {
       showErrorMessage('Failed to delete user');
       setDeleting(false);
@@ -117,13 +122,18 @@ export const ProfileView: React.FC = () => {
             <TextField
               label="Username"
               value={username}
+              error={isUsernameTooLong}
               onChange={(e) => setUsername(e.target.value)}
               fullWidth
               sx={{
                 '& .MuiInputLabel-root': { color: '#1b5e20' },
                 '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' },
               }}
-              helperText={' '}
+              helperText={
+                isUsernameTooLong
+                  ? `Username cannot be longer than 15 characters.`
+                  : ' '
+              }
             />
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -133,7 +143,7 @@ export const ProfileView: React.FC = () => {
               <Button
                 variant="contained"
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || isUsernameTooLong}
                 sx={{
                   backgroundColor: '#ffffff',
                   color: '#38a14f',

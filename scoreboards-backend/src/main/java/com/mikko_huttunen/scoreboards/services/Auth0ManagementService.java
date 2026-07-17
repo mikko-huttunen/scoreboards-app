@@ -119,7 +119,7 @@ public class Auth0ManagementService {
 
         ResponseEntity<String> response = restTemplate.exchange(updateUrl, HttpMethod.PATCH, request, String.class);
 
-        if (response.getStatusCode() != HttpStatus.OK) {
+        if (!response.getStatusCode().is2xxSuccessful()) {
             throw new RuntimeException("Failed to update external user");
         }
 
@@ -151,7 +151,7 @@ public class Auth0ManagementService {
 
         ResponseEntity<String> response = restTemplate.exchange(deleteUrl, HttpMethod.DELETE, request, String.class);
 
-        if (response.getStatusCode() != HttpStatus.OK) {
+        if (response.getStatusCode() != HttpStatus.NO_CONTENT) {
             throw new RuntimeException("Failed to delete external user");
         }
 
@@ -160,6 +160,39 @@ public class Auth0ManagementService {
         } else {
             logger.warn("Unexpected status code when deleting Auth0 user {}: {}", auth0UserId, response.getStatusCode());
         }
+    }
+
+    /**
+     * Send a new email verification email through Auth0.
+     * @param auth0UserId The Auth0 user ID
+     */
+    public void resendEmailVerification(String auth0UserId) {
+        logger.info("Sending email verification for Auth0 user: {}", auth0UserId);
+
+        String verificationUrl = "https://" + auth0Domain + "/api/v2/jobs/verification-email";
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("user_id", auth0UserId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(getAccessToken());
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+        ResponseEntity<String> response = restTemplate.exchange(
+                verificationUrl,
+                HttpMethod.POST,
+                request,
+                String.class
+        );
+
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            logger.error("Failed to create Auth0 email verification job for user {}. Status: {}",
+                    auth0UserId, response.getStatusCode());
+            throw new RuntimeException("Failed to resend verification email");
+        }
+
+        logger.info("Successfully created Auth0 email verification job for user: {}", auth0UserId);
     }
     
     /**
@@ -180,7 +213,7 @@ public class Auth0ManagementService {
 
         ResponseEntity<JsonNode> responseEntity = restTemplate.exchange(getUserUrl, HttpMethod.GET, request, JsonNode.class);
 
-        if (responseEntity.getStatusCode() != HttpStatus.OK) {
+        if (!responseEntity.getStatusCode().is2xxSuccessful()) {
             throw new RuntimeException("Failed to fetch external user");
         }
 
