@@ -11,9 +11,14 @@ import { useAxiosInterceptors } from './api/Interceptor';
 import { Navigation } from './components/navigation/Navigation.tsx';
 import { SessionResultsView } from './components/sessions/SessionResultsView.tsx';
 import EmailVerificationView from './components/authentication/EmailVerificationView.tsx';
+import { useEffect } from 'react';
 
 function App() {
   useAxiosInterceptors();
+
+  useEffect(() => {
+    console.info('App version:', import.meta.env.VITE_APP_VERSION);
+  }, []);
 
   const location = useLocation();
   const pathsWithNoNavigation = ['/login', '/', '/verify-email'];

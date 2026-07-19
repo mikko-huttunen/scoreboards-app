@@ -17,7 +17,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/point-categories")
-@CrossOrigin(origins = "*")
 public class PointCategoryController {
     
     private static final Logger logger = LoggerFactory.getLogger(PointCategoryController.class);

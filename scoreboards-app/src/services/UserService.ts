@@ -2,7 +2,7 @@ import type { User } from '../types/User';
 import apiClient from '../api/Interceptor';
 import { getErrorMessage } from '../utils/Utils.ts';
 
-const API_BASE_URL = '/api/users';
+const API_BASE_URL = '/users';
 
 /**
  * Service for interacting with the Users API.

@@ -20,7 +20,6 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/invitations")
-@CrossOrigin(origins = "*")
 public class InvitationController {
     
     private static final Logger logger = LoggerFactory.getLogger(InvitationController.class);

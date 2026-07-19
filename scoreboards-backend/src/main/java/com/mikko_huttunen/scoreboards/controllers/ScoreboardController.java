@@ -20,7 +20,6 @@ import java.util.Set;
  */
 @RestController
 @RequestMapping("/api/scoreboards")
-@CrossOrigin(origins = "*")
 public class ScoreboardController {
     
     private static final Logger logger = LoggerFactory.getLogger(ScoreboardController.class);

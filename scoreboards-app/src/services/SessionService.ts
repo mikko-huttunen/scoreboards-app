@@ -4,7 +4,7 @@ import type { PointCategory } from '../types/PointCategory.ts';
 import type { ResultEntry } from '../types/ResultEntry.ts';
 import { getErrorMessage } from '../utils/Utils.ts';
 
-const API_BASE_URL = '/api/sessions';
+const API_BASE_URL = '/sessions';
 
 export type CreateSessionData = {
   name: string;

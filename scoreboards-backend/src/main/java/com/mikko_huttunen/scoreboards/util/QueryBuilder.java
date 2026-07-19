@@ -36,7 +36,7 @@ public class QueryBuilder {
                 "user"
         );
 
-        AggregationOperation unwindUser = _ -> new Document("$unwind", "$user");
+        AggregationOperation unwindUser = context -> new Document("$unwind", "$user");
 
         AggregationOperation groupByUser = context -> new Document("$group", new Document()
                 .append("_id", "$user._id")
@@ -50,7 +50,7 @@ public class QueryBuilder {
                 )
         );
 
-        AggregationOperation sortUsers = _ -> new Document("$sort", new Document("name", 1));
+        AggregationOperation sortUsers = context -> new Document("$sort", new Document("name", 1));
 
         return Aggregation.newAggregation(
                 matchMemberships,
@@ -254,13 +254,13 @@ public class QueryBuilder {
                 "createdByUser"
         );
 
-        AggregationOperation setCreatedByName = _ -> new Document("$set", new Document()
+        AggregationOperation setCreatedByName = context -> new Document("$set", new Document()
                 .append("createdByName", new Document("$arrayElemAt",
                         List.of("$createdByUser.name", 0)
                 ))
         );
 
-        AggregationOperation sort = _ -> new Document("$sort", new Document("name", 1));
+        AggregationOperation sort = context -> new Document("$sort", new Document("name", 1));
 
         return Aggregation.newAggregation(
                 matchSessions,
@@ -311,13 +311,13 @@ public class QueryBuilder {
                 "createdByUser"
         );
 
-        AggregationOperation setCreatedByName = _ -> new Document("$set", new Document()
+        AggregationOperation setCreatedByName = context -> new Document("$set", new Document()
                 .append("createdByName", new Document("$arrayElemAt",
                         List.of("$createdByUser.name", 0)
                 ))
         );
 
-        AggregationOperation sort = _ -> new Document("$sort", new Document("name", 1));
+        AggregationOperation sort = context -> new Document("$sort", new Document("name", 1));
 
         return Aggregation.newAggregation(
                 matchSession,
@@ -344,7 +344,7 @@ public class QueryBuilder {
                 "inviterUser"
         );
 
-        AggregationOperation setReceiverAndInviterNames = _ -> new Document("$set", new Document()
+        AggregationOperation setReceiverAndInviterNames = context -> new Document("$set", new Document()
                 .append("receiverName", new Document("$arrayElemAt",
                         List.of("$receiverUser.name", 0)
                 ))

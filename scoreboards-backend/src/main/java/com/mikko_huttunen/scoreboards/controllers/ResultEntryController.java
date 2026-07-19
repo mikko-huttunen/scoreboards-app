@@ -23,7 +23,6 @@ import java.util.Set;
  */
 @RestController
 @RequestMapping("/api/result-entries")
-@CrossOrigin(origins = "*")
 public class ResultEntryController {
     
     private static final Logger logger = LoggerFactory.getLogger(ResultEntryController.class);

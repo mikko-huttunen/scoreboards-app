@@ -21,7 +21,6 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/sessions")
-@CrossOrigin(origins = "*")
 public class SessionController {
     
     private static final Logger logger = LoggerFactory.getLogger(SessionController.class);

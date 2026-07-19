@@ -3,7 +3,7 @@ import type { ResultEntry } from '../types/ResultEntry';
 import type { Result } from '../types/Result.ts';
 import { getErrorMessage } from '../utils/Utils.ts';
 
-const API_BASE_URL = '/api/result-entries';
+const API_BASE_URL = '/result-entries';
 
 export type ResultEntryData = {
   scoreboardId: string;
