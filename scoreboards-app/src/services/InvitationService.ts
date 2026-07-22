@@ -3,7 +3,7 @@ import apiClient from '../api/Interceptor';
 import { PERMISSIONS } from '../constants.ts';
 import { getErrorMessage } from '../utils/Utils.ts';
 
-const API_BASE_URL = '/invitations';
+const API_BASE_URL = '/api/invitations';
 
 /**
  * Service for interacting with the Invitations API.

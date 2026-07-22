@@ -1,7 +1,7 @@
 import type { Scoreboard } from '../types/Scoreboard';
 import apiClient from '../api/Interceptor';
 import { getErrorMessage } from '../utils/Utils.ts';
-const API_BASE_URL = '/scoreboards';
+const API_BASE_URL = '/api/scoreboards';
 
 export type ScoreboardData = {
   name: string;

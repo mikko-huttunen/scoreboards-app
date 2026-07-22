@@ -2,7 +2,7 @@ import apiClient from '../api/Interceptor';
 import type { PointCategory } from '../types/PointCategory';
 import { getErrorMessage } from '../utils/Utils.ts';
 
-const API_BASE_URL = '/point-categories';
+const API_BASE_URL = '/api/point-categories';
 
 /**
  * Service for interacting with the Point Categories API.
