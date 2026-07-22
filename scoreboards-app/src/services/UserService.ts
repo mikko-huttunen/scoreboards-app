@@ -86,7 +86,7 @@ export class UserService {
 
     try {
       const response = await apiClient.get(
-        `${API_BASE_URL}/user/resend-timer/${userId}`
+        `${API_BASE_URL}/user/resend-timer/${encodeURIComponent(userId)}`
       );
       return response.data;
     } catch (error) {

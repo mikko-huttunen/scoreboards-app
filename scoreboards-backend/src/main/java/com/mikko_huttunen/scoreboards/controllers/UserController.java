@@ -104,7 +104,7 @@ public class UserController {
      * @return ResponseEntity containing the remaining resend cooldown time in seconds
      */
     @GetMapping("/user/resend-timer/{userId}")
-    public ResponseEntity<Number> checkResendTimer(@PathVariable String userId) {
+    public ResponseEntity<Long> checkResendTimer(@PathVariable String userId) {
         logger.info("GET /api/users/user/resend-timer - Checking resend timer");
 
         Long remainingTime = userService.getResendTimer(userId);

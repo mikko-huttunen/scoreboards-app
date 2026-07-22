@@ -31,7 +31,6 @@ const EmailVerificationView = () => {
   );
 
   useEffect(() => {
-    console.log('2');
     if (verifiedAndAuthed || !user) return;
 
     const checkResendTimer = async () => {
@@ -47,7 +46,6 @@ const EmailVerificationView = () => {
   }, [verifiedAndAuthed, user?.sub, updateFromServerSeconds, user]);
 
   useEffect(() => {
-    console.log('1');
     if (verifiedAndAuthed) return;
 
     const intervalId = window.setInterval(() => {

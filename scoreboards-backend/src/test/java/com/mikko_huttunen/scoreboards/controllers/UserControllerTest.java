@@ -92,7 +92,7 @@ class UserControllerTest {
     void checkResendTimer_returnsRemainingTime() {
         when(userService.getResendTimer("user-1")).thenReturn(10L);
 
-        ResponseEntity<Number> response = userController.checkResendTimer("user-1");
+        ResponseEntity<Long> response = userController.checkResendTimer("user-1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(10L, response.getBody());
