@@ -4,8 +4,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -38,8 +40,11 @@ public class AuthConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests((authorize) -> authorize
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/actuator/health", "/api/users/test").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/health").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -47,21 +52,16 @@ public class AuthConfig {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json");
                             response.getWriter().write(
-                                    "{\"error\": " +
-                                            "\"Unauthorized\", " +
-                                            "\"message\": \"" + authException.getMessage() +
-                                            "\"}");
+                                    "{\"error\":\"Unauthorized\",\"message\":\"" +
+                                            authException.getMessage() + "\"}");
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json");
                             response.getWriter().write(
-                                    "{\"error\": " +
-                                            "\"Forbidden\", " +
-                                            "\"message\": \"" + accessDeniedException.getMessage() +
-                                            "\"}");
+                                    "{\"error\":\"Forbidden\",\"message\":\"" +
+                                            accessDeniedException.getMessage() + "\"}");
                         }))
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.decoder(jwtDecoder()))
                 )
@@ -94,7 +94,7 @@ public class AuthConfig {
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
@@ -115,11 +115,13 @@ public class AuthConfig {
                 }
             }
 
-            return OAuth2TokenValidatorResult.failure(new org.springframework.security.oauth2.core.OAuth2Error(
-                    "invalid_token",
-                    "The token does not contain any of the required audiences: " + allowedAudiences,
-                    null
-            ));
+            return OAuth2TokenValidatorResult.failure(
+                    new org.springframework.security.oauth2.core.OAuth2Error(
+                            "invalid_token",
+                            "The token does not contain any of the required audiences: " + allowedAudiences,
+                            null
+                    )
+            );
         }
     }
 }

@@ -153,14 +153,9 @@ public class InvitationService {
 
         Invitation invitation = getInvitationById(invitationId);
 
-        Scoreboard scoreboard = scoreboardService.getScoreboardById(invitation.getScoreboardId());
-        if (scoreboard.getMemberships().size() >= 10) {
-            logger.error("Scoreboard {} has reached the maximum number of members", invitation.getScoreboardId());
-            deleteInvitations(Set.of(invitationId));
-            throw new IllegalArgumentException("Scoreboard has reached the maximum number of members");
-        }
+        User receiver = currentUserContext.requireCurrentUser();
 
-        boolean userHasMembership = scoreboard.getMemberships().stream().anyMatch(ms ->
+        boolean userHasMembership = receiver.getMemberships().stream().anyMatch(ms ->
                 ms.getScoreboardId().equals(invitation.getScoreboardId()));
 
         if (userHasMembership) {

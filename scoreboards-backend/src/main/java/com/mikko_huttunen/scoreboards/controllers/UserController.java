@@ -1,7 +1,6 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.models.User;
-import com.mikko_huttunen.scoreboards.services.TimerService;
 import com.mikko_huttunen.scoreboards.services.UserService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -11,8 +10,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Duration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
