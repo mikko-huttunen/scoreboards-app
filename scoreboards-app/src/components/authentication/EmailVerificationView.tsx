@@ -15,8 +15,7 @@ const EmailVerificationView = () => {
   const [resendTime, setResendTime] = useState<number | null>(null);
 
   const resendDeadlineMsRef = useRef<number | null>(null);
-  const isResendDisabled =
-    isResending || (resendTime !== null && resendTime > 0);
+  const [isResendDisabled, setIsResendingDisabled] = useState(true);
 
   const updateFromServerSeconds = useCallback((seconds: number) => {
     const now = Date.now();
@@ -68,6 +67,12 @@ const EmailVerificationView = () => {
 
     return () => window.clearInterval(intervalId);
   }, [verifiedAndAuthed]);
+
+  useEffect(() => {
+    setIsResendingDisabled(
+      isResending || (resendTime !== null && resendTime > 0)
+    );
+  }, [isResending, resendTime != null, resendTime === 0]);
 
   const handleResend = useCallback(async () => {
     if (!email || !user) return;
