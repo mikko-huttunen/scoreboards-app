@@ -194,7 +194,14 @@ export const AddScores: React.FC<AddScoresProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Set Scores</DialogTitle>
+      <DialogTitle>
+        {`Set Scores for ${session.name}`}
+        {session.comment ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {session?.comment}
+          </Typography>
+        ) : null}
+      </DialogTitle>
       <DialogContent dividers>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -208,31 +215,42 @@ export const AddScores: React.FC<AddScoresProps> = ({
             )}
             <form onSubmit={handleSubmit}>
               <Stack spacing={3} sx={{ width: '100%', mt: 1 }}>
-                <Typography variant="h6" sx={{ color: '#1b5e20' }}>
-                  Session
-                </Typography>
+                {pointCategories.map((category) => (
+                  <TextField
+                    key={category.id}
+                    label={category.name}
+                    type="text"
+                    value={scores.get(category.id) ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
 
-                <Stack spacing={2}>
-                  {pointCategories.map((category) => (
-                    <TextField
-                      key={category.id}
-                      label={category.name}
-                      type="text"
-                      value={scores.get(category.id) || ''}
-                      onChange={(e) =>
-                        handleScoreChange(category.id, e.target.value)
+                      // 1. Allow empty string (for backspacing)
+                      if (val === '') {
+                        handleScoreChange(category.id, val);
+                        return;
                       }
-                      error={!!errors.get(category.id)}
-                      helperText={errors.get(category.id)}
-                      required
-                      fullWidth
-                      disabled={submitting}
-                      inputProps={{
+
+                      // 2. Allow only digits
+                      if (!/^\d*$/.test(val)) return;
+
+                      // 3. Enforce max value of 999999
+                      const numValue = parseInt(val, 10);
+                      if (numValue > 999999999999999) return;
+
+                      handleScoreChange(category.id, val);
+                    }}
+                    error={!!errors.get(category.id)}
+                    helperText={errors.get(category.id)}
+                    required
+                    fullWidth
+                    disabled={submitting}
+                    slotProps={{
+                      htmlInput: {
                         inputMode: 'numeric',
                         pattern: '\\d*',
-                        min: 0,
-                      }}
-                      InputProps={{
+                        max: 999999999999999,
+                      },
+                      input: {
                         startAdornment: (
                           <Box
                             sx={{
@@ -244,10 +262,10 @@ export const AddScores: React.FC<AddScoresProps> = ({
                             }}
                           />
                         ),
-                      }}
-                    />
-                  ))}
-                </Stack>
+                      },
+                    }}
+                  />
+                ))}
               </Stack>
             </form>
           </Paper>

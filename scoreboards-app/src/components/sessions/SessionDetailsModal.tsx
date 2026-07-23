@@ -125,7 +125,11 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
         </Typography>
       </DialogTitle>
 
-      <DialogContent>
+      <DialogContent
+        sx={{
+          overflowX: 'hidden',
+        }}
+      >
         {!hasEnoughData ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <LoadingSpinner />

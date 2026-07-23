@@ -72,21 +72,16 @@ export const SessionForm: React.FC<SessionFormProps> = ({
         try {
           setLoading(true);
           setError(null);
-          // Select all categories by default
+
           setSelectedPointCategories(
             new Set(pointCategories?.map((pc) => pc.id) || [])
           );
 
-          // Include all scoreboard users in participants by default
           setSelectedParticipants(new Set(users.map((u) => u.id)));
 
-          // Default session name to current date/time (capped)
-          const defaultName = `${scoreboard.name} session ${
-            scoreboard.sessions.length + 1
-          }`;
+          const defaultName = `Session ${scoreboard.sessions.length + 1}`;
           setName(defaultName.slice(0, SESSION_NAME_MAX_LENGTH));
 
-          // Comment initially empty (optional; capped)
           setComment('');
         } catch (err) {
           console.error('Error loading point categories:', err);
