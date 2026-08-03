@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
+import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.Membership;
 import com.mikko_huttunen.scoreboards.models.Result;
 import com.mikko_huttunen.scoreboards.models.ResultEntry;
@@ -10,7 +11,6 @@ import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +51,7 @@ class SessionServiceTest {
         Membership m = new Membership();
         m.setScoreboardId("sb-1");
         m.setUserId(userId);
+        m.setPermissions(Set.of(Permission.SESSIONS, Permission.OWNER));
         return m;
     }
 
@@ -222,9 +223,11 @@ class SessionServiceTest {
     @Test
     void finishSession_finishesWhenAllParticipantsSubmitted() {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
 
         SessionDTO dto = new SessionDTO();
         dto.setId("s-1");
+        dto.setScoreboardId("sb-1");
         dto.setCreatedBy("user-1");
         dto.setParticipants(Set.of("user-2"));
         dto.setResultEntryDetails(List.of(
@@ -254,9 +257,11 @@ class SessionServiceTest {
     @Test
     void finishSession_throwsWhenParticipantHasNotSubmitted() {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
 
         SessionDTO dto = new SessionDTO();
         dto.setId("s-1");
+        dto.setScoreboardId("sb-1");
         dto.setCreatedBy("user-1");
         dto.setParticipants(Set.of("user-2"));
         // Only creator submitted; user-2 has not
@@ -274,9 +279,11 @@ class SessionServiceTest {
     @Test
     void finishSession_throwsWhenSessionAlreadyFinished() {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
 
         SessionDTO dto = new SessionDTO();
         dto.setId("s-1");
+        dto.setScoreboardId("sb-1");
         dto.setCreatedBy("user-1");
         dto.setParticipants(Set.of());
         dto.setResultEntryDetails(List.of(resultEntryWithResults("re-1", "user-1")));
@@ -295,7 +302,7 @@ class SessionServiceTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> sessionService.finishSession("s-1"));
-        assertEquals("Session is already finished", ex.getMessage());
+        assertEquals("Session has already finished", ex.getMessage());
     }
 
     // ---------------------------------------------------------------------

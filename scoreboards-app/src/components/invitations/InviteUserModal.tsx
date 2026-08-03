@@ -114,7 +114,8 @@ export const InviteUserModal = ({
               label="Sessions permission"
             />
             <Typography variant="body2" color="text.secondary" sx={{ pl: 1 }}>
-              User can create new and delete their sessions
+              User can create sessions and delete sessions they have created.
+              User can also finish sessions.
             </Typography>
           </Stack>
         </Stack>

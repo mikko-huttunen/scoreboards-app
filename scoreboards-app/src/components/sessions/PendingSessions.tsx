@@ -52,7 +52,10 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   };
 
   const openAddScoresModal = (session: Session) => {
-    if (!Array.from(session.participants).includes(user!.id)) return;
+    if (!Array.from(session.participants).includes(user!.id)) {
+      showErrorMessage('You are not a participant in this session');
+      return;
+    }
     setSelectedSession(session);
     setAddScoresModalOpen(true);
   };
@@ -117,7 +120,6 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         Date: format_date(session.created),
         'Created By': session.createdByName,
         Results: resolvePendingResultEntries(session),
-        hasPermissions: hasSessionsPermission(scoreboard.memberships, user?.id),
         session,
       })),
     [pendingSessions]
@@ -158,7 +160,9 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         onDelete={(row) => openCancelSessionModal(row.session)}
         canDelete={(row) => canDelete(row.session)}
         onCustom={(row) => handleFinishSession(row.id)}
-        canCustom={(row) => row.session.createdBy === user?.id}
+        canCustom={() =>
+          hasSessionsPermission(scoreboard.memberships, user?.id)
+        }
         onCustomIcon={<DoneIcon fontSize="small" />}
         customTooltip={'Finish'}
         isLoading={isLoading}

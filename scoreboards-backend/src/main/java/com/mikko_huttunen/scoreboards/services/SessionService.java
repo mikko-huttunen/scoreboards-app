@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
+import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
@@ -179,11 +180,30 @@ public class SessionService {
 
         SessionDTO session = getSessionById(id);
 
+        Membership userMembership = currentUser.getMemberships().stream().filter(ms ->
+                ms.getScoreboardId().equals(session.getScoreboardId())).findFirst().orElse(null);
+        if (userMembership == null) {
+            logger.error("User {} is not a member of scoreboard {}", currentUser.getId(), session.getScoreboardId());
+            throw new IllegalArgumentException("User is not a member of this scoreboard");
+        }
+
+        boolean hasPermission = userMembership.getPermissions().contains(Permission.SESSIONS) ||
+                userMembership.getPermissions().contains(Permission.OWNER);
+        if (!hasPermission) {
+            logger.error("User {} does not have permission to finish session {}", currentUser.getId(), id);
+            throw new IllegalArgumentException("User does not have permission to finish this session");
+        }
+
+        if (!session.getParticipants().contains(currentUser.getId()) &&
+                !session.getCreatedBy().equals(currentUser.getId())) {
+            logger.error("User {} is not a participant in session {}", currentUser.getId(), id);
+            throw new IllegalArgumentException("User is not a participant in this session");
+        }
+
         List<ResultEntry> resultEntries = session.getResultEntryDetails();
 
-        // Get all participant IDs (including creator)
+        // Get all participant IDs
         List<String> allParticipantIds = new ArrayList<>();
-        allParticipantIds.add(session.getCreatedBy());
         if (session.getParticipants() != null) {
             for (String participantId : session.getParticipants()) {
                 if (!allParticipantIds.contains(participantId)) {
@@ -213,8 +233,8 @@ public class SessionService {
 
         Optional<Session> finishedSessionOpt = queryService.updateById(id, Session.class, s -> {
                 if (!s.getIsPending()) {
-                    logger.warn("Session {} is already finished", id);
-                    throw new IllegalArgumentException("Session is already finished");
+                    logger.warn("Session {} has already finished", id);
+                    throw new IllegalArgumentException("Session has already finished");
                 }
                 s.setResultEntries(resultEntryIds);
                 s.setIsPending(false);

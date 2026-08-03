@@ -31,10 +31,12 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
   };
 
   const canDelete = (scoreboard: Scoreboard) => {
-    const isCreator = isOwner(scoreboard.memberships, user?.id);
-    const hasPendingSessions = scoreboard.sessions.find((s) => s.isPending);
+    return isOwner(scoreboard.memberships, user?.id);
+  };
 
-    return isCreator && !hasPendingSessions;
+  const disableDelete = (scoreboard: Scoreboard) => {
+    const hasPendingSessions = scoreboard.sessions.some((s) => s.isPending);
+    return hasPendingSessions || false;
   };
 
   const canLeave = (scoreboard: Scoreboard) => {
@@ -66,6 +68,7 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
       onCreate={handleCreateNew}
       canCreate
       onDelete={(row) => onDelete(row.scoreboard)}
+      disableDelete={(row) => disableDelete(row.scoreboard)}
       canDelete={(row) => canDelete(row.scoreboard)}
       onCustom={(row) => onLeave(row.scoreboard)}
       canCustom={(row) => canLeave(row.scoreboard)}

@@ -249,9 +249,8 @@ class InvitationServiceTest {
         when(queryService.fetchInvitationWithResolvedUsernamesByInvitationId("inv-1"))
                 .thenReturn(Optional.of(invitation));
 
-        // scoreboard with no membership for this scoreboard yet
-        Scoreboard sb = scoreboardWith("inviter-1", new java.util.ArrayList<>());
-        when(scoreboardService.getScoreboardById("sb-1")).thenReturn(sb);
+        when(currentUserContext.requireCurrentUser()).thenReturn(receiver);
+        receiver.setMemberships(new java.util.HashSet<>());
 
         when(queryService.create(any(Membership.class))).thenAnswer(inv -> inv.getArgument(0));
         when(queryService.deleteAll(Set.of("inv-1"), Invitation.class)).thenReturn(List.of(invitation));
@@ -275,16 +274,14 @@ class InvitationServiceTest {
         when(queryService.fetchInvitationWithResolvedUsernamesByInvitationId("inv-1"))
                 .thenReturn(Optional.of(invitation));
 
-        java.util.List<Membership> memberships = new java.util.ArrayList<>();
-        for (int i = 0; i < 10; i++) {
-            memberships.add(membership("member-" + i));
-        }
-        when(scoreboardService.getScoreboardById("sb-1")).thenReturn(scoreboardWith("inviter-1", memberships));
+        receiver.setMemberships(new java.util.HashSet<>(List.of(membership("receiver-1"))));
+        when(currentUserContext.requireCurrentUser()).thenReturn(receiver);
+
         when(queryService.deleteAll(Set.of("inv-1"), Invitation.class)).thenReturn(List.of(invitation));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> invitationService.acceptInvitation("inv-1"));
-        assertEquals("Scoreboard has reached the maximum number of members", ex.getMessage());
+        assertEquals("User is already a member of this scoreboard", ex.getMessage());
         verify(queryService).deleteAll(Set.of("inv-1"), Invitation.class);
         verify(queryService, never()).create(any(Membership.class));
     }
@@ -298,9 +295,9 @@ class InvitationServiceTest {
         when(queryService.fetchInvitationWithResolvedUsernamesByInvitationId("inv-1"))
                 .thenReturn(Optional.of(invitation));
 
-        Scoreboard sb = scoreboardWith("inviter-1",
-                new java.util.ArrayList<>(List.of(membership("receiver-1"))));
-        when(scoreboardService.getScoreboardById("sb-1")).thenReturn(sb);
+        receiver.setMemberships(new java.util.HashSet<>(List.of(membership("receiver-1"))));
+        when(currentUserContext.requireCurrentUser()).thenReturn(receiver);
+
         when(queryService.deleteAll(Set.of("inv-1"), Invitation.class)).thenReturn(List.of(invitation));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,

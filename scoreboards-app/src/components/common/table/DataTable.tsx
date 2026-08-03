@@ -32,23 +32,23 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   showHighlight?: boolean;
   canCreate?: boolean | ((row: T) => boolean);
   onCreate?: () => void | Promise<void> | null;
-  disableCreate?: boolean;
+  disableCreate?: boolean | (() => boolean);
   createTooltip?: string;
   canAdd?: boolean | ((row: T) => boolean);
   onAdd?: () => void | Promise<void> | null;
-  disableAdd?: boolean;
+  disableAdd?: boolean | (() => boolean);
   addTooltip?: string;
   canDelete?: boolean | ((row: T) => boolean);
   onDelete?: (row: T) => void | Promise<void> | null;
-  disableDelete?: boolean;
+  disableDelete?: boolean | ((row: T) => boolean);
   deleteTooltip?: string;
   canEdit?: boolean | ((row: T) => boolean);
   onEdit?: (row: T) => void | Promise<void> | null;
-  disableEdit?: boolean;
+  disableEdit?: boolean | ((row: T) => boolean);
   editTooltip?: string;
   canCustom?: boolean | ((row: T) => boolean);
   onCustom?: (row: T) => void | Promise<void> | null;
-  disableCustom?: boolean;
+  disableCustom?: boolean | ((row: T) => boolean);
   onCustomIcon?: React.ReactNode;
   customTooltip?: string;
   pageSize?: number;
@@ -153,6 +153,10 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   };
 
   const renderContent = () => {
+    const isCreateDisabled =
+      typeof disableCreate === 'function' ? disableCreate() : disableCreate;
+    const isAddDisabled =
+      typeof disableAdd === 'function' ? disableAdd() : disableAdd;
     return (
       <>
         {(title || canCreate || canAdd) && (
@@ -196,7 +200,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                   variant="contained"
                   startIcon={<AddIcon />}
                   onClick={() => onCreate?.()}
-                  disabled={disableCreate}
+                  disabled={isCreateDisabled}
                   sx={{
                     backgroundColor: '#38a14f',
                     color: '#ffffff',
@@ -214,7 +218,7 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                   variant="contained"
                   startIcon={<AddIcon />}
                   onClick={() => onAdd?.()}
-                  disabled={disableAdd}
+                  disabled={isAddDisabled}
                   sx={{
                     backgroundColor: '#38a14f',
                     color: '#ffffff',
@@ -286,6 +290,19 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                       ? canCustom(row)
                       : canCustom;
 
+                  const isEditDisabled =
+                    typeof disableEdit === 'function'
+                      ? disableEdit(row)
+                      : disableEdit;
+                  const isDeleteDisabled =
+                    typeof disableDelete === 'function'
+                      ? disableDelete(row)
+                      : disableDelete;
+                  const isCustomDisabled =
+                    typeof disableCustom === 'function'
+                      ? disableCustom(row)
+                      : disableCustom;
+
                   return (
                     <TableRow
                       key={rowKey}
@@ -322,54 +339,60 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               <>
                                 {showEdit && (
                                   <Tooltip title={editTooltip ?? 'Edit'}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        onEdit?.(row);
-                                      }}
-                                      disabled={disableEdit}
-                                      aria-label="edit row"
-                                      sx={{ color: '#38a14f' }}
-                                    >
-                                      <EditIcon fontSize="small" />
-                                    </IconButton>
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          onEdit?.(row);
+                                        }}
+                                        disabled={isEditDisabled}
+                                        aria-label="edit row"
+                                        sx={{ color: '#38a14f' }}
+                                      >
+                                        <EditIcon fontSize="small" />
+                                      </IconButton>
+                                    </span>
                                   </Tooltip>
                                 )}
 
                                 {showDelete && (
                                   <Tooltip title={deleteTooltip ?? 'Delete'}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        onDelete?.(row);
-                                      }}
-                                      disabled={disableDelete}
-                                      aria-label="delete row"
-                                      sx={{ color: '#38a14f' }}
-                                    >
-                                      <DeleteIcon />
-                                    </IconButton>
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          onDelete?.(row);
+                                        }}
+                                        disabled={isDeleteDisabled}
+                                        aria-label="delete row"
+                                        sx={{ color: '#38a14f' }}
+                                      >
+                                        <DeleteIcon />
+                                      </IconButton>
+                                    </span>
                                   </Tooltip>
                                 )}
 
                                 {showCustom && (
                                   <Tooltip title={customTooltip ?? null}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        onCustom?.(row);
-                                      }}
-                                      disabled={disableCustom}
-                                      aria-label="custom row action"
-                                      sx={{ color: '#38a14f' }}
-                                    >
-                                      {onCustomIcon ?? (
-                                        <EditIcon fontSize="small" />
-                                      )}
-                                    </IconButton>
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          onCustom?.(row);
+                                        }}
+                                        disabled={isCustomDisabled}
+                                        aria-label="custom row action"
+                                        sx={{ color: '#38a14f' }}
+                                      >
+                                        {onCustomIcon ?? (
+                                          <EditIcon fontSize="small" />
+                                        )}
+                                      </IconButton>
+                                    </span>
                                   </Tooltip>
                                 )}
                               </>

@@ -77,7 +77,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
             new Set(pointCategories?.map((pc) => pc.id) || [])
           );
 
-          setSelectedParticipants(new Set(users.map((u) => u.id)));
+          setSelectedParticipants(new Set());
 
           const defaultName = `Session ${scoreboard.sessions.length + 1}`;
           setName(defaultName.slice(0, SESSION_NAME_MAX_LENGTH));

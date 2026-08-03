@@ -75,7 +75,10 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
         setSessions(scoreboardData!.sessions.filter((s) => !s.isPending));
         setPendingSessions(
           scoreboardData!.sessions.filter(
-            (s) => s.isPending && Array.from(s.participants).includes(user.id)
+            (s) =>
+              s.isPending &&
+              (Array.from(s.participants).includes(user.id) ||
+                s.createdBy === user.id)
           )
         );
         setResultEntries(scoreboardData!.resultEntries);
@@ -334,15 +337,25 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                       </Button>
                     </span>
                   </Tooltip>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={() => setDeleteScoreboardDialogOpen(true)}
-                    disabled={pendingSessions.length > 0}
-                    sx={{ ':hover': { backgroundColor: '#d32f2f' } }}
+                  <Tooltip
+                    title={
+                      pendingSessions.length > 0
+                        ? 'Cannot delete scoreboard while there are pending sessions'
+                        : ''
+                    }
                   >
-                    Delete
-                  </Button>
+                    <span>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() => setDeleteScoreboardDialogOpen(true)}
+                        disabled={pendingSessions.length > 0}
+                        sx={{ ':hover': { backgroundColor: '#d32f2f' } }}
+                      >
+                        Delete
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </>
               )}
               {!isOwner && (

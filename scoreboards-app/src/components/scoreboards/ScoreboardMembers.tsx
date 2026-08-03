@@ -150,6 +150,11 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
         data={data}
         canDelete={(row) => canDelete(row.user)}
         disableDelete={disableActions}
+        deleteTooltip={
+          disableActions
+            ? 'Cannot remove user while there are pending sessions'
+            : ''
+        }
         onDelete={(row) => openRemoveUserModal(row.user)}
         canAdd={isOwner(scoreboard.memberships, user?.id) && canAdd}
         disableAdd={!canAdd}
