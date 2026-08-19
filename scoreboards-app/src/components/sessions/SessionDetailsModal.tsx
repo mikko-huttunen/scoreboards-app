@@ -64,14 +64,11 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   );
 
   const chartData = useMemo(() => {
-    // Build per-user point totals for this session using only the provided props.
     const entriesForSession = (resultEntries ?? []).filter(
       (re) => re.sessionId === session.id && re.isActive && !re.isPending
     );
 
     const userById = new Map<string, User>(users.map((u) => [u.id, u]));
-
-    // Only include results that belong to users in the provided `users` list
     const memberEntriesForSession = entriesForSession.filter((entry) =>
       userById.has(entry.userId)
     );
@@ -90,22 +87,41 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
       ]);
     }
 
-    return Array.from(resultsByUserName.entries()).map(([name, results]) => {
-      const obj: { name: string; avatar: string } & Record<
-        string,
-        number | string
-      > = {
-        name,
-        avatar: avatarByName.get(name) ?? '',
-      };
+    const rows = Array.from(resultsByUserName.entries()).map(
+      ([name, results]) => {
+        const obj: { name: string; avatar: string } & Record<
+          string,
+          number | string
+        > = {
+          name,
+          avatar: avatarByName.get(name) ?? '',
+        };
 
-      for (const pc of usedPointCategories) {
-        obj[pc.name] =
-          results.find((r) => r.pointCategoryId === pc.id)?.points ?? 0;
+        for (const pc of usedPointCategories) {
+          obj[pc.name] =
+            results.find((r) => r.pointCategoryId === pc.id)?.points ?? 0;
+        }
+
+        return obj;
       }
+    );
 
-      return obj;
+    rows.sort((a, b) => {
+      const totalA = usedPointCategories.reduce((sum, pc) => {
+        const v = a[pc.name];
+        return sum + (typeof v === 'number' ? v : Number(v ?? 0));
+      }, 0);
+
+      const totalB = usedPointCategories.reduce((sum, pc) => {
+        const v = b[pc.name];
+        return sum + (typeof v === 'number' ? v : Number(v ?? 0));
+      }, 0);
+
+      if (totalB !== totalA) return totalB - totalA;
+      return String(a.name).localeCompare(String(b.name));
     });
+
+    return rows;
   }, [resultEntries, session.id, users, avatarByName, usedPointCategories]);
 
   const hasEnoughData =
@@ -144,6 +160,8 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             animationDurationMs={200}
             showAvatars
             legendToggleEnabled
+            pagination
+            pageSize={10}
           />
         )}
       </DialogContent>

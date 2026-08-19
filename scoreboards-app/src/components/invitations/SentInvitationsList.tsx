@@ -10,12 +10,14 @@ type SentInvitationsListProps = {
   invitations: Invitation[];
   onDeleteInvitation: (invitationId: string) => void;
   isLoading?: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const SentInvitationsList: React.FC<SentInvitationsListProps> = ({
   invitations,
   onDeleteInvitation,
   isLoading = false,
+  onRefresh,
 }) => {
   const { format_date } = useDateFormat();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
@@ -77,6 +79,8 @@ export const SentInvitationsList: React.FC<SentInvitationsListProps> = ({
         onDelete={(row) => openDeleteInvitationModal(row.invitation)}
         canDelete={!isProcessing}
         isLoading={isLoading}
+        emptyText="No sent invitations"
+        refresh={onRefresh}
       />
     </>
   );

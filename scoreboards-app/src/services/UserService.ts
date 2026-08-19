@@ -35,10 +35,18 @@ export class UserService {
     }
   }
 
-  static async updateCurrentUser(name?: string): Promise<User> {
+  static async updateCurrentUser(
+    name?: string,
+    avatarFile?: File | null
+  ): Promise<User> {
     const formData = new FormData();
+
     if (name !== undefined) {
       formData.append('name', name);
+    }
+
+    if (avatarFile) {
+      formData.append('avatar', avatarFile);
     }
 
     try {

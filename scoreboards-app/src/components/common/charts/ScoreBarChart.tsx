@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Avatar, Box, Paper, Typography, useMediaQuery } from '@mui/material';
+import {
+  Avatar,
+  Box,
+  Button,
+  Paper,
+  Typography,
+  useMediaQuery,
+} from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -12,11 +19,12 @@ import {
   type LegendProps,
 } from 'recharts';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
+import { KeyboardArrowLeft, KeyboardArrowRight } from '@mui/icons-material';
 
 export type ScoreBarSeries = {
-  key: string; // Field name in each data row (e.g. 'Math', 'Scrabble', ...)
-  title: string; // Legend label (and tooltip label)
-  color: string; // Bar color
+  key: string;
+  title: string;
+  color: string;
 };
 
 type ScoreBarChartRow = Record<string, string | number>;
@@ -43,12 +51,10 @@ type Props = {
    * If false, legend is non-interactive.
    */
   legendToggleEnabled?: boolean;
-
-  /** Text shown when there is no data to display a bar chart. */
   emptyText?: string;
-
-  /** If true, displays each user's avatar below their name on the axis. */
   showAvatars?: boolean;
+  pagination?: boolean;
+  pageSize?: number;
 };
 
 const HIGHLIGHT_COLOR = '#ffb300';
@@ -67,6 +73,8 @@ export const ScoreBarChart: React.FC<Props> = ({
   legendToggleEnabled = false,
   emptyText = 'No data to display',
   showAvatars = false,
+  pagination = true,
+  pageSize = 10,
 }) => {
   const isHorizontal = direction === 'horizontal';
   const isMobile = useMediaQuery('(max-width:900px)');
@@ -79,53 +87,112 @@ export const ScoreBarChart: React.FC<Props> = ({
   const avatarYSpacing =
     truncateWidths || isSmallMobile || rotateNames ? 40 : 22;
 
-  // When set, only this single point category is shown (isolation mode).
+  //These series are excluded from the chart's computed "total".
+  const totalExcludes = ['Total Wins', 'Total Sessions'];
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  // Becomes true once the initial staggered load animation has finished. It
-  // gates two behaviours: (1) toggling the legend afterwards updates the bars
-  // instantly instead of re-running the staggered animation (which previously
-  // left a delayed/empty bar "hovering" before drawing), and (2) the leader's
-  // animated glow only switches on after the chart has loaded.
   const [animationComplete, setAnimationComplete] = useState(false);
 
   const selectSeries = (key: string) => {
     if (!legendToggleEnabled) return;
-    // Toggle: clicking the already-isolated category restores all categories.
     setSelectedKey((prev) => (prev === key ? null : key));
   };
 
   const visibleKeys = useMemo(() => {
     if (selectedKey) return [selectedKey];
-    return series.map((s) => s.key);
+
+    return series.map((s) => s.key).filter((k) => !totalExcludes.includes(k));
   }, [series, selectedKey]);
 
   const totalKey = '__totalPoints';
 
-  const computedData = useMemo<ScoreBarChartRow[]>(() => {
-    return data.map((row) => {
+  const safePageSize = Math.max(1, pageSize);
+  const maxPageStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+
+  const [startPage, setStartPage] = useState<number>(() => {
+    if (!pagination) return 0;
+    return 0;
+  });
+
+  useEffect(() => {
+    if (!pagination) return;
+    setStartPage(0);
+  }, [data?.length, safePageSize, pagination]);
+
+  const canPrev = pagination && data.length > safePageSize && startPage > 0;
+  const canNext =
+    pagination && data.length > safePageSize && startPage < maxPageStart;
+
+  const computedDataAll = useMemo<ScoreBarChartRow[]>(() => {
+    const withTotals = data.map((row) => {
+      if (selectedKey && totalExcludes.includes(selectedKey)) {
+        const v = row[selectedKey];
+        return {
+          ...row,
+          [totalKey]: typeof v === 'number' ? v : Number(v ?? 0),
+        };
+      }
+
       const total = visibleKeys.reduce((sum, k) => {
+        if (totalExcludes.includes(k)) return sum;
+
         const v = row[k];
         return sum + (typeof v === 'number' ? v : Number(v ?? 0));
       }, 0);
 
       return { ...row, [totalKey]: total };
     });
-  }, [data, visibleKeys]);
 
-  const leaderName = useMemo(() => {
-    let best: { name: string; total: number } | null = null;
-    for (const row of computedData) {
+    const sortKey: string =
+      selectedKey && !totalExcludes.includes(selectedKey)
+        ? selectedKey
+        : totalKey;
+
+    const toNumber = (r: ScoreBarChartRow, key: string): number => {
+      const indexable = r as Record<string, string | number>;
+      return Number(indexable[key] ?? 0);
+    };
+
+    return [...withTotals].sort((a, b) => {
+      const aVal = toNumber(a, sortKey);
+      const bVal = toNumber(b, sortKey);
+
+      if (bVal !== aVal) return bVal - aVal;
+
+      const aName = String((a as Record<string, unknown>)[labelKey] ?? '');
+      const bName = String((b as Record<string, unknown>)[labelKey] ?? '');
+      return aName.localeCompare(bName);
+    });
+  }, [data, visibleKeys, totalExcludes, selectedKey, labelKey, totalKey]);
+
+  const computedData = useMemo<ScoreBarChartRow[]>(() => {
+    if (!pagination) return computedDataAll;
+    if (!computedDataAll.length || computedDataAll.length <= safePageSize)
+      return computedDataAll;
+    return computedDataAll.slice(startPage, startPage + safePageSize);
+  }, [computedDataAll, pagination, safePageSize, startPage]);
+
+  const leaderNames = useMemo(() => {
+    let bestTotal = -Infinity;
+
+    for (const row of computedDataAll) {
       const total = Number(row[totalKey] ?? 0);
-      if (!best || total > best.total) {
-        best = { name: String(row[labelKey] ?? ''), total };
+      if (total > bestTotal) bestTotal = total;
+    }
+
+    if (bestTotal <= 0) return new Set<string>();
+
+    const winners = new Set<string>();
+    for (const row of computedDataAll) {
+      const total = Number(row[totalKey] ?? 0);
+      if (total === bestTotal) {
+        winners.add(String(row[labelKey] ?? ''));
       }
     }
-    return best && best.total > 0 ? best.name : null;
-  }, [computedData, labelKey]);
+
+    return winners;
+  }, [computedDataAll, labelKey]);
 
   const avatarByName = useMemo(() => {
-    // Ensure O(1) lookup by tick renders.
     const map = new Map<string, string>();
     for (const row of data) {
       const name = String(row[labelKey] ?? '');
@@ -136,14 +203,8 @@ export const ScoreBarChart: React.FC<Props> = ({
   }, [data, labelKey]);
 
   const hasData = Array.isArray(data) && data.length > 0;
-
-  // Each stacked segment starts before the previous one has fully finished so
-  // the whole chart loads quickly while still revealing one section at a time.
-  // The overlap (and therefore overall speed) scales with animationDurationMs.
   const segmentStaggerMs = Math.round(animationDurationMs * 0.45);
 
-  // Run the staggered reveal only on the initial load (per data set). Toggling
-  // the legend afterwards must not re-trigger it, so selectedKey is not a dep.
   useEffect(() => {
     if (loading || !hasData) return;
     setAnimationComplete(false);
@@ -154,13 +215,12 @@ export const ScoreBarChart: React.FC<Props> = ({
       totalAnimationMs
     );
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, hasData, data, series.length, animationDurationMs]);
 
-  // The top-most visible segment carries the rounded corners and the total
-  // label. During isolation only the selected category is visible, so it must
-  // be the one that gets them — not the last series (which may be hidden).
-  const topVisibleKey = selectedKey ?? series[series.length - 1]?.key;
+  const topVisibleKey =
+    selectedKey ??
+    visibleKeys[visibleKeys.length - 1] ??
+    series[series.length - 1]?.key;
 
   const renderAvatar = useCallback(
     (
@@ -201,7 +261,7 @@ export const ScoreBarChart: React.FC<Props> = ({
     (props: { x: number; y: number; payload: { value: string | number } }) => {
       const { x, y, payload } = props;
       const name = String(payload.value ?? '');
-      const isLeader = leaderName != null && name === leaderName;
+      const isLeader = leaderNames.has(name);
 
       const avatarUrl = showAvatars ? avatarByName.get(name) : undefined;
       const fill = isLeader ? LEADER_TEXT_COLOR : DEFAULT_TEXT_COLOR;
@@ -268,7 +328,7 @@ export const ScoreBarChart: React.FC<Props> = ({
       isSmallMobile,
       rotateNames,
       showAvatars,
-      leaderName,
+      leaderNames,
       avatarYSpacing,
     ]
   );
@@ -285,91 +345,107 @@ export const ScoreBarChart: React.FC<Props> = ({
     );
   }, [isHorizontal, labelKey, isMobile, renderAxisTick]);
 
-  /* Might be needed later
-  const yAxis = useMemo(() => {
-    if (isHorizontal)
-      return (
-        <YAxis
-          dataKey={labelKey}
-          type="category"
-          width={showAvatars ? 150 : isMobile ? 110 : 100}
-          tick={renderAxisTick}
-        />
-      );
-    return <YAxis />;
-  }, [isHorizontal, labelKey, showAvatars, isMobile, renderAxisTick]);
-  */
-
   const Legend = useMemo(() => {
     if (!legendToggleEnabled) return null;
 
+    const fixedKeys = totalExcludes;
+
     const CustomLegend: React.FC<LegendProps> = () => {
-      // depends on selectedKey + series + selectSeries
+      const otherSeries = series.filter((s) => !fixedKeys.includes(s.key));
+      const fixedSeries = series.filter((s) => fixedKeys.includes(s.key));
+
+      const renderLegendButton = (s: ScoreBarSeries) => {
+        const isFixed = fixedKeys.includes(s.key);
+        const isDimmed =
+          !isFixed && selectedKey !== null && selectedKey !== s.key;
+
+        return (
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => selectSeries(s.key)}
+            style={{
+              cursor: legendToggleEnabled ? 'pointer' : 'default',
+              background: isDimmed ? 'rgba(0,0,0,0.03)' : '#fff',
+              border:
+                selectedKey === s.key
+                  ? `1px solid ${s.color}`
+                  : '1px solid rgba(0,0,0,0.10)',
+              borderRadius: 999,
+              padding: '7px 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              opacity: isDimmed ? 0.45 : 1,
+              pointerEvents: legendToggleEnabled ? 'auto' : 'none',
+              transition: 'all 160ms ease',
+              whiteSpace: 'nowrap',
+            }}
+            aria-pressed={selectedKey === s.key}
+          >
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: s.color,
+                display: 'inline-block',
+                boxShadow: '0 0 0 2px rgba(255,255,255,0.9) inset',
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12,
+                userSelect: 'none',
+                fontWeight: selectedKey === s.key ? 700 : 400,
+              }}
+            >
+              {s.title}
+            </span>
+          </button>
+        );
+      };
+
       return (
         <div
           style={{
             display: 'flex',
-            flexWrap: 'wrap',
-            gap: 10,
+            flexDirection: 'column',
+            gap: 8,
             marginBottom: 12,
             padding: '0 4px',
           }}
         >
-          {series.map((s) => {
-            const isDimmed = selectedKey !== null && selectedKey !== s.key;
+          {fixedSeries.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+              }}
+            >
+              {fixedSeries.map(renderLegendButton)}
+            </div>
+          )}
 
-            return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => selectSeries(s.key)}
-                style={{
-                  cursor: legendToggleEnabled ? 'pointer' : 'default',
-                  background: isDimmed ? 'rgba(0,0,0,0.03)' : '#fff',
-                  border:
-                    selectedKey === s.key
-                      ? `1px solid ${s.color}`
-                      : '1px solid rgba(0,0,0,0.10)',
-                  borderRadius: 999,
-                  padding: '7px 12px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                  opacity: isDimmed ? 0.45 : 1,
-                  pointerEvents: legendToggleEnabled ? 'auto' : 'none',
-                  transition: 'all 160ms ease',
-                }}
-                aria-pressed={selectedKey === s.key}
-              >
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background: s.color,
-                    display: 'inline-block',
-                    boxShadow: '0 0 0 2px rgba(255,255,255,0.9) inset',
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 12,
-                    userSelect: 'none',
-                    fontWeight: selectedKey === s.key ? 700 : 400,
-                  }}
-                >
-                  {s.title}
-                </span>
-              </button>
-            );
-          })}
+          {otherSeries.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+              }}
+            >
+              {otherSeries.map(renderLegendButton)}
+            </div>
+          )}
         </div>
       );
     };
 
     return <CustomLegend />;
-  }, [legendToggleEnabled, selectedKey, series, selectSeries]);
+  }, [legendToggleEnabled, selectedKey, series, selectSeries, totalExcludes]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -404,6 +480,43 @@ export const ScoreBarChart: React.FC<Props> = ({
       ) : (
         <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: 1, pt: 4 }}>
           {Legend}
+          {pagination && data.length > safePageSize && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                mb: 1,
+              }}
+            >
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.max(0, v - safePageSize))
+                }
+                disabled={!canPrev}
+                sx={{ color: '#1b5e20' }}
+              >
+                <KeyboardArrowLeft />
+              </Button>
+
+              <Typography variant="caption" sx={{ color: '#666' }}>
+                Showing {startPage + 1}–
+                {Math.min(data.length, startPage + safePageSize)} of{' '}
+                {data.length}
+              </Typography>
+
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.min(maxPageStart, v + safePageSize))
+                }
+                disabled={!canNext}
+                sx={{ color: '#1b5e20' }}
+              >
+                <KeyboardArrowRight />
+              </Button>
+            </Box>
+          )}
           <ResponsiveContainer width="100%" height={430}>
             <BarChart
               data={computedData}
@@ -430,7 +543,10 @@ export const ScoreBarChart: React.FC<Props> = ({
               />
 
               {series.map((s, idx) => {
-                const isHidden = selectedKey !== null && selectedKey !== s.key;
+                const isHidden =
+                  (selectedKey !== null && selectedKey !== s.key) ||
+                  (selectedKey === null && totalExcludes.includes(s.key));
+
                 const isTopSegment = s.key === topVisibleKey;
 
                 return (
@@ -454,17 +570,14 @@ export const ScoreBarChart: React.FC<Props> = ({
                   >
                     {computedData.map((row) => {
                       const rowLabel = String(row[labelKey] ?? '');
-                      const isLeader =
-                        leaderName != null && rowLabel === leaderName;
+                      const isLeader = leaderNames.has(rowLabel);
                       const showGlow = isLeader && animationComplete;
 
                       return (
                         <Cell
                           key={`${s.key}-${rowLabel}`}
                           fill={s.color}
-                          stroke={showGlow ? HIGHLIGHT_COLOR : undefined}
                           strokeWidth={showGlow ? 2 : 0}
-                          className={showGlow ? 'leader-bar' : undefined}
                         />
                       );
                     })}

@@ -55,14 +55,19 @@ export class SessionService {
   /**
    * Get all active sessions for a specific scoreboard.
    * @param scoreboardId The scoreboard ID
-   * @returns Promise resolving to array of sessions
+   * @param isPending Whether to fetch pending sessions
+   * @returns Promise resolving to an array of sessions
    */
   static async getSessionsByScoreboardId(
-    scoreboardId: string
+    scoreboardId: string,
+    isPending: boolean
   ): Promise<Session[]> {
     try {
       const response = await apiClient.get<Session[]>(
-        `${API_BASE_URL}/scoreboard/${scoreboardId}`
+        `${API_BASE_URL}/scoreboard/${scoreboardId}`,
+        {
+          params: { isPending },
+        }
       );
       return response.data;
     } catch (error) {

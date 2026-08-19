@@ -5,12 +5,15 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { useNavigate } from 'react-router-dom';
 import { isOwner } from '../../utils/Utils.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import StarIcon from '@mui/icons-material/Star';
+import { Stack } from '@mui/material';
 
 type ScoreboardsListProps = {
   scoreboards: Scoreboard[];
   onDelete: (scoreboard: Scoreboard) => void;
   onLeave: (scoreboard: Scoreboard) => void;
   isLoading: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
@@ -18,6 +21,7 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
   onDelete,
   onLeave,
   isLoading,
+  onRefresh,
 }) => {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
@@ -46,12 +50,24 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
     return !isCreator && !hasPendingSessions;
   };
 
+  const renderScoreboardName = (scoreboard: Scoreboard) => {
+    if (!user) return;
+    const isCreator = isOwner(scoreboard.memberships, user.id);
+
+    return (
+      <Stack direction="row" spacing={1} alignItems="center">
+        <span>{scoreboard.name}</span>
+        {isCreator && <StarIcon sx={{ color: '#ffa726', fontSize: 20 }} />}
+      </Stack>
+    );
+  };
+
   const data = useMemo(
     () =>
       scoreboards.map((scoreboard) => {
         return {
           id: scoreboard.id,
-          Name: scoreboard.name,
+          Name: renderScoreboardName(scoreboard),
           scoreboard,
         };
       }),
@@ -60,7 +76,7 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
 
   return (
     <DataTable
-      title={'Your Scoreboards'}
+      title={'Scoreboards'}
       headers={['Name']}
       data={data}
       pageSize={10}
@@ -75,6 +91,8 @@ export const ScoreboardsList: React.FC<ScoreboardsListProps> = ({
       onCustomIcon={<ExitToAppIcon />}
       customTooltip={'Leave'}
       isLoading={isLoading}
+      refresh={onRefresh}
+      emptyText="No scoreboards"
     />
   );
 };

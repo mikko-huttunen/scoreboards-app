@@ -29,7 +29,10 @@ export const LoadingSpinner = ({
         }}
         role="status"
       >
-        <Typography variant="h6" sx={{ color: '#1b5e20', paddingBottom: 2 }}>
+        <Typography
+          variant="h6"
+          sx={{ color: '#1b5e20', paddingBottom: label ? 2 : 0 }}
+        >
           {label}
         </Typography>
         <CircularProgress size={size} thickness={4} color="success" />
@@ -49,7 +52,10 @@ export const LoadingSpinner = ({
       }}
       role="status"
     >
-      <Typography variant="h6" sx={{ color: '#1b5e20', paddingBottom: 2 }}>
+      <Typography
+        variant="h6"
+        sx={{ color: '#1b5e20', paddingBottom: label ? 2 : 0 }}
+      >
         {label}
       </Typography>
       <CircularProgress size={size} thickness={4} color="success" />

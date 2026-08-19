@@ -259,6 +259,12 @@ public class QueryService {
         return aggregate(scoreboardAggregation, Scoreboard.class, Scoreboard.class);
     }
 
+    public Optional<List<Session>> fetchScoreboardSessionsWithCreatedByNames(String scoreboardId, Boolean isPending) {
+        Aggregation aggregation = queryBuilder.sessionsByScoreboardIdWithResolvedCreatedByNamesQuery(scoreboardId, isPending);
+
+        return aggregateList(aggregation, Session.class, Session.class);
+    }
+
     public Optional<SessionDTO> fetchSessionWithPointCategoriesAndResultEntries(String sessionId) {
         Aggregation aggregation = queryBuilder.sessionWithPointCategoriesAndResultEntriesQuery(sessionId);
 

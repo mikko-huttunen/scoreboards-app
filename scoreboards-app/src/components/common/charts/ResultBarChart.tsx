@@ -31,11 +31,6 @@ type ResultBarChartProps = {
   chartTitle?: string;
   emptyText?: string;
   onFinished?: () => void;
-
-  /**
-   * Animation speed control: milliseconds per stacked segment.
-   * Default: 3000ms (3 seconds per segment).
-   */
   segmentDurationMs?: number;
 };
 
@@ -89,7 +84,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
 
     for (const entry of results ?? []) {
       if (entry.isPending) continue;
-      if (entry.isActive === false) continue;
+      if (!entry.isActive) continue;
 
       for (const r of entry.results ?? []) {
         if (r?.pointCategoryId) ids.add(r.pointCategoryId);
@@ -755,18 +750,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                       >
                         {totalChartData.map((row) => {
                           const participantName = String(row.name ?? '');
-                          const isTotalLeader =
-                            hasFinishedAllSegments &&
-                            totalLeaderNames.has(participantName);
 
                           return (
-                            <Cell
-                              key={`${series.key}-${participantName}`}
-                              stroke={
-                                isTotalLeader ? HIGHLIGHT_COLOR : undefined
-                              }
-                              strokeWidth={isTotalLeader ? 2 : 0}
-                            />
+                            <Cell key={`${series.key}-${participantName}`} />
                           );
                         })}
 
@@ -828,14 +814,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
                     isAnimationActive={false}
                   >
                     {selectedCategoryData.map((row) => {
-                      const isLeader = leaderNameForAxis.has(row.name);
-                      return (
-                        <Cell
-                          key={row.name}
-                          stroke={isLeader ? HIGHLIGHT_COLOR : undefined}
-                          strokeWidth={isLeader ? 3 : 0}
-                        />
-                      );
+                      return <Cell key={row.name} />;
                     })}
                     <LabelList
                       dataKey="points"

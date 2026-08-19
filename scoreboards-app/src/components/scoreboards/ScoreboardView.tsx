@@ -29,6 +29,7 @@ import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { UserService } from '../../services/UserService.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { PerformanceChart } from './PerformanceChart.tsx';
+import { SessionService } from '../../services/SessionService.ts';
 
 export type ScoreboardsViewProps = {
   sessions?: Session[];
@@ -111,17 +112,78 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     const isCreator = scoreboard.createdBy === user.id;
     setIsOwner(isCreator);
 
-    // Check if user is in the user's list (either as creator or joined user)
     const isInUsersList = users.some((u) => u.id === user.id);
 
     const userHasAccess = isCreator || isInUsersList;
     setHasAccess(userHasAccess);
 
-    // Redirect if user doesn't have access
     if (!userHasAccess) {
       navigate('/scoreboards');
     }
   }, [scoreboard, users, user]);
+
+  const handleRefreshPendingSessions = async () => {
+    if (!scoreboardId || !user) return;
+
+    try {
+      const updated = await SessionService.getSessionsByScoreboardId(
+        scoreboardId,
+        true
+      );
+
+      const filtered = updated.filter(
+        (s) =>
+          Array.from(s.participants).includes(user.id) ||
+          s.createdBy === user.id
+      );
+      setPendingSessions(filtered);
+      showSuccessMessage('Pending sessions refreshed');
+    } catch {
+      showErrorMessage('Failed to load pending sessions');
+    }
+  };
+
+  const handleRefreshSessions = async () => {
+    if (!scoreboardId) return;
+
+    try {
+      const updated = await SessionService.getSessionsByScoreboardId(
+        scoreboardId,
+        false
+      );
+
+      setSessions(updated);
+      showSuccessMessage('Sessions refreshed');
+    } catch {
+      showErrorMessage('Failed to load sessions');
+    }
+  };
+
+  const handleRefreshUsers = async () => {
+    if (!scoreboardId) return;
+
+    try {
+      const updatedUsers = await UserService.getScoreboardUsers(scoreboardId);
+      setUsers(updatedUsers);
+      showSuccessMessage('Users refreshed');
+    } catch {
+      showErrorMessage('Failed to load users');
+    }
+  };
+
+  const handleRefreshSentInvitations = async () => {
+    if (!scoreboardId) return;
+
+    try {
+      const invitations = await InvitationService.getInvitations();
+      setSentInvitations(
+        invitations.filter((inv) => inv.scoreboardId === scoreboardId)
+      );
+      showSuccessMessage('Sent invitations refreshed');
+    } catch {
+      showErrorMessage('Failed to load invitations');
+    }
+  };
 
   const handleInvitationSent = (invitation: Invitation) => {
     setSentInvitations([...sentInvitations, invitation]);
@@ -346,7 +408,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                   >
                     <span>
                       <Button
-                        variant="contained"
+                        variant="outlined"
                         color="error"
                         onClick={() => setDeleteScoreboardDialogOpen(true)}
                         disabled={pendingSessions.length > 0}
@@ -360,7 +422,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               )}
               {!isOwner && (
                 <Button
-                  variant="contained"
+                  variant="outlined"
                   color="warning"
                   onClick={openLeaveScoreboardModal}
                   disabled={pendingSessions.length > 0}
@@ -394,20 +456,17 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               />
             )}
 
-            {pendingSessions.length > 0 && (
-              <PendingSessions
-                isLoading={loadingScoreboard}
-                pendingSessions={pendingSessions}
-                scoreboard={scoreboard}
-                pointCategories={pointCategories}
-                onCancelSession={(sessionId) =>
-                  handleRemovePendingSession(sessionId)
-                }
-                onScoreSubmit={(resultEntry) =>
-                  handleScoreSubmitted(resultEntry)
-                }
-              />
-            )}
+            <PendingSessions
+              isLoading={loadingScoreboard}
+              pendingSessions={pendingSessions}
+              scoreboard={scoreboard}
+              pointCategories={pointCategories}
+              onCancelSession={(sessionId) =>
+                handleRemovePendingSession(sessionId)
+              }
+              onScoreSubmit={(resultEntry) => handleScoreSubmitted(resultEntry)}
+              onRefresh={handleRefreshPendingSessions}
+            />
 
             <Sessions
               isLoading={loadingScoreboard}
@@ -418,6 +477,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               resultEntries={resultEntries}
               onCreateSession={(session) => handleSessionCreated(session)}
               onDeleteSession={(sessionId) => handleDeleteSession(sessionId)}
+              onRefresh={handleRefreshSessions}
             />
 
             <ScoreboardMembers
@@ -429,15 +489,17 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               }
               onRemoveUser={(userId) => handleRemoveUser(userId)}
               disableActions={pendingSessions.length > 0}
+              onRefresh={handleRefreshUsers}
             />
 
-            {sentInvitations.length > 0 && (
+            {isOwner && (
               <SentInvitationsList
                 isLoading={loadingScoreboard}
                 invitations={sentInvitations}
                 onDeleteInvitation={(invitationId) =>
                   handleDeleteInvitation(invitationId)
                 }
+                onRefresh={handleRefreshSentInvitations}
               />
             )}
           </>

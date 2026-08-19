@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -20,26 +20,78 @@ export const ProfileView: React.FC = () => {
   const { user: auth0User, logout } = useAuth0();
   const navigationSpacing = useNavigationSpacing();
   const [username, setUsername] = useState<string>('');
-  const [avatarFile] = useState<File | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const { user, isLoadingUser } = useCurrentUser();
+  const { user, isLoadingUser, setUser } = useCurrentUser();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentUsername = useMemo(() => user?.name || '', [user?.name]);
 
   const avatarUrl = useMemo(() => {
-    return auth0User?.picture ?? undefined;
-  }, [avatarFile, user?.avatar, auth0User?.picture]);
+    return avatarPreviewUrl ?? user?.avatar ?? auth0User?.picture ?? undefined;
+  }, [avatarPreviewUrl, user?.avatar, auth0User?.picture]);
 
   const isUsernameTooLong = username.length > 15;
+
+  const handleSelectAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
+    const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/gif']);
+
+    const isAllowedType = allowedMimeTypes.has(file.type);
+    if (!isAllowedType) {
+      showErrorMessage(
+        'Invalid file type. Please upload a PNG, JPG, JPEG, or GIF image.'
+      );
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > maxSizeBytes) {
+      showErrorMessage('File is too large. Max allowed size is 5MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setAvatarFile(file);
+
+    const nextPreviewUrl = URL.createObjectURL(file);
+    setAvatarPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return nextPreviewUrl;
+    });
+
+    // allow selecting the same file again later
+    e.target.value = '';
+  };
 
   const handleSave = async () => {
     if (saving || !user) return;
     if (isUsernameTooLong) return;
     setSaving(true);
     try {
-      await UserService.updateCurrentUser(username);
-      showSuccessMessage('User updated successfully');
+      const updated = await UserService.updateCurrentUser(username, avatarFile);
+
+      setUser(updated);
+      setAvatarFile(null);
+      setAvatarPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+
+      if (updated?.name !== undefined) setUsername(updated.name);
+
+      showSuccessMessage('User updated');
     } catch (err) {
       showErrorMessage('Failed to update user');
     } finally {
@@ -62,14 +114,38 @@ export const ProfileView: React.FC = () => {
     }
   };
 
+  const renderHelperText = () => {
+    if (isUsernameTooLong) {
+      return 'Username cannot be longer than 15 characters.';
+    }
+
+    if (hasUnsavedChanges) {
+      return 'Save changes to update your profile.';
+    }
+
+    return '';
+  };
+
+  const hasUnsavedUsernameChange = username !== currentUsername;
+  const hasUnsavedAvatarChange =
+    avatarFile !== null || avatarPreviewUrl !== null;
+  const hasUnsavedChanges = hasUnsavedUsernameChange || hasUnsavedAvatarChange;
+
   useEffect(() => {
     setUsername(user?.name || '');
   }, [user]);
 
+  useEffect(() => {
+    return () => {
+      setAvatarPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, []);
+
   if (isLoadingUser) {
-    return (
-      <LoadingSpinner label={'Loading user'} size={64} screenCentered={true} />
-    );
+    return <LoadingSpinner size={64} screenCentered={true} />;
   }
 
   return (
@@ -91,28 +167,46 @@ export const ProfileView: React.FC = () => {
             <Typography variant="h4" sx={{ color: '#1b5e20' }}>
               Profile
             </Typography>
+
             <Button
-              variant="contained"
-              onClick={() =>
-                logout({
-                  logoutParams: { returnTo: `${window.location.origin}/login` },
-                })
-              }
-              sx={{
-                backgroundColor: '#ffffff',
-                color: '#38a14f',
-                ':hover': { backgroundColor: '#f7f7f7' },
-              }}
+              variant="outlined"
+              color="error"
+              onClick={() => setConfirmOpen(true)}
             >
-              Log Out
+              Delete Account
             </Button>
           </Stack>
+
           <Stack
             spacing={2}
             alignItems="center"
             sx={{ width: 'min(1200px, 100%)', alignSelf: 'center' }}
           >
             <Avatar src={avatarUrl} sx={{ width: 112, height: 112 }} />
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".png,.jpeg,.jpg,.gif"
+              style={{ display: 'none' }}
+              onChange={handleAvatarFileChange}
+            />
+            <Button
+              variant="contained"
+              onClick={handleSelectAvatarClick}
+              disabled={saving}
+              sx={{
+                backgroundColor: '#ffffff',
+                color: '#38a14f',
+                borderColor: '#38a14f',
+                ':hover': {
+                  backgroundColor: '#f7f7f7',
+                  borderColor: '#38a14f',
+                },
+              }}
+            >
+              Change Picture
+            </Button>
           </Stack>
 
           <Stack
@@ -129,35 +223,41 @@ export const ProfileView: React.FC = () => {
                 '& .MuiInputLabel-root': { color: '#1b5e20' },
                 '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' },
               }}
-              helperText={
-                isUsernameTooLong
-                  ? `Username cannot be longer than 15 characters.`
-                  : ' '
-              }
+              helperText={renderHelperText()}
             />
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={2}
-              justifyContent="flex-end"
-            >
+
+            <Stack spacing={2} justifyContent="center" alignItems="center">
               <Button
                 variant="contained"
                 onClick={handleSave}
-                disabled={saving || isUsernameTooLong}
+                disabled={saving || isUsernameTooLong || !hasUnsavedChanges}
                 sx={{
-                  backgroundColor: '#ffffff',
-                  color: '#38a14f',
-                  ':hover': { backgroundColor: '#f7f7f7' },
+                  backgroundColor: '#38a14f',
+                  color: '#ffffff',
+                  ':hover': { backgroundColor: '#2d7f3d' },
+                  minWidth: '100%',
                 }}
               >
                 {saving ? <LoadingSpinner size={24} /> : 'Save Changes'}
               </Button>
+
               <Button
-                variant="outlined"
-                color="error"
-                onClick={() => setConfirmOpen(true)}
+                variant="contained"
+                onClick={() =>
+                  logout({
+                    logoutParams: {
+                      returnTo: `${window.location.origin}/login`,
+                    },
+                  })
+                }
+                sx={{
+                  backgroundColor: '#ffffff',
+                  color: '#38a14f',
+                  ':hover': { backgroundColor: '#f7f7f7' },
+                  minWidth: '100%',
+                }}
               >
-                Delete Account
+                Log Out
               </Button>
             </Stack>
           </Stack>

@@ -11,14 +11,17 @@ import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,6 +49,8 @@ class UserServiceTest {
     private CurrentUserContext currentUserContext;
     @Mock
     private TimerService timerService;
+    @Mock
+    private S3Service s3Service;
 
     @InjectMocks
     private UserService userService;
@@ -60,6 +65,10 @@ class UserServiceTest {
         user.setId("user-1");
         user.setName("Alice");
         user.setAuth0Id("auth0|123");
+    }
+
+    private MultipartFile avatarFile(String filename) {
+        return new MockMultipartFile("avatar", filename, "image/png", new byte[]{1, 2, 3});
     }
 
     private JsonNode auth0UserNode(String email, boolean verified, String name, String picture) {
@@ -110,14 +119,18 @@ class UserServiceTest {
     // ---------------------------------------------------------------------
 
     @Test
-    void getCurrentUser_returnsExistingUser() {
+    void getCurrentUser_returnsExistingUserWithResolvedAvatarUrl() {
+        user.setAvatar("s3://bucket/avatars/user-1/pic.png");
         when(authProvider.requireAuth0UserId()).thenReturn("auth0|123");
         when(queryService.find(any(Query.class), eq(User.class), eq(false)))
                 .thenReturn(List.of(user));
+        when(s3Service.resolveUrl("s3://bucket/avatars/user-1/pic.png"))
+                .thenReturn("https://signed/pic.png");
 
         User result = userService.getCurrentUser();
 
         assertEquals("user-1", result.getId());
+        assertEquals("https://signed/pic.png", result.getAvatar());
         verify(userRepository, never()).save(any());
     }
 
@@ -141,13 +154,17 @@ class UserServiceTest {
     // ---------------------------------------------------------------------
 
     @Test
-    void getScoreboardUsers_returnsUsers() {
+    void getScoreboardUsers_returnsUsersWithResolvedAvatarUrls() {
+        user.setAvatar("s3://bucket/avatars/user-1/pic.png");
         when(queryService.fetchUsersWithMembershipsByScoreboardId("sb-1"))
                 .thenReturn(Optional.of(List.of(user)));
+        when(s3Service.resolveUrl("s3://bucket/avatars/user-1/pic.png"))
+                .thenReturn("https://signed/pic.png");
 
         List<User> result = userService.getScoreboardUsers("sb-1");
 
         assertEquals(1, result.size());
+        assertEquals("https://signed/pic.png", result.get(0).getAvatar());
     }
 
     @Test
@@ -163,22 +180,53 @@ class UserServiceTest {
     // updateUser
     // ---------------------------------------------------------------------
 
-    @Test
-    void updateUser_updatesName() {
-        when(currentUserContext.requireCurrentUser()).thenReturn(user);
-        User updated = new User();
-        updated.setId("user-1");
-        updated.setName("NewName");
+    /**
+     * Stubs {@code queryService.updateById} so the service's updater callback is applied
+     * to {@code target}, mimicking a successful persistence round-trip.
+     */
+    private void stubUpdateByIdApplyingUpdaterTo(User target) {
         when(queryService.updateById(eq("user-1"), eq(User.class), any()))
                 .thenAnswer(inv -> {
                     QueryService.DocumentUpdater<User> updater = inv.getArgument(2);
-                    updater.update(updated);
-                    return Optional.of(updated);
+                    updater.update(target);
+                    return Optional.of(target);
                 });
+    }
 
-        User result = userService.updateUser(Map.of("name", "NewName"));
+    @Test
+    void updateUser_updatesName() throws IOException {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+
+        User result = userService.updateUser("NewName", null);
 
         assertEquals("NewName", result.getName());
+        verify(s3Service, never()).uploadFile(anyString(), any());
+        verify(s3Service, never()).deleteFile(anyString());
+    }
+
+    @Test
+    void updateUser_trimsName() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+
+        User result = userService.updateUser("  NewName  ", null);
+
+        assertEquals("NewName", result.getName());
+    }
+
+    @Test
+    void updateUser_throwsWhenNameBlank() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> userService.updateUser("   ", null));
+        assertEquals("User name cannot be empty", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), any(), any());
     }
 
     @Test
@@ -186,8 +234,9 @@ class UserServiceTest {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.updateUser(Map.of("name", "ThisNameIsWayTooLong")));
+                () -> userService.updateUser("ThisNameIsWayTooLong", null));
         assertEquals("User name cannot be longer than 15 characters", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), any(), any());
     }
 
     @Test
@@ -196,7 +245,84 @@ class UserServiceTest {
         when(queryService.updateById(eq("user-1"), eq(User.class), any())).thenReturn(Optional.empty());
 
         assertThrows(RuntimeException.class,
-                () -> userService.updateUser(Map.of("name", "Ok")));
+                () -> userService.updateUser("Ok", null));
+    }
+
+    @Test
+    void updateUser_uploadsAvatarUnderUserScopedKeyKeepingExtension() throws IOException {
+        user.setAvatar(null);
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+        when(s3Service.uploadFile(anyString(), any())).thenReturn("s3://bucket/avatars/user-1/new.png");
+        when(s3Service.resolveUrl("s3://bucket/avatars/user-1/new.png")).thenReturn("https://signed/new.png");
+
+        User result = userService.updateUser(null, avatarFile("avatar.png"));
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(s3Service).uploadFile(keyCaptor.capture(), any());
+        assertTrue(keyCaptor.getValue().startsWith("avatars/user-1/"),
+                "Avatar key should be scoped to the user: " + keyCaptor.getValue());
+        assertTrue(keyCaptor.getValue().endsWith(".png"),
+                "Avatar key should keep the original extension: " + keyCaptor.getValue());
+        assertEquals("https://signed/new.png", result.getAvatar());
+        // No previous avatar to clean up
+        verify(s3Service, never()).deleteFile(anyString());
+    }
+
+    @Test
+    void updateUser_deletesPreviousAvatarAfterSuccessfulUpload() throws IOException {
+        user.setAvatar("s3://bucket/avatars/user-1/old.png");
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+        when(s3Service.uploadFile(anyString(), any())).thenReturn("s3://bucket/avatars/user-1/new.png");
+
+        userService.updateUser(null, avatarFile("avatar.png"));
+
+        verify(s3Service).deleteFile("s3://bucket/avatars/user-1/old.png");
+    }
+
+    @Test
+    void updateUser_succeedsWhenPreviousAvatarDeletionFails() throws IOException {
+        user.setAvatar("s3://bucket/avatars/user-1/old.png");
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+        when(s3Service.uploadFile(anyString(), any())).thenReturn("s3://bucket/avatars/user-1/new.png");
+        doThrow(new RuntimeException("S3 down")).when(s3Service).deleteFile(anyString());
+
+        User result = userService.updateUser(null, avatarFile("avatar.png"));
+
+        assertNotNull(result);
+    }
+
+    @Test
+    void updateUser_wrapsAvatarUploadFailure() throws IOException {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        when(s3Service.uploadFile(anyString(), any())).thenThrow(new IOException("stream closed"));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> userService.updateUser(null, avatarFile("avatar.png")));
+        assertEquals("Failed to upload avatar image", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), any(), any());
+    }
+
+    @Test
+    void updateUser_ignoresEmptyAvatarFile() throws IOException {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        User updated = new User();
+        updated.setId("user-1");
+        stubUpdateByIdApplyingUpdaterTo(updated);
+
+        MultipartFile empty = new MockMultipartFile("avatar", "avatar.png", "image/png", new byte[0]);
+
+        userService.updateUser("NewName", empty);
+
+        verify(s3Service, never()).uploadFile(anyString(), any());
     }
 
     // ---------------------------------------------------------------------
@@ -205,6 +331,7 @@ class UserServiceTest {
 
     @Test
     void deleteUser_deletesAuth0OwnedScoreboardsAndUser() {
+        user.setAvatar("s3://bucket/avatars/user-1/pic.png");
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
 
         Scoreboard owned = new Scoreboard();
@@ -222,6 +349,7 @@ class UserServiceTest {
         assertEquals("user-1", result.getId());
         verify(auth0ManagementService).deleteUser("auth0|123");
         verify(scoreboardService).deleteScoreboards(Set.of("sb-owned"));
+        verify(s3Service).deleteFile("s3://bucket/avatars/user-1/pic.png");
         verify(queryService).deleteById("user-1", User.class);
     }
 

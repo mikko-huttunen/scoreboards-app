@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Paper, Typography } from '@mui/material';
+import { Box, Button, Paper, Typography } from '@mui/material';
 import {
   CartesianGrid,
   Line,
@@ -11,6 +11,7 @@ import {
   type LegendProps,
 } from 'recharts';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
+import { KeyboardArrowLeft, KeyboardArrowRight } from '@mui/icons-material';
 
 export type LineChartSeries = {
   key: string;
@@ -58,6 +59,9 @@ type Props = {
     payload: LineChartRow
   ) => string;
   valueFormatter?: (value: number, seriesName: string) => [string, string];
+  pagination?: boolean;
+  pageSize?: number;
+  startFromLatest?: boolean;
 };
 
 const DEFAULT_TEXT_COLOR = '#555';
@@ -75,15 +79,43 @@ export const LineChart: React.FC<Props> = ({
   showGrid = true,
   showDots = true,
   connectNulls = false,
-  lineType = 'monotone',
+  lineType = 'linear',
   xAxisTickMargin = 10,
   tooltipValueSuffix = '',
   tooltipLabelFormatter,
   valueFormatter,
+  pagination = true,
+  pageSize = 10,
+  startFromLatest = true,
 }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const hasData = Array.isArray(data) && data.length > 0;
+
+  const safePageSize = Math.max(1, pageSize);
+  const maxPageStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+
+  const [startPage, setStartPage] = useState<number>(() => {
+    if (!pagination) return 0;
+    const latestStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+    return startFromLatest ? latestStart : 0;
+  });
+
+  React.useEffect(() => {
+    if (!pagination) return;
+    const latestStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+    setStartPage(startFromLatest ? latestStart : 0);
+  }, [data]);
+
+  const pageData = useMemo(() => {
+    if (!pagination) return data;
+    if (!Array.isArray(data) || data.length <= safePageSize) return data;
+    return data.slice(startPage, startPage + safePageSize);
+  }, [data, startPage, safePageSize]);
+
+  const canPrev = pagination && data.length > safePageSize && startPage > 0;
+  const canNext =
+    pagination && data.length > safePageSize && startPage < maxPageStart;
 
   const visibleSeries = useMemo(() => {
     if (selectedKey) {
@@ -195,9 +227,47 @@ export const LineChart: React.FC<Props> = ({
       ) : (
         <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 }, pt: 4 }}>
           <CustomLegend />
+
+          {pagination && data.length > safePageSize && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+              }}
+            >
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.max(0, v - safePageSize))
+                }
+                disabled={!canPrev}
+                sx={{ color: '#1b5e20' }}
+              >
+                <KeyboardArrowLeft />
+              </Button>
+
+              <Typography variant="caption" sx={{ color: '#666' }}>
+                Showing {startPage + 1}–
+                {Math.min(data.length, startPage + safePageSize)} of{' '}
+                {data.length}
+              </Typography>
+
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.min(maxPageStart, v + safePageSize))
+                }
+                disabled={!canNext}
+                sx={{ color: '#1b5e20' }}
+              >
+                <KeyboardArrowRight />
+              </Button>
+            </Box>
+          )}
+
           <ResponsiveContainer width="100%" height={height}>
             <RechartsLineChart
-              data={data}
+              data={pageData}
               margin={{ top: 24, right: 24, left: 8, bottom: 12 }}
             >
               {showGrid && (

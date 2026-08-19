@@ -34,6 +34,8 @@ dependencies {
 	implementation(platform("org.mongodb:mongodb-driver-bom:5.6.1"))
 	implementation 'org.mongodb:mongodb-driver-sync'
 	implementation 'org.apache.httpcomponents.client5:httpclient5'
+	implementation(platform('software.amazon.awssdk:bom:2.53.1'))
+	implementation 'software.amazon.awssdk:s3'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	mockitoAgent 'org.mockito:mockito-core:5.17.0'

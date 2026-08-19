@@ -28,6 +28,7 @@ type SessionsProps = {
   onCreateSession: (session: Session) => void;
   onDeleteSession: (sessionId: string) => void;
   isLoading?: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const Sessions: React.FC<SessionsProps> = ({
@@ -39,6 +40,7 @@ export const Sessions: React.FC<SessionsProps> = ({
   onCreateSession,
   onDeleteSession,
   isLoading = false,
+  onRefresh,
 }) => {
   const navigate = useNavigate();
   const { format_date } = useDateFormat();
@@ -151,7 +153,7 @@ export const Sessions: React.FC<SessionsProps> = ({
         />
       )}
       <DataTable
-        title="Latest Sessions"
+        title="Past Sessions"
         headers={['Name', 'Date', 'Created By']}
         data={data}
         onCreate={openCreateSessionModal}
@@ -166,6 +168,7 @@ export const Sessions: React.FC<SessionsProps> = ({
         pageSize={10}
         onRowClick={(row) => openSessionDetailsModal(row.session)}
         isLoading={isLoading}
+        refresh={onRefresh}
       />
     </>
   );

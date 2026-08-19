@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -54,12 +53,23 @@ class SessionControllerTest {
 
     @Test
     void getSessionsByScoreboardId_returnsOk() {
-        when(sessionService.getSessionsByScoreboardId("sb-1")).thenReturn(List.of(new Session()));
+        when(sessionService.getSessionsByScoreboardId("sb-1", true)).thenReturn(List.of(new Session()));
 
-        ResponseEntity<List<Session>> response = sessionController.getSessionsByScoreboardId("sb-1");
+        ResponseEntity<List<Session>> response = sessionController.getSessionsByScoreboardId("sb-1", true);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, response.getBody().size());
+    }
+
+    @Test
+    void getSessionsByScoreboardId_passesIsPendingThrough() {
+        when(sessionService.getSessionsByScoreboardId("sb-1", false)).thenReturn(List.of());
+
+        ResponseEntity<List<Session>> response = sessionController.getSessionsByScoreboardId("sb-1", false);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isEmpty());
+        verify(sessionService).getSessionsByScoreboardId("sb-1", false);
     }
 
     @Test

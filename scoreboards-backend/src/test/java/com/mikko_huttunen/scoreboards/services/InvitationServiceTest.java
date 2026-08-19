@@ -127,7 +127,7 @@ class InvitationServiceTest {
                 .thenReturn(Optional.of(receiver));
 
         java.util.List<Membership> memberships = new java.util.ArrayList<>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 20; i++) {
             memberships.add(membership("member-" + i));
         }
         when(scoreboardService.getScoreboardById("sb-1"))

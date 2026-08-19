@@ -9,12 +9,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.*;
 
 /**
@@ -56,12 +57,36 @@ class UserControllerTest {
         User user = new User();
         user.setId("user-1");
         user.setName("NewName");
-        when(userService.updateUser(anyMap())).thenReturn(user);
 
-        ResponseEntity<User> response = userController.updateCurrentUser(Map.of("name", "NewName"));
+        when(userService.updateUser(any(), any())).thenReturn(user);
+
+        ResponseEntity<User> response = userController.updateCurrentUser("NewName", null);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("NewName", response.getBody().getName());
+        verify(userService).updateUser("NewName", null);
+    }
+
+    @Test
+    void updateCurrentUser_withAvatar_returnsOk() {
+        User user = new User();
+        user.setId("user-1");
+        user.setName("NewName");
+
+        MultipartFile avatar = new MockMultipartFile(
+                "avatar",
+                "avatar.png",
+                "image/png",
+                new byte[]{1, 2, 3}
+        );
+
+        when(userService.updateUser(any(), any())).thenReturn(user);
+
+        ResponseEntity<User> response = userController.updateCurrentUser("NewName", avatar);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("NewName", response.getBody().getName());
+        verify(userService).updateUser("NewName", avatar);
     }
 
     @Test

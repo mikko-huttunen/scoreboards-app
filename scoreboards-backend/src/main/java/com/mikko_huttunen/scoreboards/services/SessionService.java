@@ -86,17 +86,22 @@ public class SessionService {
     }
 
     /**
-     * Get all sessions for a specific scoreboard.
+     * Get all pending or non-pending sessions for a specific scoreboard.
      * @param scoreboardId The scoreboard ID
      * @return List of sessions
      */
-    public List<Session> getSessionsByScoreboardId(String scoreboardId) {
-        logger.info("Fetching sessions for scoreboard ID: {}", scoreboardId);
+    public List<Session> getSessionsByScoreboardId(String scoreboardId, Boolean isPending) {
+        logger.info("Fetching sessions (isPending: {}) for scoreboard ID: {}", isPending, scoreboardId);
 
-        Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId));
-        List<Session> sessions = queryService.find(query, Session.class, false);
+        Optional<List<Session>> sessionsOpt = queryService.fetchScoreboardSessionsWithCreatedByNames(scoreboardId, isPending);
+        if (sessionsOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        logger.info("Found {} sessions for scoreboard ID: {}", sessions.size(), scoreboardId);
+        List<Session> sessions = sessionsOpt.orElseThrow(() ->
+                new IllegalArgumentException("Failed to fetch sessions"));
+
+        logger.info("Found {} sessions (isPending: {}) for scoreboard ID: {}", sessions.size(), isPending, scoreboardId);
         return sessions;
     }
     

@@ -44,7 +44,7 @@ export const ScoreboardsView: React.FC = () => {
           await ScoreboardsService.getScoreboardsByCurrentUser();
         setScoreboards(scoreboardsData);
       } catch (err) {
-        showErrorMessage('Failed loading scoreboards');
+        showErrorMessage('Failed to load scoreboards');
       } finally {
         setLoadingScoreboards(false);
       }
@@ -57,7 +57,7 @@ export const ScoreboardsView: React.FC = () => {
           invitationsData.filter((inv) => inv.receiverId === user.id)
         );
       } catch (err) {
-        showErrorMessage('Failed loading invitations');
+        showErrorMessage('Failed to load invitations');
       } finally {
         setLoadingInvitations(false);
       }
@@ -66,6 +66,33 @@ export const ScoreboardsView: React.FC = () => {
     fetchScoreboards();
     fetchInvitations();
   }, [user]);
+
+  const handleRefreshScoreboards = async () => {
+    if (!user) return;
+
+    try {
+      const scoreboardsData =
+        await ScoreboardsService.getScoreboardsByCurrentUser();
+      setScoreboards(scoreboardsData);
+      showSuccessMessage('Scoreboards refreshed');
+    } catch {
+      showErrorMessage('Failed to load scoreboards');
+    }
+  };
+
+  const handleRefreshReceivedInvitations = async () => {
+    if (!user) return;
+
+    try {
+      const invitationsData = await InvitationService.getInvitations();
+      setPendingInvitations(
+        invitationsData.filter((inv) => inv.receiverId === user.id)
+      );
+      showSuccessMessage('Invitations refreshed');
+    } catch {
+      showErrorMessage('Failed to load invitations');
+    }
+  };
 
   const handleDeleteScoreboardClick = (scoreboard: Scoreboard) => {
     setSelectedScoreboard(scoreboard);
@@ -164,7 +191,6 @@ export const ScoreboardsView: React.FC = () => {
 
       await InvitationService.deleteInvitation(selectedInvitation.id);
 
-      // Remove from pending invitations
       setPendingInvitations(
         pendingInvitations.filter((inv) => inv.id !== selectedInvitation.id)
       );
@@ -253,6 +279,7 @@ export const ScoreboardsView: React.FC = () => {
                   handleDeleteScoreboardClick(scoreboard)
                 }
                 onLeave={(scoreboard) => handleLeaveScoreboardClick(scoreboard)}
+                onRefresh={handleRefreshScoreboards}
               />
             </Stack>
             <Stack sx={{ width: '100%', alignItems: 'flex-start' }} spacing={2}>
@@ -266,6 +293,7 @@ export const ScoreboardsView: React.FC = () => {
                 onDeleteInvitation={(invitation) =>
                   handleDeleteInvitationClick(invitation)
                 }
+                onRefresh={handleRefreshReceivedInvitations}
               />
             </Stack>
           </Stack>

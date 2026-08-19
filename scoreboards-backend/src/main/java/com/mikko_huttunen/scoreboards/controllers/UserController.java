@@ -7,8 +7,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -58,14 +60,18 @@ public class UserController {
 
     /**
      * Update the current authenticated user.
-     * @param userData Map containing the new user data
+     * @param name Optional new display name
+     * @param avatar Optional avatar image file
      * @return ResponseEntity containing the updated user
      */
-    @PutMapping("/user")
-    public ResponseEntity<User> updateCurrentUser(@RequestBody Map<String, String> userData) {
+    @PutMapping(value = "/user", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<User> updateCurrentUser(
+            @RequestParam String name,
+            @RequestPart MultipartFile avatar
+    ) {
         logger.info("PUT /api/users/user - Updating current user");
 
-        User updatedUser = userService.updateUser(userData);
+        User updatedUser = userService.updateUser(name, avatar);
         return ResponseEntity.status(HttpStatus.OK).body(updatedUser);
     }
 

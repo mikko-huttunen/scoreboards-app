@@ -6,7 +6,6 @@ import {
   TextField,
   Button,
   Paper,
-  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,6 +18,7 @@ import type { ResultEntry } from '../../types/ResultEntry.ts';
 import type { Result } from '../../types/Result.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 
 export type AddScoresProps = {
   open: boolean;
@@ -40,22 +40,20 @@ export const AddScores: React.FC<AddScoresProps> = ({
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
   const [resultEntry, setResultEntry] = useState<ResultEntry | null>(null);
   const { user } = useCurrentUser();
 
   useEffect(() => {
     const loadData = async () => {
       if (!session) {
-        setError('Session is missing');
+        showErrorMessage('Failed to load session');
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        setError(null);
 
         const sessionCategoryIds = Array.from(session.pointCategories) || [];
         const filtered = pointCategoriesProp.filter((pg) =>
@@ -63,7 +61,6 @@ export const AddScores: React.FC<AddScoresProps> = ({
         );
         setPointCategories(filtered);
 
-        // Only use the provided API call (no extra DB calls)
         const resultEntriesData =
           await ResultEntryService.getResultEntriesByUser();
 
@@ -73,7 +70,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
 
         if (!resultEntryData) {
           setResultEntry(null);
-          setScores(new Map()); // start empty; user will fill scores
+          setScores(new Map());
           setLoading(false);
           return;
         }
@@ -94,7 +91,9 @@ export const AddScores: React.FC<AddScoresProps> = ({
 
         setScores(initial);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        showErrorMessage(
+          err instanceof Error ? err.message : 'Failed to load session'
+        );
       } finally {
         setLoading(false);
       }
@@ -138,12 +137,10 @@ export const AddScores: React.FC<AddScoresProps> = ({
 
   const handleSubmit = async (event?: React.FormEvent) => {
     event?.preventDefault();
-    setError(null);
-    setSuccess(false);
 
     if (!validateForm()) return;
     if (!session || !user) {
-      setError('Session or user information is missing');
+      showErrorMessage('Failed to submit results');
       return;
     }
 
@@ -172,18 +169,19 @@ export const AddScores: React.FC<AddScoresProps> = ({
         onScoreSubmit(createdEntry);
       }
 
-      setSuccess(true);
-      setTimeout(() => onClose(), 600);
+      showSuccessMessage('Results submitted');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit scores');
+      showErrorMessage(
+        err instanceof Error ? err.message : 'Failed to submit scores'
+      );
     } finally {
+      onClose();
       setSubmitting(false);
     }
   };
 
   const canSubmit =
     !submitting &&
-    !success &&
     pointCategories.length > 0 &&
     pointCategories.every((cat) => {
       const score = scores.get(cat.id);
@@ -209,10 +207,6 @@ export const AddScores: React.FC<AddScoresProps> = ({
           </Box>
         ) : (
           <Paper elevation={0} sx={{ p: 0 }}>
-            {error && <Alert severity="error">{error}</Alert>}
-            {success && (
-              <Alert severity="success">Results submitted successfully!</Alert>
-            )}
             <form onSubmit={handleSubmit}>
               <Stack spacing={3} sx={{ width: '100%', mt: 1 }}>
                 {pointCategories.map((category) => (

@@ -64,7 +64,7 @@ public class InvitationService {
         Scoreboard scoreboard = scoreboardService.getScoreboardById(scoreboardId);
 
         //Check if scoreboard has reached the maximum number of members
-        if (scoreboard.getMemberships().size() >= 10) {
+        if (scoreboard.getMemberships().size() >= 20) {
             logger.error("Scoreboard {} has reached the maximum number of members", scoreboardId);
             throw new IllegalArgumentException("Scoreboard has reached the maximum number of members");
         }

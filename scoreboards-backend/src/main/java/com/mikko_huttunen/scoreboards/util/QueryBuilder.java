@@ -241,9 +241,10 @@ public class QueryBuilder {
         );
     }
 
-    public Aggregation sessionsWithResolvedCreatedByNamesQuery(Set<String> sessionIds) {
+    public Aggregation sessionsByScoreboardIdWithResolvedCreatedByNamesQuery(String scoreboardId, Boolean isPending) {
         AggregationOperation matchSessions = match(
-                Criteria.where("_id").in(sessionIds)
+                Criteria.where("scoreboardId").is(scoreboardId)
+                        .and("isPending").is(isPending)
                         .and("isActive").is(true)
         );
 
@@ -260,12 +261,37 @@ public class QueryBuilder {
                 ))
         );
 
-        AggregationOperation sort = context -> new Document("$sort", new Document("name", 1));
+        AggregationOperation lookupResultEntries = context -> new Document("$lookup", new Document()
+                .append("from", "ResultEntry")
+                .append("let", new Document("sessionId", "$_id"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$and", List.of(
+                                new Document("$eq", List.of("$sessionId", "$$sessionId")),
+                                new Document("$eq", List.of("$isActive", true))
+                        ))))
+                ))
+                .append("as", "resultEntryDetails")
+        );
+
+        AggregationOperation setResultEntries = context -> new Document("$set", new Document()
+                .append("resultEntries",
+                        new Document("$map", new Document()
+                                .append("input", "$resultEntryDetails")
+                                .append("as", "re")
+                                .append("in", "$$re._id")
+                        )
+                )
+                .append("resultEntryDetails", "$$REMOVE")
+        );
+
+        AggregationOperation sort = context -> new Document("$sort", new Document("lastModified", -1));
 
         return Aggregation.newAggregation(
                 matchSessions,
                 lookupSessionCreatorUser,
                 setCreatedByName,
+                lookupResultEntries,
+                setResultEntries,
                 sort
         );
     }

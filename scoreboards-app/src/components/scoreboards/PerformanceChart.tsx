@@ -27,15 +27,23 @@ const USER_LINE_COLORS = [
   '#38a14f',
   '#1976d2',
   '#ff7043',
-  '#8e24aa',
-  '#00897b',
-  '#ef6c00',
-  '#d81b60',
-  '#5d4037',
-  '#546e7a',
-  '#7cb342',
-  '#3949ab',
+  '#842bfb',
+  '#FF0000',
   '#f9a825',
+  '#00FFFF',
+  '#FF69B4',
+  '#363636',
+  '#895129',
+  '#39FF14',
+  '#00008B',
+  '#65000B',
+  '#452c63',
+  '#E9967A',
+  '#5F9EA0',
+  '#E0115F',
+  '#A0AD59',
+  '#7B68EE',
+  '#000000',
 ];
 
 export const PerformanceChart: React.FC<PerformanceChartProps> = ({
@@ -48,11 +56,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
 }) => {
   const latestSessions = useMemo(() => {
     return [...(sessions ?? [])]
-      .filter((session) => session.isActive !== false && !session.isPending)
+      .filter((session) => session.isActive && !session.isPending)
       .sort(
         (a, b) => new Date(a.created).getTime() - new Date(b.created).getTime()
-      )
-      .slice(-10);
+      );
   }, [sessions]);
 
   const userSeries = useMemo<LineChartSeries[]>(() => {
@@ -92,8 +99,8 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
 
     return latestSessions.map((session, index) => {
       const row: PerformanceChartRow = {
-        session: `S${index + 1}`, // revert XAxis legend back to S1, S2, ...
-        sessionTitle: session.name, // tooltip will show the real session name
+        session: `S${index + 1}`,
+        sessionTitle: session.name,
       };
 
       const sessionEntries = entriesBySessionId.get(session.id) ?? [];
@@ -149,6 +156,8 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           `${payload.sessionTitle} (${label})`
         }
         valueFormatter={(value, seriesName) => [`${value} pts`, seriesName]}
+        pagination
+        pageSize={10}
       />
     </Stack>
   );

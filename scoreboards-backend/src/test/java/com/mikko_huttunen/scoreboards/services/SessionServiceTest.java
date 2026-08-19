@@ -74,7 +74,6 @@ class SessionServiceTest {
         assertTrue(result.getIsPending());
         assertEquals(Set.of("user-1", "user-2"), result.getParticipants());
         assertEquals(Set.of("pc-1"), result.getPointCategories());
-        // creator name added post-persist
         assertEquals("Alice", result.getCreatedByName());
     }
 
@@ -99,12 +98,23 @@ class SessionServiceTest {
     void getSessionsByScoreboardId_delegatesToQueryService() {
         Session s = new Session();
         s.setId("s-1");
-        when(queryService.find(any(Query.class), eq(Session.class), eq(false))).thenReturn(List.of(s));
+        when(queryService.fetchScoreboardSessionsWithCreatedByNames("sb-1", true))
+                .thenReturn(Optional.of(List.of(s)));
 
-        List<Session> result = sessionService.getSessionsByScoreboardId("sb-1");
+        List<Session> result = sessionService.getSessionsByScoreboardId("sb-1", true);
 
         assertEquals(1, result.size());
         assertEquals("s-1", result.get(0).getId());
+    }
+
+    @Test
+    void getSessionsByScoreboardId_returnsEmptyListWhenNoSessionsFound() {
+        when(queryService.fetchScoreboardSessionsWithCreatedByNames("sb-1", false))
+                .thenReturn(Optional.empty());
+
+        List<Session> result = sessionService.getSessionsByScoreboardId("sb-1", false);
+
+        assertTrue(result.isEmpty());
     }
 
     // ---------------------------------------------------------------------

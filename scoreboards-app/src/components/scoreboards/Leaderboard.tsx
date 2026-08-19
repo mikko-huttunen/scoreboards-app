@@ -1,5 +1,10 @@
-import React, { useMemo } from 'react';
-import { Stack, Typography } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import {
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material';
 import { ScoreBarChart } from '../common/charts/ScoreBarChart';
 import type { Session } from '../../types/Session';
 import type { User } from '../../types/User';
@@ -31,6 +36,11 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
   chartTitle = 'Leaderboard',
   isLoading = false,
 }) => {
+  const WIN_KEY = 'Total Wins';
+  const SESSIONS_KEY = 'Total Sessions';
+
+  const [scoreMode, setScoreMode] = useState<'total' | 'average'>('total');
+
   const leaderboardChartData = useMemo<LeaderboardRow[]>(() => {
     if (!sessions?.length || !pointCategories?.length) return [];
 
@@ -44,28 +54,29 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
     const winsByUserId = new Map<string, number>();
 
-    // Group results by session so we can determine "session winner" correctly.
+    const sessionsPlayedByUserId = new Map<string, Set<string>>();
     const entriesBySession = new Map<string, ResultEntry[]>();
     for (const entry of resultEntries ?? []) {
       if (!finishedSessionIds.has(entry.sessionId)) continue;
       if (entry.isPending) continue;
       if (!entry.isActive) continue;
-
-      // Skip entries whose user isn't a (known) member of this scoreboard
       if (!userById.has(entry.userId)) continue;
 
       const list = entriesBySession.get(entry.sessionId) ?? [];
       list.push(entry);
       entriesBySession.set(entry.sessionId, list);
+
+      if (!sessionsPlayedByUserId.has(entry.userId)) {
+        sessionsPlayedByUserId.set(entry.userId, new Set<string>());
+      }
+      sessionsPlayedByUserId.get(entry.userId)!.add(entry.sessionId);
     }
 
-    // Only use the provided props: no extra fetching.
     for (const entry of resultEntries ?? []) {
       if (!finishedSessionIds.has(entry.sessionId)) continue;
       if (entry.isPending) continue;
       if (!entry.isActive) continue;
 
-      // Skip entries whose user isn't a (known) member of this scoreboard
       const user = userById.get(entry.userId);
       if (!user) continue;
 
@@ -78,7 +89,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         categories: new Map<string, number>(),
       };
 
-      // entry.results is a Set<Result>
       for (const result of entry.results ?? []) {
         const categoryId = result.pointCategoryId;
         const current = existing.categories.get(categoryId) ?? 0;
@@ -93,7 +103,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       const totalsThisSession = new Map<string, number>();
 
       for (const entry of entries) {
-        // entries were already filtered above to contain only members
         let sum = 0;
         for (const r of entry.results ?? []) {
           sum += r.points ?? 0;
@@ -110,61 +119,106 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       }
     }
 
-    const WIN_KEY = 'Wins';
-
     const chartRows = Array.from(totalsByUserId.entries()).map(
       ([_userId, value]) => {
+        const sessionsCount = sessionsPlayedByUserId.get(_userId)?.size ?? 0;
+
         const row: LeaderboardRow = {
           name: value.name,
           avatar: value.avatar,
           [WIN_KEY]: winsByUserId.get(_userId) ?? 0,
+          [SESSIONS_KEY]: sessionsCount,
         };
 
         for (const category of pointCategories) {
-          row[category.name] = value.categories.get(category.id) ?? 0;
+          const totalForCategory = value.categories.get(category.id) ?? 0;
+
+          const avgForCategory =
+            sessionsCount > 0 ? totalForCategory / sessionsCount : 0;
+          const roundedAvgForCategory = Math.round(avgForCategory);
+
+          row[category.name] =
+            scoreMode === 'average' ? roundedAvgForCategory : totalForCategory;
         }
 
         return row;
       }
     );
 
-    chartRows.sort((a, b) => a.name.localeCompare(b.name));
+    chartRows.sort((a, b) => {
+      const totalA = pointCategories.reduce((sum, category) => {
+        const v = a[category.name];
+        return sum + (typeof v === 'number' ? v : Number(v ?? 0));
+      }, 0);
+
+      const totalB = pointCategories.reduce((sum, category) => {
+        const v = b[category.name];
+        return sum + (typeof v === 'number' ? v : Number(v ?? 0));
+      }, 0);
+
+      if (totalB !== totalA) return totalB - totalA;
+
+      return String(a.name).localeCompare(String(b.name));
+    });
 
     return chartRows;
-  }, [sessions, users, pointCategories, resultEntries]);
+  }, [sessions, users, pointCategories, resultEntries, scoreMode]);
 
   const leaderboardSeries = useMemo(() => {
-    const WIN_KEY = 'Wins';
+    const pointSeries = pointCategories.map((category) => ({
+      key: category.name,
+      title: category.name,
+      color: category.color,
+    }));
 
     return [
-      // Wins first so it’s visible/togglable right away in the legend
       {
         key: WIN_KEY,
         title: WIN_KEY,
-        color: '#ffb300', // gold
+        color: '#ffb300',
       },
-      ...pointCategories.map((category) => ({
-        key: category.name,
-        title: category.name,
-        color: category.color,
-      })),
+      {
+        key: SESSIONS_KEY,
+        title: SESSIONS_KEY,
+        color: '#515151',
+      },
+      ...pointSeries,
     ];
   }, [pointCategories]);
 
   return (
     <Stack sx={{ width: '100%' }} spacing={2}>
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        justifyContent="space-between"
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="flex-start"
         spacing={2}
       >
         <Typography variant="h6" sx={{ color: '#1b5e20' }}>
           {chartTitle}
         </Typography>
+
+        <ToggleButtonGroup
+          value={scoreMode}
+          exclusive
+          onChange={(_e, v) => {
+            if (v) setScoreMode(v);
+          }}
+          size="small"
+          aria-label="Leaderboard score mode"
+          sx={{ borderRadius: '20px' }}
+        >
+          <ToggleButton value="total" aria-label="Total scores">
+            Total
+          </ToggleButton>
+          <ToggleButton value="average" aria-label="Average scores">
+            Average
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Stack>
 
       <ScoreBarChart
+        key={`leaderboard-${scoreMode}`}
         loading={isLoading}
         direction="vertical"
         data={leaderboardChartData}
@@ -173,6 +227,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         legendToggleEnabled
         showAvatars={true}
         emptyText={emptyText}
+        pagination
+        pageSize={10}
       />
     </Stack>
   );

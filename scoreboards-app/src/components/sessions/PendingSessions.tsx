@@ -24,6 +24,7 @@ type PendingSessionsProps = {
   onCancelSession: (sessionId: string) => void;
   onScoreSubmit: (resultEntry: ResultEntry) => void;
   isLoading?: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const PendingSessions: React.FC<PendingSessionsProps> = ({
@@ -33,6 +34,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   onCancelSession,
   onScoreSubmit,
   isLoading = false,
+  onRefresh,
 }) => {
   const { format_date } = useDateFormat();
   const { user } = useCurrentUser();
@@ -166,6 +168,8 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         onCustomIcon={<DoneIcon fontSize="small" />}
         customTooltip={'Finish'}
         isLoading={isLoading}
+        refresh={onRefresh}
+        emptyText={'No pending sessions'}
       />
     </>
   );

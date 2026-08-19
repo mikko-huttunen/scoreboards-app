@@ -2,12 +2,10 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mikko_huttunen.scoreboards.Constants.Types;
-import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
-import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,9 +13,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -29,7 +26,7 @@ import static org.springframework.data.mongodb.core.query.Criteria.where;
  */
 @Service
 public class UserService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     private final Auth0ManagementService auth0ManagementService;
@@ -39,7 +36,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final CurrentUserContext currentUserContext;
     private final TimerService timerService;
-    
+    private final S3Service s3Service;
+
     @Autowired
     public UserService(
             Auth0ManagementService auth0ManagementService,
@@ -47,7 +45,9 @@ public class UserService {
             QueryService queryService,
             ScoreboardService scoreboardService,
             UserRepository userRepository,
-            CurrentUserContext currentUserContext, TimerService timerService) {
+            CurrentUserContext currentUserContext,
+            TimerService timerService,
+            S3Service s3Service) {
         this.auth0ManagementService = auth0ManagementService;
         this.authProvider = authProvider;
         this.queryService = queryService;
@@ -55,8 +55,9 @@ public class UserService {
         this.userRepository = userRepository;
         this.currentUserContext = currentUserContext;
         this.timerService = timerService;
+        this.s3Service = s3Service;
     }
-    
+
     /**
      * Create a user on the first login.
      * @return The created user
@@ -105,13 +106,12 @@ public class UserService {
         Query query = new Query(Criteria.where("auth0Id").is(auth0UserId));
 
         Optional<User> user = queryService.find(query, User.class, false).stream().findFirst();
-        //If user doesn't exist in, create a new one
         if (user.isEmpty()) {
             return createUser();
         }
 
         logger.info("Found user with ID: {}", user.get().getId());
-        return user.get();
+        return resolveAvatarUrl(user.get());
     }
 
     /**
@@ -126,33 +126,80 @@ public class UserService {
         List<User> users = usersOpt.orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
 
         logger.info("Found {} users for scoreboard ID: {}", users.size(), scoreboardId);
-        return users;
+        return users.stream().map(this::resolveAvatarUrl).toList();
     }
 
     /**
-     * Update user information.
-     * @param userData Map containing the new user data
+     * Update user information (name and/or avatar).
+     * @param name Optional new display name
+     * @param avatar Optional avatar image file
      * @return The updated user
      */
     @Transactional
-    public User updateUser(Map <String, String> userData) {
+    public User updateUser(String name, MultipartFile avatar) {
         User user = currentUserContext.requireCurrentUser();
         logger.info("Updating user with ID: {}", user.getId());
 
-        String name = userData.get("name");
+        int maxNameLength = 15;
 
-        if (name.length() > 15) {
-            logger.error("User name cannot be longer than 15 characters");
-            throw new IllegalArgumentException("User name cannot be longer than 15 characters");
+        if (name != null) {
+            name = name.trim();
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("User name cannot be empty");
+            }
+            if (name.length() > maxNameLength) {
+                logger.error("User name cannot be longer than {} characters", maxNameLength);
+                throw new IllegalArgumentException("User name cannot be longer than 15 characters");
+            }
         }
 
-        Optional<User> updatedUserOpt = queryService.updateById(user.getId(), User.class, userToUpdate ->
-                userToUpdate.setName(name));
+        boolean hasAvatar = avatar != null && !avatar.isEmpty();
+
+        String previousAvatar = user.getAvatar();
+
+        String newAvatarUrl = null;
+        if (hasAvatar) {
+            String originalFilename = avatar.getOriginalFilename();
+            String extension = "";
+
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf('.'));
+            }
+
+            String keyName = "avatars/" + user.getId() + "/" + UUID.randomUUID() + extension;
+
+            try {
+                newAvatarUrl = s3Service.uploadFile(keyName, avatar);
+            } catch (Exception e) {
+                logger.error("Failed to upload avatar for user {}: {}", user.getId(), e.getMessage());
+                throw new RuntimeException("Failed to upload avatar image", e);
+            }
+        }
+
+        String finalName = name;
+        String finalNewAvatarUrl = newAvatarUrl;
+
+        Optional<User> updatedUserOpt = queryService.updateById(user.getId(), User.class, userToUpdate -> {
+            if (finalName != null) {
+                userToUpdate.setName(finalName);
+            }
+            if (finalNewAvatarUrl != null) {
+                userToUpdate.setAvatar(finalNewAvatarUrl);
+            }
+        });
 
         User updatedUser = updatedUserOpt.orElseThrow(() -> new RuntimeException("Failed to update user"));
 
+        if (hasAvatar && previousAvatar != null && !Objects.equals(previousAvatar, updatedUser.getAvatar())) {
+            try {
+                s3Service.deleteFile(previousAvatar);
+            } catch (Exception e) {
+                logger.warn("Failed to delete previous avatar for user {}: {}", user.getId(), e.getMessage());
+            }
+        }
+
         logger.info("Successfully updated user with ID: {}", updatedUser.getId());
-        return updatedUser;
+        return resolveAvatarUrl(updatedUser);
     }
 
     /**
@@ -171,6 +218,7 @@ public class UserService {
                 sb.getCreatedBy().equals(user.getId())).map(Scoreboard::getId).collect(Collectors.toSet());
 
         scoreboardService.deleteScoreboards(createdScoreboardsIds);
+        s3Service.deleteFile(user.getAvatar());
 
         User deletedUser = queryService.deleteById(user.getId(), User.class);
         logger.info("Successfully deleted user with ID: {}", deletedUser.getId());
@@ -204,5 +252,13 @@ public class UserService {
         logger.info("Resend timer for user with ID: {} is {} seconds", userId, remainingTime);
         return remainingTime;
     }
-}
 
+    private User resolveAvatarUrl(User user) {
+        if (user == null) {
+            return null;
+        }
+
+        user.setAvatar(s3Service.resolveUrl(user.getAvatar()));
+        return user;
+    }
+}

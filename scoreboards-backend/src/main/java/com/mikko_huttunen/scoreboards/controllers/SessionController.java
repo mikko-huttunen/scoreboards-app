@@ -54,20 +54,21 @@ public class SessionController {
     }
 
     /**
-     * Get all active sessions for a specific scoreboard.
+     * Get all pending or non-pending sessions for a specific scoreboard.
      * @param scoreboardId The scoreboard ID
      * @return ResponseEntity containing a list of sessions
      */
     @GetMapping("/scoreboard/{scoreboardId}")
     public ResponseEntity<List<Session>> getSessionsByScoreboardId(
-            @PathVariable String scoreboardId) {
-        logger.info("GET /api/sessions/scoreboard/{} - Fetching sessions", scoreboardId);
+            @PathVariable String scoreboardId,
+            @RequestParam(value = "isPending") Boolean isPending) {
+        logger.info("GET /api/sessions/scoreboard/{} - Fetching sessions (isPending: {})", scoreboardId, isPending);
 
-        List<Session> sessions = sessionService.getSessionsByScoreboardId(scoreboardId);
+        List<Session> sessions = sessionService.getSessionsByScoreboardId(scoreboardId, isPending);
 
         return ResponseEntity.status(HttpStatus.OK).body(sessions);
     }
-    
+
     /**
      * Get a session by ID.
      * @param id The session ID

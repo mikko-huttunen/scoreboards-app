@@ -20,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 type DataTableRow = Record<string, unknown>;
 
@@ -54,6 +55,7 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   pageSize?: number;
   onRowClick?: (row: T) => void;
   getRowId?: (row: T, index: number) => React.Key;
+  refresh?: () => Promise<void> | void;
 };
 
 const normalizeKey = (value: string) =>
@@ -132,8 +134,10 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   pageSize = 10,
   onRowClick,
   getRowId,
+  refresh,
 }: DataTableProps<T>) => {
   const [page, setPage] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const hasActions = canEdit || canDelete || canCustom;
 
@@ -152,11 +156,18 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
     setPage(newPage);
   };
 
-  const renderContent = () => {
+  return (
+    <Stack sx={{ width: '100%' }} spacing={2}>
+      {renderContent()}
+    </Stack>
+  );
+
+  function renderContent() {
     const isCreateDisabled =
       typeof disableCreate === 'function' ? disableCreate() : disableCreate;
     const isAddDisabled =
       typeof disableAdd === 'function' ? disableAdd() : disableAdd;
+
     return (
       <>
         {(title || canCreate || canAdd) && (
@@ -167,29 +178,62 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             sx={{ width: '100%' }}
           >
             {title ? (
-              showHighlight ? (
-                <Stack direction="row" alignItems="center" spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                {showHighlight ? (
+                  <Stack direction="row" alignItems="center" spacing={2}>
+                    <Typography variant="h6" sx={{ color: '#1b5e20' }}>
+                      {title}
+                    </Typography>
+                    {data.length > 0 && (
+                      <Badge
+                        badgeContent={data.length}
+                        color="success"
+                        sx={{
+                          '& .MuiBadge-badge': {
+                            backgroundColor: '#38a14f',
+                            color: '#fff',
+                          },
+                        }}
+                      />
+                    )}
+                  </Stack>
+                ) : (
                   <Typography variant="h6" sx={{ color: '#1b5e20' }}>
                     {title}
                   </Typography>
-                  {data.length > 0 && (
-                    <Badge
-                      badgeContent={data.length}
-                      color="success"
-                      sx={{
-                        '& .MuiBadge-badge': {
-                          backgroundColor: '#38a14f',
-                          color: '#fff',
-                        },
+                )}
+                {refresh && (
+                  <Tooltip title="Refresh">
+                    <span
+                      style={{
+                        marginLeft:
+                          showHighlight && data.length > 0 ? '10px' : '0',
                       }}
-                    />
-                  )}
-                </Stack>
-              ) : (
-                <Typography variant="h6" sx={{ color: '#1b5e20' }}>
-                  {title}
-                </Typography>
-              )
+                    >
+                      <IconButton
+                        onClick={async () => {
+                          if (isRefreshing) return;
+                          try {
+                            setIsRefreshing(true);
+                            await refresh();
+                          } finally {
+                            setIsRefreshing(false);
+                          }
+                        }}
+                        disabled={isLoading || isRefreshing}
+                        aria-label="refresh table"
+                        sx={{ color: '#38a14f' }}
+                      >
+                        {isRefreshing ? (
+                          <LoadingSpinner size={20} />
+                        ) : (
+                          <RefreshIcon />
+                        )}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
+              </Stack>
             ) : (
               <span />
             )}
@@ -422,16 +466,5 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
         </TableContainer>
       </>
     );
-  };
-
-  return (
-    <Stack
-      sx={{ width: '100%' }}
-      spacing={2}
-      border={showHighlight ? 'solid 3px greenyellow' : 'none'}
-      borderRadius={showHighlight ? '4px' : 'none'}
-    >
-      {renderContent()}
-    </Stack>
-  );
+  }
 };

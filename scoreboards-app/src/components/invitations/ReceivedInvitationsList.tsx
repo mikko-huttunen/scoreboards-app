@@ -10,6 +10,7 @@ type ReceivedInvitationsListProps = {
   onAcceptInvitation: (invitation: Invitation) => void;
   onDeleteInvitation: (invitation: Invitation) => void;
   isLoading: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const ReceivedInvitationsList: React.FC<
@@ -20,6 +21,7 @@ export const ReceivedInvitationsList: React.FC<
   onAcceptInvitation,
   onDeleteInvitation,
   isLoading,
+  onRefresh,
 }) => {
   const { format_date } = useDateFormat();
 
@@ -37,7 +39,7 @@ export const ReceivedInvitationsList: React.FC<
 
   return (
     <DataTable
-      title={'Scoreboard Invitations'}
+      title={'Invitations'}
       headers={['Scoreboard', 'From', 'Received']}
       data={data}
       showHighlight={invitations.length > 0}
@@ -49,6 +51,8 @@ export const ReceivedInvitationsList: React.FC<
       onCustomIcon={<CheckIcon />}
       customTooltip={'Accept'}
       isLoading={isLoading}
+      refresh={onRefresh}
+      emptyText="No invitations"
     />
   );
 };

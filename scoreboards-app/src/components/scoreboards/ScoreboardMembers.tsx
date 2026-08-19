@@ -20,6 +20,7 @@ type ScoreboardUsersProps = {
   onRemoveUser: (userId: string) => void;
   disableActions?: boolean;
   isLoading?: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
@@ -29,6 +30,7 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
   onRemoveUser,
   disableActions = false,
   isLoading = false,
+  onRefresh,
 }) => {
   const { user } = useCurrentUser();
   const [inviteUserModalOpen, setInviteUserModalOpen] = useState(false);
@@ -45,7 +47,7 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
   };
 
   const canAdd = () => {
-    return !disableActions || users.length < 10;
+    return !disableActions || users.length < 20;
   };
 
   const openInviteUserModal = () => {
@@ -163,6 +165,7 @@ export const ScoreboardMembers: React.FC<ScoreboardUsersProps> = ({
         emptyText="No users"
         pageSize={10}
         isLoading={isLoading}
+        refresh={onRefresh}
       />
     </>
   );

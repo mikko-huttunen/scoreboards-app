@@ -16,6 +16,7 @@ import { InvitationService } from '../../services/InvitationService.ts';
 import type { Invitation } from '../../types/Invitation.ts';
 import { PERMISSIONS } from '../../constants.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 type InviteUserModalProps = {
   open: boolean;
   onClose: (invitation: Invitation | null) => void;
@@ -32,6 +33,7 @@ export const InviteUserModal = ({
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [sessionsPermission, setSessionsPermission] = useState(false);
+  const { showSuccessMessage } = useMessageSnackbar();
 
   const handleSendInvitation = async () => {
     if (!scoreboardId || !inviteEmail.trim()) {
@@ -54,9 +56,8 @@ export const InviteUserModal = ({
       );
 
       setInviteSuccess(true);
-      setTimeout(() => {
-        handleClose(createdInvitation);
-      }, 1500);
+      handleClose(createdInvitation);
+      showSuccessMessage('Invitation sent successfully');
     } catch (err) {
       setInviteError(
         err instanceof Error ? err.message : 'Failed to send invitation'
