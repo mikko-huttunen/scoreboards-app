@@ -66,8 +66,8 @@ public class UserController {
      */
     @PutMapping(value = "/user", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<User> updateCurrentUser(
-            @RequestParam String name,
-            @RequestPart MultipartFile avatar
+            @RequestParam(required = false) String name,
+            @RequestPart(required = false) MultipartFile avatar
     ) {
         logger.info("PUT /api/users/user - Updating current user");
 

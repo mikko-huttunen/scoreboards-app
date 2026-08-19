@@ -90,6 +90,28 @@ class UserControllerTest {
     }
 
     @Test
+    void updateCurrentUser_withOnlyAvatar_returnsOk() {
+        User user = new User();
+        user.setId("user-1");
+        user.setName("ExistingName");
+
+        MultipartFile avatar = new MockMultipartFile(
+                "avatar",
+                "avatar.png",
+                "image/png",
+                new byte[]{1, 2, 3}
+        );
+
+        when(userService.updateUser(any(), any())).thenReturn(user);
+
+        ResponseEntity<User> response = userController.updateCurrentUser(null, avatar);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("ExistingName", response.getBody().getName());
+        verify(userService).updateUser(null, avatar);
+    }
+
+    @Test
     void deleteCurrentUser_returnsOk() {
         User user = new User();
         user.setId("user-1");
