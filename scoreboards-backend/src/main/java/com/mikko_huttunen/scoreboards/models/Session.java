@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.models;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -30,14 +31,25 @@ public class Session extends Auditable {
     @NotBlank(message = "Name cannot be blank")
     private String name;
 
-    @Field("comment")
-    private String comment;
+    @Field("description")
+    private String description;
 
     private String createdByName;
     
     @Field("isPending")
     @NotNull(message = "IsPending cannot be null")
     private Boolean isPending = false;
+
+    @Field("finishedAt")
+    @Indexed
+    private Date finishedAt;
+
+    /**
+     * When the session was last edited after it had already finished. Null while a finished
+     * session has never been edited.
+     */
+    @Field("editedAt")
+    private Date editedAt;
     
     @Field("participants")
     @NotEmpty(message = "Participants cannot be empty")
@@ -49,6 +61,19 @@ public class Session extends Auditable {
     
     @Field("resultEntries")
     private Set<String> resultEntries = new HashSet<>();
+
+    /**
+     * False while the session's top total points are shared by two or more participants and
+     * no tie breaker winner has been picked. True when there is no tie, or the tie was resolved.
+     */
+    @Field("isTieResolved")
+    private Boolean isTieResolved = true;
+
+    /**
+     * User ID of the participant chosen as the winner of a tie breaker. Null when no tie was broken.
+     */
+    @Field("tieWinner")
+    private String tieWinner;
 
     public String getId() {
         return id;
@@ -70,9 +95,9 @@ public class Session extends Auditable {
 
     public void setName(String name) { this.name = name; }
 
-    public String getComment() { return comment; }
+    public String getDescription() { return description; }
 
-    public void setComment(String comment) { this.comment = comment; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getCreatedByName() {
         return createdByName;
@@ -88,6 +113,22 @@ public class Session extends Auditable {
 
     public void setIsPending(Boolean isPending) {
         this.isPending = isPending;
+    }
+
+    public Date getFinishedAt() {
+        return finishedAt;
+    }
+
+    public void setFinishedAt(Date finishedAt) {
+        this.finishedAt = finishedAt;
+    }
+
+    public Date getEditedAt() {
+        return editedAt;
+    }
+
+    public void setEditedAt(Date editedAt) {
+        this.editedAt = editedAt;
     }
 
     public Set<String> getParticipants() {
@@ -114,6 +155,22 @@ public class Session extends Auditable {
         this.resultEntries = resultEntries;
     }
 
+    public Boolean getIsTieResolved() {
+        return isTieResolved;
+    }
+
+    public void setIsTieResolved(Boolean isTieResolved) {
+        this.isTieResolved = isTieResolved;
+    }
+
+    public String getTieWinner() {
+        return tieWinner;
+    }
+
+    public void setTieWinner(String tieWinner) {
+        this.tieWinner = tieWinner;
+    }
+
     @Override
     public String toString() {
         return "Session{" +
@@ -121,11 +178,15 @@ public class Session extends Auditable {
                 ", type='" + getType() + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", name='" + name + '\'' +
-                ", comment='" + comment + '\'' +
+                ", description='" + description + '\'' +
                 ", isPending=" + isPending +
+                ", finishedAt='" + finishedAt + '\'' +
+                ", editedAt='" + editedAt + '\'' +
                 ", participants=" + participants +
                 ", pointCategories=" + pointCategories +
                 ", resultEntries=" + resultEntries +
+                ", isTieResolved=" + isTieResolved +
+                ", tieWinner='" + tieWinner + '\'' +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

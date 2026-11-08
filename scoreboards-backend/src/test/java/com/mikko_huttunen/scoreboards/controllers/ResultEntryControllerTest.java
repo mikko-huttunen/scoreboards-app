@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -105,7 +106,7 @@ class ResultEntryControllerTest {
     void deleteResultEntry_returnsOk() {
         ResultEntry deleted = new ResultEntry();
         deleted.setId("re-1");
-        when(resultEntryService.deleteResultEntry("re-1")).thenReturn(deleted);
+        when(resultEntryService.deleteResultEntries(Set.of("re-1"))).thenReturn(List.of(deleted));
 
         ResponseEntity<ResultEntry> response = resultEntryController.deleteResultEntry("re-1");
 

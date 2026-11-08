@@ -1,5 +1,13 @@
 package com.mikko_huttunen.scoreboards.dtos;
 
+import com.mikko_huttunen.scoreboards.models.Result;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -7,44 +15,89 @@ import java.util.Set;
  */
 public class UpdateSessionDTO {
 
-    private Boolean isPending;
-    
-    private Set<String> participants;
-    
-    private Set<String> pointCategories;
+    private String name;
 
-    private Set<String> resultEntries;
+    private String description;
 
-    public Boolean getPending() {
-        return isPending;
+    /**
+     * User ID of the tie breaker winner. Null leaves the current winner untouched, an empty
+     * string clears it and reopens the tie.
+     */
+    private String tieWinner;
+
+    @Valid
+    @NotNull(message = "Result entries cannot be null")
+    private List<ResultEntryUpdateDTO> resultEntries = new ArrayList<>();
+
+    public String getName() {
+        return name;
     }
 
-    public void setPending(Boolean pending) {
-        isPending = pending;
+    public void setName(String name) {
+        this.name = name;
     }
 
-    public Set<String> getParticipants() {
-        return participants;
+    public String getDescription() {
+        return description;
     }
 
-    public void setParticipants(Set<String> participants) {
-        this.participants = participants;
+    public void setDescription(String description) {
+        this.description = description;
     }
 
-    public Set<String> getPointCategories() {
-        return pointCategories;
+    public String getTieWinner() {
+        return tieWinner;
     }
 
-    public void setPointCategories(Set<String> pointCategories) {
-        this.pointCategories = pointCategories;
+    public void setTieWinner(String tieWinner) {
+        this.tieWinner = tieWinner;
     }
 
-    public Set<String> getResultEntries() {
+    public List<ResultEntryUpdateDTO> getResultEntries() {
         return resultEntries;
     }
 
-    public void setResultEntries(Set<String> resultEntries) {
+    public void setResultEntries(List<ResultEntryUpdateDTO> resultEntries) {
         this.resultEntries = resultEntries;
     }
-}
 
+    /**
+     * DTO for updating an existing result entry within a session.
+     */
+    public static class ResultEntryUpdateDTO {
+
+        @NotBlank(message = "Result entry ID cannot be blank")
+        private String id;
+
+        @NotBlank(message = "User ID cannot be blank")
+        private String userId;
+
+        @Valid
+        @NotNull(message = "Results cannot be null")
+        private Set<Result> results = new HashSet<>();
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public Set<Result> getResults() {
+            return results;
+        }
+
+        public void setResults(Set<Result> results) {
+            this.results = results;
+        }
+    }
+}

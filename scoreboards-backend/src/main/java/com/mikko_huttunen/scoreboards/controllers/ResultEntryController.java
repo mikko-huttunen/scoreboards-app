@@ -115,7 +115,7 @@ public class ResultEntryController {
     public ResponseEntity<ResultEntry> deleteResultEntry(@PathVariable String id) {
         logger.info("DELETE /api/result-entries/{} - Deleting result entry", id);
 
-        ResultEntry deleted = resultEntryService.deleteResultEntry(id);
+        ResultEntry deleted = resultEntryService.deleteResultEntries(Set.of(id)).getFirst();
 
         return ResponseEntity.status(HttpStatus.OK).body(deleted);
     }

@@ -8,7 +8,10 @@ import { ScoreboardsService } from '../../services/ScoreboardService';
 import { useEffect, useState } from 'react';
 import type { Scoreboard } from '../../types/Scoreboard';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
-import type { PointCategory } from '../../types/PointCategory.ts';
+import {
+  type PointCategory,
+  sortPointCategoriesByIndex,
+} from '../../types/PointCategory.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 
@@ -51,7 +54,9 @@ export const EditScoreboard: React.FC = () => {
 
         setScoreboard(scoreboardData);
 
-        setPointCategories(scoreboardData!.pointCategories);
+        setPointCategories(
+          sortPointCategoriesByIndex(scoreboardData!.pointCategories)
+        );
       } catch (err) {
         showErrorMessage('Failed to load scoreboard');
         navigate('/scoreboards');

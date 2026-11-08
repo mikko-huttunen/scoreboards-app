@@ -12,10 +12,10 @@ import {
   Stack,
   Box,
 } from '@mui/material';
-import SportsScoreIcon from '@mui/icons-material/SportsScore';
 import PersonIcon from '@mui/icons-material/Person';
 import { useLocation, useNavigate } from 'react-router-dom';
 import logo from '../../resources/scoreboards_logo_black.png';
+import { Leaderboard } from '@mui/icons-material';
 
 const DrawerContext = createContext<{
   drawerOpen: boolean;
@@ -67,7 +67,7 @@ export const Navigation: React.FC = () => {
                 onClick={() => navigate('/scoreboards')}
               >
                 <ListItemIcon>
-                  <SportsScoreIcon
+                  <Leaderboard
                     sx={{
                       color:
                         location.pathname === '/scoreboards'
@@ -125,7 +125,7 @@ export const Navigation: React.FC = () => {
             <BottomNavigationAction
               label="Scoreboards"
               value="/scoreboards"
-              icon={<SportsScoreIcon />}
+              icon={<Leaderboard />}
               onClick={() => navigate('/scoreboards')}
               sx={{ color: '#ffffff' }}
             />

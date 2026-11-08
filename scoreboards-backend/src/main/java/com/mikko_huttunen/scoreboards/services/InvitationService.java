@@ -1,5 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.Constants;
+import com.mikko_huttunen.scoreboards.enums.HistoryAction;
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.Invitation;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
 
 /**
@@ -28,16 +31,18 @@ public class InvitationService {
     private final ScoreboardService scoreboardService;
     private final CurrentUserContext currentUserContext;
     private final UserRepository userRepository;
+    private final HistoryEventService historyEventService;
     
     @Autowired
     public InvitationService(QueryService queryService,
                              ScoreboardService scoreboardService,
                              CurrentUserContext currentUserContext,
-                             UserRepository userRepository) {
+                             UserRepository userRepository, HistoryEventService historyEventService) {
         this.queryService = queryService;
         this.scoreboardService = scoreboardService;
         this.currentUserContext = currentUserContext;
         this.userRepository = userRepository;
+        this.historyEventService = historyEventService;
     }
     
     /**
@@ -97,6 +102,15 @@ public class InvitationService {
         invitation.setPermissions(permissions);
 
         Invitation createdInvitation = queryService.create(invitation);
+
+        historyEventService.createHistoryEvent(
+                scoreboardId,
+                HistoryAction.CREATE,
+                Constants.Types.INVITATION,
+                createdInvitation.getId(),
+                null,
+                Map.of("invitation", "Invitation to " + receiver.getName() + " (" + receiver.getId() + ")")
+        );
 
         //Inviter name can change, so we do not save it in the invitation document in database but add it afterward
         createdInvitation.setReceiverName(receiver.getName());
@@ -172,11 +186,25 @@ public class InvitationService {
 
         queryService.create(membership);
 
-        //Delete invitation after it's accepted
-        Invitation deletedInvitation = deleteInvitations(Set.of(invitationId)).get(0);
+        historyEventService.createHistoryEvent(
+                invitation.getScoreboardId(),
+                HistoryAction.JOIN,
+                Constants.Types.USER,
+                receiver.getId(),
+                receiver.getName(),
+                Collections.emptyMap()
+        );
 
-        logger.info("Successfully accepted invitation {}", deletedInvitation.getId());
-        return deletedInvitation;
+        //Set invitation accepted
+        Invitation acceptedInvitation = queryService.updateById(invitation.getId(), Invitation.class, inv -> {
+            inv.setAcceptedDate(new Date());
+            inv.setIsActive(false);
+        }).orElseThrow(() -> new IllegalArgumentException("Invitation not found"));
+
+        //Invitation deletedInvitation = deleteInvitations(Set.of(invitationId)).getFirst();
+
+        logger.info("Successfully accepted invitation {}", acceptedInvitation.getId());
+        return acceptedInvitation;
     }
     
     /**
@@ -189,6 +217,15 @@ public class InvitationService {
         logger.info("Deleting invitations {}", ids);
 
         List<Invitation> deletedInvitations = queryService.deleteAll(ids, Invitation.class);
+
+        deletedInvitations.forEach(invitation -> historyEventService.createHistoryEvent(
+                invitation.getScoreboardId(),
+                HistoryAction.DELETE,
+                Constants.Types.INVITATION,
+                invitation.getId(),
+                null,
+                Map.of("invitation", "Invitation to " + invitation.getReceiverId())
+        ));
 
         logger.info("Successfully deleted invitations: {}", deletedInvitations);
         return deletedInvitations;

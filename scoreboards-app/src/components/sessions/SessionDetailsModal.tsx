@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -6,6 +6,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Stack,
   Typography,
 } from '@mui/material';
 import type { Session } from '../../types/Session.ts';
@@ -19,6 +20,13 @@ import {
 } from '../common/charts/ScoreBarChart.tsx';
 import { useDateFormat } from '../../utils/Utils.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { CommentSection } from '../comments/CommentSection.tsx';
+import type { Comment } from '../../types/Comment.ts';
+import {
+  getSessionTotalsByUserId,
+  getSessionWinnerIds,
+  getTopScorerIds,
+} from '../../utils/TieBreaker.ts';
 
 type SessionDetailsModalProps = {
   open: boolean;
@@ -27,6 +35,11 @@ type SessionDetailsModalProps = {
   users: User[];
   pointCategories: PointCategory[];
   resultEntries: ResultEntry[];
+  comments: Comment[];
+  onCreateComment: (sessionId: string, comment: string) => Promise<void>;
+  onDeleteComment: (commentId: string) => Promise<void>;
+  onRefreshComments?: () => Promise<void> | void;
+  isScoreboardOwner: boolean;
 };
 
 export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
@@ -36,6 +49,11 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   users,
   pointCategories,
   resultEntries,
+  comments,
+  onCreateComment,
+  onDeleteComment,
+  onRefreshComments,
+  isScoreboardOwner,
 }) => {
   const { format_date } = useDateFormat();
 
@@ -48,9 +66,9 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   }, [users]);
 
   const usedPointCategories = useMemo(() => {
-    return pointCategories.filter((pc) =>
-      Array.from(session.pointCategories).includes(pc.id)
-    );
+    return pointCategories
+      .filter((pc) => Array.from(session.pointCategories).includes(pc.id))
+      .sort((a, b) => a.index - b.index);
   }, [pointCategories, session.pointCategories]);
 
   const series: ScoreBarSeries[] = useMemo(
@@ -124,11 +142,61 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
     return rows;
   }, [resultEntries, session.id, users, avatarByName, usedPointCategories]);
 
+  const nameForUserId = useCallback(
+    (userId: string) => {
+      const u = users.find((candidate) => candidate.id === userId);
+      return u?.name || u?.email || '[Removed user]';
+    },
+    [users]
+  );
+
+  // A tie settled by the tie breaker has a single winner; an unresolved or split tie keeps every
+  // tied player a winner. Either way the chart crowns exactly these players.
+  const winnerIds = useMemo(
+    () => getSessionWinnerIds(session, resultEntries ?? [], session.id),
+    [session, resultEntries]
+  );
+
+  const winnerNames = useMemo(
+    () => winnerIds.map(nameForUserId),
+    [winnerIds, nameForUserId]
+  );
+
+  // A tie is called out either way: unresolved so it is clear the win is still shared, resolved
+  // so the single crown on the chart is explained rather than looking like an outright win.
+  const tieStatus = useMemo(() => {
+    const totals = getSessionTotalsByUserId(
+      resultEntries ?? [],
+      session.id,
+      new Set(Array.from(session.participants ?? []))
+    );
+
+    const topScorerIds = getTopScorerIds(totals);
+    if (topScorerIds.length <= 1) return null;
+
+    const points = totals.get(topScorerIds[0]) ?? 0;
+    const tieWinner = session.tieWinner;
+
+    if (tieWinner && topScorerIds.includes(tieWinner)) {
+      return {
+        resolved: true,
+        title: '🏆 Tie resolved',
+        text: `${nameForUserId(tieWinner)} won the tie breaker.`,
+      };
+    }
+
+    return {
+      resolved: false,
+      title: '⚖️ Unresolved tie',
+      text: `Tie at ${points} points.`,
+    };
+  }, [session, resultEntries, nameForUserId]);
+
   const hasEnoughData =
     open && !!session && !!users?.length && !!pointCategories?.length;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen>
       <DialogTitle>
         {`${session?.name} - Session Results`}
         {session?.created && (
@@ -136,8 +204,18 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             {format_date(session.created)}
           </Typography>
         )}
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'text.secondary',
+            wordBreak: 'break-word',
+            mt: 0.5,
+          }}
+        >
+          {`ID: ${session?.id}`}
+        </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-          {session?.comment}
+          {session?.description}
         </Typography>
       </DialogTitle>
 
@@ -151,18 +229,63 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             <LoadingSpinner />
           </Box>
         ) : (
-          <ScoreBarChart
-            loading={false}
-            data={chartData}
-            barTitle="Points"
-            direction="vertical"
-            series={series}
-            animationDurationMs={200}
-            showAvatars
-            legendToggleEnabled
-            pagination
-            pageSize={10}
-          />
+          <Stack spacing={3}>
+            {tieStatus && (
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.5,
+                  borderRadius: 3,
+                  background: tieStatus.resolved
+                    ? 'linear-gradient(135deg, rgba(232,245,233,0.95) 0%, rgba(241,248,242,1) 100%)'
+                    : 'linear-gradient(135deg, rgba(255,237,213,0.95) 0%, rgba(255,243,224,1) 100%)',
+                  border: tieStatus.resolved
+                    ? '1px solid rgba(56,161,79,0.32)'
+                    : '1px solid rgba(255,179,0,0.32)',
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    fontWeight: 800,
+                    color: tieStatus.resolved ? '#1b5e20' : '#8a5a00',
+                  }}
+                >
+                  {tieStatus.title}
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {tieStatus.text}
+                </Typography>
+              </Box>
+            )}
+
+            <ScoreBarChart
+              loading={false}
+              data={chartData}
+              barTitle="Points"
+              direction="vertical"
+              series={series}
+              animationDurationMs={200}
+              leaderLabels={winnerNames}
+              showAvatars
+              legendToggleEnabled
+              pagination
+              pageSize={10}
+            />
+
+            <CommentSection
+              title="Comments"
+              comments={comments}
+              isScoreboardOwner={isScoreboardOwner}
+              maxLength={100}
+              placeholder="Add a comment to this session..."
+              onCreateComment={(comment) =>
+                onCreateComment(session.id, comment)
+              }
+              onDeleteComment={onDeleteComment}
+              refresh={onRefreshComments}
+            />
+          </Stack>
         )}
       </DialogContent>
 

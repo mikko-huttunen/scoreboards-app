@@ -22,6 +22,7 @@ public class SchemaInitializer {
             applySchema(mongoTemplate, "Session", createSessionSchema());
             applySchema(mongoTemplate, "PointCategory", createPointCategorySchema());
             applySchema(mongoTemplate, "ResultEntry", createResultEntrySchema());
+            applySchema(mongoTemplate, "Comment", createCommentSchema());
         };
     }
 
@@ -35,7 +36,7 @@ public class SchemaInitializer {
                 .append("validator", new Document("$jsonSchema", schema))
                 .append("validationLevel", "strict")
                 .append("validationAction", "error");
-        
+
         try {
             db.runCommand(command);
             System.out.println("Applied JSON schema validation to collection: " + collectionName);
@@ -64,13 +65,21 @@ public class SchemaInitializer {
 
     private Document createScoreboardSchema() {
         return new Document("bsonType", "object")
-                .append("required", Arrays.asList("name", "memberships", "pointCategories", "isActive"))
+                .append("required", Arrays.asList("name", "memberships", "pointCategories", "settings", "isActive"))
                 .append("properties", new Document()
                         .append("name", new Document("bsonType", "string"))
                         .append("memberships", new Document("bsonType", "array"))
                         .append("pointCategories", new Document("bsonType", "array"))
                         .append("sessions", new Document("bsonType", "array"))
                         .append("resultEntries", new Document("bsonType", "array"))
+                        .append("settings", new Document("bsonType", "object")
+                                .append("required", Arrays.asList("statTypes", "defaultStatType"))
+                                .append("properties", new Document()
+                                        .append("statTypes", new Document("bsonType", "array")
+                                                .append("minItems", 1)
+                                                .append("items", new Document("enum", Arrays.asList("TOTAL", "AVERAGE"))))
+                                        .append("defaultStatType", new Document("bsonType", "string")
+                                                .append("enum", Arrays.asList("TOTAL", "AVERAGE")))))
                         .append("isActive", new Document("bsonType", "bool"))
                         .append("type", new Document("bsonType", "string"))
                         .append("created", new Document("bsonType", "date"))
@@ -121,15 +130,19 @@ public class SchemaInitializer {
                 .append("properties", new Document()
                         .append("scoreboardId", new Document("bsonType", "string"))
                         .append("name", new Document("bsonType", "string"))
-                        .append("comment", new Document("bsonType", "string"))
+                        .append("description", new Document("bsonType", "string"))
                         .append("createdByName", new Document("bsonType", "string"))
                         .append("isPending", new Document("bsonType", "bool"))
+                        .append("finishedAt", new Document("bsonType", Arrays.asList("date", "null")))
+                        .append("editedAt", new Document("bsonType", Arrays.asList("date", "null")))
                         .append("participants", new Document("bsonType", "array")
                                 .append("items", new Document("bsonType", "string")))
                         .append("pointCategories", new Document("bsonType", "array")
                                 .append("items", new Document("bsonType", "string")))
                         .append("resultEntries", new Document("bsonType", "array")
                                 .append("items", new Document("bsonType", "string")))
+                        .append("isTieResolved", new Document("bsonType", "bool"))
+                        .append("tieWinner", new Document("bsonType", Arrays.asList("string", "null")))
                         .append("isActive", new Document("bsonType", "bool"))
                         .append("type", new Document("bsonType", "string"))
                         .append("created", new Document("bsonType", "date"))
@@ -170,6 +183,23 @@ public class SchemaInitializer {
                                                 .append("points", new Document("bsonType", "double"))
                                         )))
                         .append("totalPoints", new Document("bsonType", "double"))
+                        .append("isActive", new Document("bsonType", "bool"))
+                        .append("type", new Document("bsonType", "string"))
+                        .append("created", new Document("bsonType", "date"))
+                        .append("lastModified", new Document("bsonType", "date"))
+                        .append("createdBy", new Document("bsonType", "string"))
+                );
+    }
+
+    private Document createCommentSchema() {
+        return new Document("bsonType", "object")
+                .append("required", Arrays.asList("scoreboardId", "userId", "comment", "isActive"))
+                .append("properties", new Document()
+                        .append("scoreboardId", new Document("bsonType", "string"))
+                        .append("userId", new Document("bsonType", "string"))
+                        .append("username", new Document("bsonType", Arrays.asList("string", "null")))
+                        .append("sessionId", new Document("bsonType", Arrays.asList("string", "null")))
+                        .append("comment", new Document("bsonType", "string"))
                         .append("isActive", new Document("bsonType", "bool"))
                         .append("type", new Document("bsonType", "string"))
                         .append("created", new Document("bsonType", "date"))

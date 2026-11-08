@@ -4,6 +4,10 @@ import {
   Box,
   Button,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -19,10 +23,33 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 type DataTableRow = Record<string, unknown>;
+
+// One row action, rendered either as an icon button or as an entry in the overflow menu.
+type RowAction = {
+  key: string;
+  label: string;
+  ariaLabel: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+  onClick: () => void;
+};
+
+// Beyond this many actions the icons are collapsed behind a single overflow button, so the
+// column cannot keep growing wider as actions are added.
+const MAX_INLINE_ACTIONS = 3;
+
+// Tight hit area and a smaller glyph than the default, which keeps the actions column narrow.
+// The descendant selector also covers caller supplied custom icons.
+const ACTION_ICON_BUTTON_SX = {
+  color: '#38a14f',
+  p: 0.25,
+  '& .MuiSvgIcon-root': { fontSize: 18 },
+};
 
 export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   headers: string[];
@@ -53,6 +80,10 @@ export type DataTableProps<T extends DataTableRow = DataTableRow> = {
   onCustomIcon?: React.ReactNode;
   customTooltip?: string;
   pageSize?: number;
+  page?: number;
+  totalCount?: number;
+  serverPagination?: boolean;
+  onPageChange?: (page: number) => void;
   onRowClick?: (row: T) => void;
   getRowId?: (row: T, index: number) => React.Key;
   refresh?: () => Promise<void> | void;
@@ -132,28 +163,46 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
   onCustomIcon,
   customTooltip,
   pageSize = 10,
+  page,
+  totalCount,
+  serverPagination = false,
+  onPageChange,
   onRowClick,
   getRowId,
   refresh,
 }: DataTableProps<T>) => {
-  const [page, setPage] = useState(0);
+  const [internalPage, setInternalPage] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [actionsMenu, setActionsMenu] = useState<{
+    anchorEl: HTMLElement;
+    row: T;
+  } | null>(null);
 
   const hasActions = canEdit || canDelete || canCustom;
+  const currentPage = serverPagination ? (page ?? 0) : internalPage;
+  const paginationCount = serverPagination
+    ? (totalCount ?? data.length)
+    : data.length;
 
   const visibleRows = useMemo(() => {
-    if (pageSize <= 0) {
+    if (serverPagination || pageSize <= 0) {
       return data;
     }
 
-    const start = page * pageSize;
+    const start = currentPage * pageSize;
     return data.slice(start, start + pageSize);
-  }, [data, page, pageSize]);
+  }, [currentPage, data, pageSize, serverPagination]);
 
   const columnCount = headers.length + (hasActions ? 1 : 0);
 
   const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
+    if (serverPagination) {
+      onPageChange?.(newPage);
+      return;
+    }
+
+    setInternalPage(newPage);
+    onPageChange?.(newPage);
   };
 
   return (
@@ -161,6 +210,59 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
       {renderContent()}
     </Stack>
   );
+
+  // The actions a single row offers, in the order they have always been shown.
+  function getRowActions(row: T): RowAction[] {
+    const actions: RowAction[] = [];
+
+    const showEdit = typeof canEdit === 'function' ? canEdit(row) : canEdit;
+    const showDelete =
+      typeof canDelete === 'function' ? canDelete(row) : canDelete;
+    const showCustom =
+      typeof canCustom === 'function' ? canCustom(row) : canCustom;
+
+    if (showEdit) {
+      actions.push({
+        key: 'edit',
+        label: editTooltip ?? 'Edit',
+        ariaLabel: 'edit row',
+        icon: <EditIcon />,
+        disabled:
+          typeof disableEdit === 'function' ? disableEdit(row) : disableEdit,
+        onClick: () => onEdit?.(row),
+      });
+    }
+
+    if (showDelete) {
+      actions.push({
+        key: 'delete',
+        label: deleteTooltip ?? 'Delete',
+        ariaLabel: 'delete row',
+        icon: <DeleteIcon />,
+        disabled:
+          typeof disableDelete === 'function'
+            ? disableDelete(row)
+            : disableDelete,
+        onClick: () => onDelete?.(row),
+      });
+    }
+
+    if (showCustom) {
+      actions.push({
+        key: 'custom',
+        label: customTooltip ?? 'Action',
+        ariaLabel: 'custom row action',
+        icon: onCustomIcon ?? <EditIcon />,
+        disabled:
+          typeof disableCustom === 'function'
+            ? disableCustom(row)
+            : disableCustom,
+        onClick: () => onCustom?.(row),
+      });
+    }
+
+    return actions;
+  }
 
   function renderContent() {
     const isCreateDisabled =
@@ -323,29 +425,9 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                     ? getRowId(row, index)
                     : ((row.id as React.Key | undefined) ?? index);
 
-                  const showEdit =
-                    typeof canEdit === 'function' ? canEdit(row) : canEdit;
-                  const showDelete =
-                    typeof canDelete === 'function'
-                      ? canDelete(row)
-                      : canDelete;
-                  const showCustom =
-                    typeof canCustom === 'function'
-                      ? canCustom(row)
-                      : canCustom;
-
-                  const isEditDisabled =
-                    typeof disableEdit === 'function'
-                      ? disableEdit(row)
-                      : disableEdit;
-                  const isDeleteDisabled =
-                    typeof disableDelete === 'function'
-                      ? disableDelete(row)
-                      : disableDelete;
-                  const isCustomDisabled =
-                    typeof disableCustom === 'function'
-                      ? disableCustom(row)
-                      : disableCustom;
+                  const rowActions = getRowActions(row);
+                  const collapseActions =
+                    rowActions.length > MAX_INLINE_ACTIONS;
 
                   return (
                     <TableRow
@@ -368,10 +450,15 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                       ))}
 
                       {hasActions && (
-                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        <TableCell
+                          align="right"
+                          // The 1% width shrinks the column to its content, leaving the rest of
+                          // the table width to the data columns.
+                          sx={{ whiteSpace: 'nowrap', px: 1, width: '1%' }}
+                        >
                           <Stack
                             direction="row"
-                            spacing={0}
+                            spacing={0.25}
                             justifyContent="flex-end"
                             flexWrap="nowrap"
                             sx={{
@@ -379,68 +466,43 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
                               alignItems: 'center',
                             }}
                           >
-                            {hasActions ? (
-                              <>
-                                {showEdit && (
-                                  <Tooltip title={editTooltip ?? 'Edit'}>
-                                    <span>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          onEdit?.(row);
-                                        }}
-                                        disabled={isEditDisabled}
-                                        aria-label="edit row"
-                                        sx={{ color: '#38a14f' }}
-                                      >
-                                        <EditIcon fontSize="small" />
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                )}
-
-                                {showDelete && (
-                                  <Tooltip title={deleteTooltip ?? 'Delete'}>
-                                    <span>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          onDelete?.(row);
-                                        }}
-                                        disabled={isDeleteDisabled}
-                                        aria-label="delete row"
-                                        sx={{ color: '#38a14f' }}
-                                      >
-                                        <DeleteIcon />
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                )}
-
-                                {showCustom && (
-                                  <Tooltip title={customTooltip ?? null}>
-                                    <span>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          onCustom?.(row);
-                                        }}
-                                        disabled={isCustomDisabled}
-                                        aria-label="custom row action"
-                                        sx={{ color: '#38a14f' }}
-                                      >
-                                        {onCustomIcon ?? (
-                                          <EditIcon fontSize="small" />
-                                        )}
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                )}
-                              </>
-                            ) : null}
+                            {collapseActions ? (
+                              <Tooltip title="Actions">
+                                <IconButton
+                                  size="small"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setActionsMenu({
+                                      anchorEl: event.currentTarget,
+                                      row,
+                                    });
+                                  }}
+                                  aria-label="row actions"
+                                  sx={ACTION_ICON_BUTTON_SX}
+                                >
+                                  <MoreVertIcon />
+                                </IconButton>
+                              </Tooltip>
+                            ) : (
+                              rowActions.map((action) => (
+                                <Tooltip key={action.key} title={action.label}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        action.onClick();
+                                      }}
+                                      disabled={action.disabled}
+                                      aria-label={action.ariaLabel}
+                                      sx={ACTION_ICON_BUTTON_SX}
+                                    >
+                                      {action.icon}
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              ))
+                            )}
                           </Stack>
                         </TableCell>
                       )}
@@ -451,12 +513,12 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             </TableBody>
           </Table>
 
-          {!isLoading && pageSize > 0 && data.length > pageSize && (
+          {!isLoading && pageSize > 0 && paginationCount > pageSize && (
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <TablePagination
                 component="div"
-                count={data.length}
-                page={page}
+                count={paginationCount}
+                page={currentPage}
                 onPageChange={handleChangePage}
                 rowsPerPage={pageSize}
                 rowsPerPageOptions={[pageSize]}
@@ -464,6 +526,32 @@ export const DataTable = <T extends DataTableRow = DataTableRow>({
             </Box>
           )}
         </TableContainer>
+
+        {/* Shared by every collapsed row; the row it was opened from is held in state. */}
+        <Menu
+          anchorEl={actionsMenu?.anchorEl ?? null}
+          open={!!actionsMenu}
+          onClose={() => setActionsMenu(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          {(actionsMenu ? getRowActions(actionsMenu.row) : []).map((action) => (
+            <MenuItem
+              key={action.key}
+              disabled={action.disabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                setActionsMenu(null);
+                action.onClick();
+              }}
+            >
+              <ListItemIcon sx={{ color: '#38a14f', minWidth: 32 }}>
+                {action.icon}
+              </ListItemIcon>
+              <ListItemText primary={action.label} />
+            </MenuItem>
+          ))}
+        </Menu>
       </>
     );
   }

@@ -2,6 +2,7 @@ import type { Membership } from './Membership.ts';
 import type { PointCategory } from './PointCategory.ts';
 import type { ResultEntry } from './ResultEntry.ts';
 import type { Session } from './Session.ts';
+import type { ScoreboardSettings } from './ScoreboardSettings.ts';
 
 export type Scoreboard = {
   id: string;
@@ -11,6 +12,7 @@ export type Scoreboard = {
   pointCategories: PointCategory[];
   sessions: Session[];
   resultEntries: ResultEntry[];
+  settings: ScoreboardSettings;
   created: Date;
   lastModified: Date;
   createdBy: string;
@@ -26,6 +28,7 @@ export const Scoreboard = {
     pointCategories: data.pointCategories,
     sessions: data.sessions,
     resultEntries: data.resultEntries,
+    settings: data.settings,
     created: data.created,
     lastModified: data.lastModified,
     createdBy: data.createdBy,

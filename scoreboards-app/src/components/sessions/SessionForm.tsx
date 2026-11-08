@@ -8,6 +8,7 @@ import {
   Stack,
   Typography,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -30,6 +31,23 @@ import type { Scoreboard } from '../../types/Scoreboard.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import {
+  MAX_SESSION_DESCRIPTION_LENGTH,
+  MAX_SESSION_NAME_LENGTH,
+  MAX_SESSION_PARTICIPANTS,
+  MIN_SESSION_PARTICIPANTS,
+} from '../../constants.ts';
+
+// Keeps the participant dropdown to roughly six rows instead of growing with the member count.
+// Phones get a share of the viewport so the list never runs past the bottom of the screen.
+const PARTICIPANT_MENU_PROPS = {
+  PaperProps: {
+    sx: {
+      maxHeight: { xs: '45vh', sm: 320 },
+      overflowY: 'auto',
+    },
+  },
+};
 
 type SessionFormProps = {
   open: boolean;
@@ -39,9 +57,6 @@ type SessionFormProps = {
   pointCategories?: PointCategory[];
   onSuccess?: (session: Session) => void;
 };
-
-const SESSION_NAME_MAX_LENGTH = 20;
-const SESSION_COMMENT_MAX_LENGTH = 50;
 
 export const SessionForm: React.FC<SessionFormProps> = ({
   open,
@@ -64,7 +79,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const { showSuccessMessage } = useMessageSnackbar();
 
   const [name, setName] = useState<string>('');
-  const [comment, setComment] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
 
   useEffect(() => {
     if (open && scoreboard && user) {
@@ -80,9 +95,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
           setSelectedParticipants(new Set());
 
           const defaultName = `Session ${scoreboard.sessions.length + 1}`;
-          setName(defaultName.slice(0, SESSION_NAME_MAX_LENGTH));
+          setName(defaultName.slice(0, MAX_SESSION_NAME_LENGTH));
 
-          setComment('');
+          setDescription('');
         } catch (err) {
           console.error('Error loading point categories:', err);
           setError(
@@ -100,10 +115,25 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       setSelectedParticipants(new Set());
       setSelectedPointCategories(new Set());
       setName('');
-      setComment('');
+      setDescription('');
       setError(null);
     }
   }, [open, scoreboard, user, users, pointCategories]);
+
+  const participantsAtCap =
+    selectedParticipants.size >= MAX_SESSION_PARTICIPANTS;
+
+  const handleParticipantsChange = (selectedUserIds: string[]) => {
+    // The menu items are disabled at the cap, so this only catches the odd keyboard selection.
+    if (selectedUserIds.length > MAX_SESSION_PARTICIPANTS) {
+      setError(
+        `A session can have at most ${MAX_SESSION_PARTICIPANTS} participants`
+      );
+      return;
+    }
+
+    setSelectedParticipants(new Set(selectedUserIds));
+  };
 
   const handlePointCategoryToggle = (categoryId: string) => {
     setSelectedPointCategories((prev) => {
@@ -128,15 +158,15 @@ export const SessionForm: React.FC<SessionFormProps> = ({
       setError('Name cannot be empty');
       return;
     }
-    if (trimmedName.length > SESSION_NAME_MAX_LENGTH) {
-      setError(`Name must be at most ${SESSION_NAME_MAX_LENGTH} characters`);
+    if (trimmedName.length > MAX_SESSION_NAME_LENGTH) {
+      setError(`Name must be at most ${MAX_SESSION_NAME_LENGTH} characters`);
       return;
     }
 
-    const trimmedComment = comment.trim();
-    if (trimmedComment.length > SESSION_COMMENT_MAX_LENGTH) {
+    const trimmedDescription = description.trim();
+    if (trimmedDescription.length > MAX_SESSION_DESCRIPTION_LENGTH) {
       setError(
-        `Comment must be at most ${SESSION_COMMENT_MAX_LENGTH} characters`
+        `Description must be at most ${MAX_SESSION_DESCRIPTION_LENGTH} characters`
       );
       return;
     }
@@ -147,8 +177,17 @@ export const SessionForm: React.FC<SessionFormProps> = ({
     }
 
     // Require at least 2 participants (creator is not mandatory)
-    if (selectedParticipants.size < 2) {
-      setError('At least 2 participants are required');
+    if (selectedParticipants.size < MIN_SESSION_PARTICIPANTS) {
+      setError(
+        `At least ${MIN_SESSION_PARTICIPANTS} participants are required`
+      );
+      return;
+    }
+
+    if (selectedParticipants.size > MAX_SESSION_PARTICIPANTS) {
+      setError(
+        `A session can have at most ${MAX_SESSION_PARTICIPANTS} participants`
+      );
       return;
     }
 
@@ -158,7 +197,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
     try {
       const sessionData: CreateSessionData = {
         name: trimmedName,
-        comment: trimmedComment, // optional; empty string is fine
+        description: trimmedDescription,
         scoreboardId: scoreboard.id,
         participants: Array.from(selectedParticipants),
         pointCategories: Array.from(selectedPointCategories),
@@ -176,10 +215,12 @@ export const SessionForm: React.FC<SessionFormProps> = ({
         id: createdSession.id,
         type: createdSession.type,
         name: createdSession.name,
-        comment: createdSession.comment,
+        description: createdSession.description,
         scoreboardId: createdSession.scoreboardId,
         createdByName: createdSession.createdByName,
         isPending: createdSession.isPending ?? true,
+        finishedAt: createdSession.finishedAt ?? null,
+        editedAt: createdSession.editedAt ?? null,
         participants: allParticipantIds,
         pointCategories: pointCategoryIds,
         resultEntries: new Set<string>(),
@@ -203,7 +244,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen>
       <DialogTitle>Create New Session</DialogTitle>
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>
@@ -220,12 +261,12 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   label="Name"
                   value={name}
                   onChange={(e) =>
-                    setName(e.target.value.slice(0, SESSION_NAME_MAX_LENGTH))
+                    setName(e.target.value.slice(0, MAX_SESSION_NAME_LENGTH))
                   }
                   fullWidth
                   disabled={submitting}
                   required
-                  inputProps={{ maxLength: SESSION_NAME_MAX_LENGTH }}
+                  inputProps={{ maxLength: MAX_SESSION_NAME_LENGTH }}
                 />
               </Stack>
 
@@ -237,8 +278,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   multiple
                   value={Array.from(selectedParticipants)}
                   onChange={(e) =>
-                    setSelectedParticipants(new Set(e.target.value as string[]))
+                    handleParticipantsChange(e.target.value as string[])
                   }
+                  MenuProps={PARTICIPANT_MENU_PROPS}
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {Array.from(selected).map((userId) => {
@@ -257,13 +299,25 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                 >
                   {users.map((u) => {
                     // Creator does NOT need to be included; allow toggling freely.
+                    // Once the cap is reached only the already picked members stay selectable.
                     return (
-                      <MenuItem key={u.id} value={u.id}>
+                      <MenuItem
+                        key={u.id}
+                        value={u.id}
+                        disabled={
+                          participantsAtCap && !selectedParticipants.has(u.id)
+                        }
+                      >
                         {u.name || u.email || 'Unknown User'}
                       </MenuItem>
                     );
                   })}
                 </Select>
+                <FormHelperText>
+                  {participantsAtCap
+                    ? `${selectedParticipants.size}/${MAX_SESSION_PARTICIPANTS} participants selected. Remove one to pick someone else.`
+                    : `${selectedParticipants.size}/${MAX_SESSION_PARTICIPANTS} participants selected (at least ${MIN_SESSION_PARTICIPANTS} required).`}
+                </FormHelperText>
               </FormControl>
 
               <Stack spacing={2}>
@@ -305,18 +359,18 @@ export const SessionForm: React.FC<SessionFormProps> = ({
                   )}
                 </Stack>
                 <TextField
-                  label="Comment"
-                  value={comment}
+                  label="Description"
+                  value={description}
                   onChange={(e) =>
-                    setComment(
-                      e.target.value.slice(0, SESSION_COMMENT_MAX_LENGTH)
+                    setDescription(
+                      e.target.value.slice(0, MAX_SESSION_DESCRIPTION_LENGTH)
                     )
                   }
                   fullWidth
                   disabled={submitting}
                   multiline
                   minRows={2}
-                  inputProps={{ maxLength: SESSION_COMMENT_MAX_LENGTH }}
+                  inputProps={{ maxLength: MAX_SESSION_DESCRIPTION_LENGTH }}
                 />
               </Stack>
             </>
@@ -336,8 +390,8 @@ export const SessionForm: React.FC<SessionFormProps> = ({
             selectedPointCategories.size === 0 ||
             selectedParticipants.size < 2 ||
             name.trim().length === 0 ||
-            name.trim().length > SESSION_NAME_MAX_LENGTH ||
-            comment.trim().length > SESSION_COMMENT_MAX_LENGTH
+            name.trim().length > MAX_SESSION_NAME_LENGTH ||
+            description.trim().length > MAX_SESSION_DESCRIPTION_LENGTH
           }
           sx={{ backgroundColor: '#38a14f', color: '#ffffff' }}
         >

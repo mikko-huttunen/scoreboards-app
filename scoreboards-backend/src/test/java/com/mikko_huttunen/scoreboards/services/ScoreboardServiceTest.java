@@ -2,9 +2,11 @@ package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
+import com.mikko_huttunen.scoreboards.enums.StatType;
 import com.mikko_huttunen.scoreboards.models.Membership;
 import com.mikko_huttunen.scoreboards.models.PointCategory;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
+import com.mikko_huttunen.scoreboards.models.ScoreboardSettings;
 import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.models.User;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
@@ -39,6 +41,8 @@ class ScoreboardServiceTest {
     private PointCategoryService pointCategoryService;
     @Mock
     private SessionService sessionService;
+    @Mock
+    private HistoryEventService historyEventService;
 
     @InjectMocks
     private ScoreboardService scoreboardService;
@@ -67,6 +71,13 @@ class ScoreboardServiceTest {
         return m;
     }
 
+    private ScoreboardSettings settingsWith(StatType... statTypes) {
+        ScoreboardSettings settings = new ScoreboardSettings();
+        settings.setStatTypes(List.of(statTypes));
+        settings.setDefaultStatType(statTypes.length > 0 ? statTypes[0] : StatType.TOTAL);
+        return settings;
+    }
+
     // ---------------------------------------------------------------------
     // createScoreboard
     // ---------------------------------------------------------------------
@@ -80,20 +91,26 @@ class ScoreboardServiceTest {
         ScoreboardDTO dto = new ScoreboardDTO();
         dto.setName("  My Board  ");
         dto.setPointCategories(List.of(pcDto(null, "Goals", "#FFFFFF")));
+        dto.setSettings(settingsWith(StatType.TOTAL, StatType.AVERAGE));
 
         Scoreboard result = scoreboardService.createScoreboard(dto);
 
         assertNotNull(result.getId());
         assertEquals("My Board", result.getName());
+        assertNotNull(result.getSettings());
+        assertEquals(List.of(StatType.TOTAL, StatType.AVERAGE), result.getSettings().getStatTypes());
 
-        // Membership created with OWNER permission for the current user
         ArgumentCaptor<Membership> membershipCaptor = ArgumentCaptor.forClass(Membership.class);
         verify(queryService).create(membershipCaptor.capture());
         Membership created = membershipCaptor.getValue();
         assertEquals("user-1", created.getUserId());
         assertEquals(result.getId(), created.getScoreboardId());
 
-        // Point categories delegated using the generated scoreboard id
+        ArgumentCaptor<Scoreboard> scoreboardCaptor = ArgumentCaptor.forClass(Scoreboard.class);
+        verify(queryService).create(scoreboardCaptor.capture());
+        assertEquals(List.of(StatType.TOTAL, StatType.AVERAGE),
+                scoreboardCaptor.getValue().getSettings().getStatTypes());
+
         verify(pointCategoryService).createPointCategories(eq(dto.getPointCategories()), eq(result.getId()));
     }
 
@@ -127,6 +144,7 @@ class ScoreboardServiceTest {
         user.getMemberships().add(membership("sb-1"));
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        sb.setSettings(settingsWith(StatType.TOTAL));
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(queryService.fetchScoreboardsWithPartialData(anySet())).thenReturn(Optional.of(List.of(sb)));
 
@@ -134,6 +152,7 @@ class ScoreboardServiceTest {
 
         assertEquals(1, result.size());
         assertEquals("sb-1", result.get(0).getId());
+        assertEquals(List.of(StatType.TOTAL), result.get(0).getSettings().getStatTypes());
     }
 
     // ---------------------------------------------------------------------
@@ -144,11 +163,13 @@ class ScoreboardServiceTest {
     void getScoreboardWithData_returnsScoreboard() {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        sb.setSettings(settingsWith(StatType.TOTAL, StatType.AVERAGE));
         when(queryService.fetchScoreboardWithData("sb-1")).thenReturn(Optional.of(sb));
 
         Scoreboard result = scoreboardService.getScoreboardWithData("sb-1");
 
         assertEquals("sb-1", result.getId());
+        assertEquals(List.of(StatType.TOTAL, StatType.AVERAGE), result.getSettings().getStatTypes());
     }
 
     @Test
@@ -168,12 +189,14 @@ class ScoreboardServiceTest {
     void getScoreboardById_returnsFirstScoreboard() {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        sb.setSettings(settingsWith(StatType.TOTAL));
         when(queryService.fetchScoreboardsWithPartialData(Set.of("sb-1")))
                 .thenReturn(Optional.of(List.of(sb)));
 
         Scoreboard result = scoreboardService.getScoreboardById("sb-1");
 
         assertEquals("sb-1", result.getId());
+        assertEquals(List.of(StatType.TOTAL), result.getSettings().getStatTypes());
     }
 
     @Test
@@ -196,6 +219,8 @@ class ScoreboardServiceTest {
 
         ScoreboardDTO dto = new ScoreboardDTO();
         dto.setName("New");
+        dto.setPointCategories(List.of()); // keep existing test style; validation is not executed here
+        dto.setSettings(settingsWith(StatType.TOTAL));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> scoreboardService.updateScoreboard("sb-1", dto));
@@ -204,7 +229,7 @@ class ScoreboardServiceTest {
     }
 
     @Test
-    void updateScoreboard_createsUpdatesAndDeletesCategories() {
+    void updateScoreboard_createsUpdatesAndDeletesCategoriesAndUpdatesSettings() {
         when(sessionService.getPendingSessionsByScoreboardId("sb-1")).thenReturn(List.of());
 
         PointCategory existing1 = new PointCategory();
@@ -216,7 +241,7 @@ class ScoreboardServiceTest {
 
         ScoreboardDTO dto = new ScoreboardDTO();
         dto.setName("  Updated Name  ");
-        // one to keep/update (has existing id), one to create (null id)
+        dto.setSettings(settingsWith(StatType.AVERAGE));
         dto.setPointCategories(List.of(
                 pcDto("pc-existing-keep", "Keep", "#111111"),
                 pcDto(null, "Brand New", "#222222")
@@ -225,26 +250,27 @@ class ScoreboardServiceTest {
         Scoreboard updated = new Scoreboard();
         updated.setId("sb-1");
         updated.setName("Updated Name");
+        updated.setSettings(settingsWith(StatType.AVERAGE));
+
         when(queryService.updateById(eq("sb-1"), eq(Scoreboard.class), any()))
                 .thenReturn(Optional.of(updated));
 
         Scoreboard result = scoreboardService.updateScoreboard("sb-1", dto);
 
         assertEquals("sb-1", result.getId());
+        assertNotNull(result.getSettings());
+        assertEquals(List.of(StatType.AVERAGE), result.getSettings().getStatTypes());
 
-        // creation for the null-id category
         ArgumentCaptor<List<PointCategoryDTO>> createCaptor = captorForList();
         verify(pointCategoryService).createPointCategories(createCaptor.capture(), eq("sb-1"));
         assertEquals(1, createCaptor.getValue().size());
         assertEquals("Brand New", createCaptor.getValue().get(0).getName());
 
-        // update for the existing-id category
         ArgumentCaptor<List<PointCategoryDTO>> updateCaptor = captorForList();
         verify(pointCategoryService).updatePointCategories(updateCaptor.capture(), eq("sb-1"));
         assertEquals(1, updateCaptor.getValue().size());
         assertEquals("pc-existing-keep", updateCaptor.getValue().get(0).getId());
 
-        // delete for the category no longer present
         verify(pointCategoryService).deletePointCategories(Set.of("pc-existing-remove"));
     }
 
@@ -258,6 +284,7 @@ class ScoreboardServiceTest {
         ScoreboardDTO dto = new ScoreboardDTO();
         dto.setName("Name");
         dto.setPointCategories(List.of());
+        dto.setSettings(settingsWith(StatType.TOTAL));
 
         assertThrows(IllegalArgumentException.class,
                 () -> scoreboardService.updateScoreboard("sb-1", dto));
@@ -282,12 +309,12 @@ class ScoreboardServiceTest {
 
         Scoreboard deleted = new Scoreboard();
         deleted.setId("sb-1");
+        deleted.setSettings(settingsWith(StatType.TOTAL));
         when(queryService.deleteAll(Set.of("sb-1"), Scoreboard.class)).thenReturn(List.of(deleted));
 
         List<Scoreboard> result = scoreboardService.deleteScoreboards(Set.of("sb-1"));
 
         assertEquals(1, result.size());
-        // Related documents deleted via query for each collection (5 collections)
         verify(queryService, times(5)).delete(any(Query.class), any());
     }
 
@@ -349,6 +376,7 @@ class ScoreboardServiceTest {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
         sb.setCreatedBy("someone-else");
+        sb.setSettings(settingsWith(StatType.TOTAL));
         when(queryService.fetchScoreboardsWithPartialData(Set.of("sb-1")))
                 .thenReturn(Optional.of(List.of(sb)));
 
@@ -365,6 +393,7 @@ class ScoreboardServiceTest {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
         sb.setCreatedBy("user-1");
+        sb.setSettings(settingsWith(StatType.TOTAL));
         when(queryService.fetchScoreboardsWithPartialData(Set.of("sb-1")))
                 .thenReturn(Optional.of(List.of(sb)));
         when(queryService.delete(any(Query.class), eq(Membership.class))).thenReturn(List.of(new Membership()));

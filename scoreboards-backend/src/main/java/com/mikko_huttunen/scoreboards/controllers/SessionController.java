@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.CreateSessionDTO;
+import com.mikko_huttunen.scoreboards.dtos.ResolveTieDTO;
 import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.dtos.UpdateSessionDTO;
@@ -45,7 +46,7 @@ public class SessionController {
         Session createdSession = sessionService.createSession(
                 dto.getScoreboardId(),
                 dto.getName(),
-                dto.getComment(),
+                dto.getDescription(),
                 dto.getParticipants(),
                 dto.getPointCategories()
         );
@@ -59,12 +60,12 @@ public class SessionController {
      * @return ResponseEntity containing a list of sessions
      */
     @GetMapping("/scoreboard/{scoreboardId}")
-    public ResponseEntity<List<Session>> getSessionsByScoreboardId(
+    public ResponseEntity<List<SessionDTO>> getSessionsByScoreboardId(
             @PathVariable String scoreboardId,
             @RequestParam(value = "isPending") Boolean isPending) {
         logger.info("GET /api/sessions/scoreboard/{} - Fetching sessions (isPending: {})", scoreboardId, isPending);
 
-        List<Session> sessions = sessionService.getSessionsByScoreboardId(scoreboardId, isPending);
+        List<SessionDTO> sessions = sessionService.getSessionsByScoreboardId(scoreboardId, isPending);
 
         return ResponseEntity.status(HttpStatus.OK).body(sessions);
     }
@@ -83,7 +84,7 @@ public class SessionController {
 
         return ResponseEntity.status(HttpStatus.OK).body(session);
     }
-    
+
     /**
      * Update an existing session.
      * @param id The ID of the session to update
@@ -91,22 +92,36 @@ public class SessionController {
      * @return ResponseEntity containing the updated session if found
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Session> updateSession(
+    public ResponseEntity<SessionDTO> updateSession(
             @PathVariable String id,
             @Valid @RequestBody UpdateSessionDTO dto) {
         logger.info("PUT /api/sessions/{} - Updating session", id);
 
-        Session updatedSession = sessionService.updateSession(
+        SessionDTO updatedSession = sessionService.updateSession(
                 id,
-                dto.getPending(),
-                dto.getParticipants(),
-                dto.getPointCategories(),
-                dto.getResultEntries()
+                dto
         );
 
         return ResponseEntity.status(HttpStatus.OK).body(updatedSession);
     }
     
+    /**
+     * Resolve a session's tie breaker by recording the chosen winner.
+     * @param id The ID of the session whose tie is being resolved
+     * @param dto The DTO containing the chosen winner's user ID
+     * @return ResponseEntity containing the updated session
+     */
+    @PutMapping("/{id}/tie-winner")
+    public ResponseEntity<SessionDTO> resolveTieWinner(
+            @PathVariable String id,
+            @Valid @RequestBody ResolveTieDTO dto) {
+        logger.info("PUT /api/sessions/{}/tie-winner - Resolving tie", id);
+
+        SessionDTO updatedSession = sessionService.resolveTieWinner(id, dto.getTieWinner());
+
+        return ResponseEntity.status(HttpStatus.OK).body(updatedSession);
+    }
+
     /**
      * Delete a session (soft delete).
      * @param id The ID of the session to delete

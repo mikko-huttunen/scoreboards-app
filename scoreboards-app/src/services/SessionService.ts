@@ -2,34 +2,59 @@ import apiClient from '../api/Interceptor';
 import type { Session } from '../types/Session';
 import type { PointCategory } from '../types/PointCategory.ts';
 import type { ResultEntry } from '../types/ResultEntry.ts';
+import type { Comment } from '../types/Comment.ts';
 import { getErrorMessage } from '../utils/Utils.ts';
 
 const API_BASE_URL = '/api/sessions';
 
 export type CreateSessionData = {
   name: string;
-  comment: string;
+  description: string;
   scoreboardId: string;
   participants: string[];
   pointCategories: string[];
 };
 
+export type UpdateSessionResultData = {
+  pointCategoryId: string;
+  points: number;
+};
+
+export type UpdateSessionResultEntryData = {
+  id?: string;
+  userId: string;
+  results: UpdateSessionResultData[];
+};
+
 export type UpdateSessionData = {
-  participants?: string[];
-  pointCategories?: string[];
+  name: string;
+  description?: string;
+  participants: string[];
+  pointCategories: string[];
+  resultEntries: UpdateSessionResultEntryData[];
+  tieWinner?: string;
 };
 
 export type SessionData = {
   id: string;
+  type: string;
   name: string;
-  comment: string;
+  description: string;
   scoreboardId: string;
   createdBy: string;
   createdByName: string;
   isPending: boolean;
+  finishedAt?: Date | null;
+  editedAt?: Date | null;
   participants: Set<string>;
+  isTieResolved?: boolean;
+  tieWinner?: string | null;
   pointCategoryDetails: PointCategory[];
   resultEntryDetails: ResultEntry[];
+  comments?: Comment[];
+  created: Date;
+  lastModified: Date;
+  isActive: boolean;
 };
 
 /**
@@ -61,9 +86,9 @@ export class SessionService {
   static async getSessionsByScoreboardId(
     scoreboardId: string,
     isPending: boolean
-  ): Promise<Session[]> {
+  ): Promise<SessionData[]> {
     try {
-      const response = await apiClient.get<Session[]>(
+      const response = await apiClient.get<SessionData[]>(
         `${API_BASE_URL}/scoreboard/${scoreboardId}`,
         {
           params: { isPending },
@@ -96,15 +121,20 @@ export class SessionService {
   /**
    * Update an existing session.
    * @param id Session ID
-   * @param data Updated session data
+   * @param data Updated session data and scores
    * @returns Promise resolving to updated session or null if not found
    */
   static async updateSession(
     id: string,
-    data: UpdateSessionData
-  ): Promise<Session | null> {
+    data: {
+      name: string;
+      description: string;
+      resultEntries: UpdateSessionResultEntryData[];
+      tieWinner?: string;
+    }
+  ): Promise<SessionData | null> {
     try {
-      const response = await apiClient.put<Session>(
+      const response = await apiClient.put<SessionData>(
         `${API_BASE_URL}/${id}`,
         data
       );
@@ -112,6 +142,28 @@ export class SessionService {
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       throw new Error(`Failed to update session: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Resolve a session's tie breaker by recording the chosen winner.
+   * @param id Session ID
+   * @param tieWinner User ID of the participant picked as the winner
+   * @returns Promise resolving to the updated session
+   */
+  static async resolveTieWinner(
+    id: string,
+    tieWinner: string
+  ): Promise<SessionData | null> {
+    try {
+      const response = await apiClient.put<SessionData>(
+        `${API_BASE_URL}/${id}/tie-winner`,
+        { tieWinner }
+      );
+      return response.data;
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      throw new Error(errorMessage);
     }
   }
 

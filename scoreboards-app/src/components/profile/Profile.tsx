@@ -3,6 +3,9 @@ import {
   Avatar,
   Box,
   Button,
+  IconButton,
+  Menu,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -15,6 +18,7 @@ import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 export const ProfileView: React.FC = () => {
   const { user: auth0User, logout } = useAuth0();
@@ -28,6 +32,17 @@ export const ProfileView: React.FC = () => {
   const { user, isLoadingUser, setUser } = useCurrentUser();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [actionsMenuAnchorEl, setActionsMenuAnchorEl] =
+    useState<null | HTMLElement>(null);
+
+  const openActionsMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setActionsMenuAnchorEl(event.currentTarget);
+  };
+
+  const closeActionsMenu = () => {
+    setActionsMenuAnchorEl(null);
+  };
 
   const currentUsername = useMemo(() => user?.name || '', [user?.name]);
 
@@ -168,13 +183,40 @@ export const ProfileView: React.FC = () => {
               Profile
             </Typography>
 
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={() => setConfirmOpen(true)}
+            <IconButton
+              onClick={openActionsMenu}
+              sx={{ color: '#1b5e20' }}
+              aria-label="profile actions"
             >
-              Delete Account
-            </Button>
+              <MoreVertIcon />
+            </IconButton>
+
+            <Menu
+              anchorEl={actionsMenuAnchorEl}
+              open={Boolean(actionsMenuAnchorEl)}
+              onClose={closeActionsMenu}
+            >
+              <MenuItem
+                onClick={() => {
+                  closeActionsMenu();
+                  logout({
+                    logoutParams: {
+                      returnTo: `${window.location.origin}/login`,
+                    },
+                  });
+                }}
+              >
+                Log Out
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  closeActionsMenu();
+                  setConfirmOpen(true);
+                }}
+              >
+                Delete Account
+              </MenuItem>
+            </Menu>
           </Stack>
 
           <Stack
@@ -239,25 +281,6 @@ export const ProfileView: React.FC = () => {
                 }}
               >
                 {saving ? <LoadingSpinner size={24} /> : 'Save Changes'}
-              </Button>
-
-              <Button
-                variant="contained"
-                onClick={() =>
-                  logout({
-                    logoutParams: {
-                      returnTo: `${window.location.origin}/login`,
-                    },
-                  })
-                }
-                sx={{
-                  backgroundColor: '#ffffff',
-                  color: '#38a14f',
-                  ':hover': { backgroundColor: '#f7f7f7' },
-                  minWidth: '100%',
-                }}
-              >
-                Log Out
               </Button>
             </Stack>
           </Stack>

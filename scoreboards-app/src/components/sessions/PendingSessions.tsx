@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import DoneIcon from '@mui/icons-material/Done';
 import type { Session } from '../../types/Session.ts';
 import { DataTable } from '../common/table/DataTable.tsx';
 import {
@@ -16,11 +15,16 @@ import { ConfirmDialog } from '../common/dialog/ConfirmDialog.tsx';
 import { SessionService } from '../../services/SessionService.ts';
 import { useNavigate } from 'react-router-dom';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
+import type { User } from '../../types/User.ts';
+import { SessionForm } from './SessionForm.tsx';
+import { TaskAlt } from '@mui/icons-material';
 
 type PendingSessionsProps = {
   pendingSessions: Session[];
   scoreboard: Scoreboard;
+  users: User[];
   pointCategories: PointCategory[];
+  onCreateSession: (session: Session) => void;
   onCancelSession: (sessionId: string) => void;
   onScoreSubmit: (resultEntry: ResultEntry) => void;
   isLoading?: boolean;
@@ -30,7 +34,9 @@ type PendingSessionsProps = {
 export const PendingSessions: React.FC<PendingSessionsProps> = ({
   pendingSessions,
   scoreboard,
+  users,
   pointCategories,
+  onCreateSession,
   onCancelSession,
   onScoreSubmit,
   isLoading = false,
@@ -40,11 +46,16 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   const { user } = useCurrentUser();
   const navigate = useNavigate();
   const [addScoresModalOpen, setAddScoresModalOpen] = useState(false);
+  const [createSessionModalOpen, setCreateSessionModalOpen] = useState(false);
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
   const [cancelSessionDialogOpen, setCancelSessionDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const isCreator = isOwner(scoreboard.memberships, user?.id);
+  const hasPermissions = hasSessionsPermission(
+    scoreboard.memberships,
+    user?.id
+  );
 
   const canDelete = (session: Session) => {
     if (isCreator) return true;
@@ -65,6 +76,15 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
   const handleCloseAddScores = () => {
     setSelectedSession(null);
     setAddScoresModalOpen(false);
+  };
+
+  const openCreateSessionModal = () => {
+    setCreateSessionModalOpen(true);
+  };
+
+  const handleSessionCreated = async (session: Session) => {
+    onCreateSession(session);
+    setCreateSessionModalOpen(false);
   };
 
   const openCancelSessionModal = (session: Session) => {
@@ -129,6 +149,16 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
 
   return (
     <>
+      {scoreboard && (
+        <SessionForm
+          open={createSessionModalOpen}
+          onClose={() => setCreateSessionModalOpen(false)}
+          scoreboard={scoreboard}
+          users={users}
+          pointCategories={pointCategories}
+          onSuccess={(session) => handleSessionCreated(session)}
+        />
+      )}
       <ConfirmDialog
         open={cancelSessionDialogOpen}
         onCancel={() => {
@@ -159,13 +189,13 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
         data={data}
         pageSize={10}
         onRowClick={(row) => openAddScoresModal(row.session)}
+        onCreate={openCreateSessionModal}
+        canCreate={hasPermissions}
         onDelete={(row) => openCancelSessionModal(row.session)}
         canDelete={(row) => canDelete(row.session)}
         onCustom={(row) => handleFinishSession(row.id)}
-        canCustom={() =>
-          hasSessionsPermission(scoreboard.memberships, user?.id)
-        }
-        onCustomIcon={<DoneIcon fontSize="small" />}
+        canCustom={() => hasPermissions}
+        onCustomIcon={<TaskAlt fontSize="small" />}
         customTooltip={'Finish'}
         isLoading={isLoading}
         refresh={onRefresh}

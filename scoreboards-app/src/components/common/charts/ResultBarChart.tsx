@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Avatar,
   Box,
@@ -32,6 +38,11 @@ type ResultBarChartProps = {
   emptyText?: string;
   onFinished?: () => void;
   segmentDurationMs?: number;
+  // Silent pause between pressing Start and the first bar moving, there to pace the reveal.
+  // Set to 0 to start immediately.
+  startDelayMs?: number;
+  // User ID picked in the tie breaker, which takes the win outright over the other tied players
+  tieWinnerUserId?: string | null;
 };
 
 type TotalChartRow = {
@@ -52,7 +63,9 @@ const LEADER_TEXT_COLOR = '#1b5e20';
 const DEFAULT_TEXT_COLOR = '#546e5a';
 const AVATAR_SIZE = 34;
 
-type FlowStep = 'idle' | 'animating' | 'finished';
+// 'starting' is the pause between pressing Start and the first bar moving. The prompt is gone by
+// then but the chart still shows the frozen zero rows, so nothing is revealed early.
+type FlowStep = 'idle' | 'starting' | 'animating' | 'finished';
 
 export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   participants,
@@ -60,19 +73,22 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   pointCategories,
   emptyText = 'No results to display',
   onFinished,
-  segmentDurationMs = 2000,
+  segmentDurationMs = 2500,
+  startDelayMs = 1000,
+  tieWinnerUserId = null,
 }) => {
   const [step, setStep] = useState<FlowStep>('idle');
   const [revealedSegmentCount, setRevealedSegmentCount] = useState<number>(0);
   const [selectedCategoryIdForLegend, setSelectedCategoryIdForLegend] =
     useState<string | null>(null);
+  const timersRef = useRef<number[]>([]);
   const isMobile = useMediaQuery('(max-width:900px)');
   const isSmallMobile = useMediaQuery('(max-width:600px)');
   const truncateWidths = isMobile && participants.length > 5;
   const rotateNames =
     useMediaQuery('(max-width:1400px)') && participants.length > 8;
 
-  const segmentRevealDelayMs = 2000;
+  const segmentRevealDelayMs = 3000;
 
   const avatarSize = truncateWidths ? 26 : AVATAR_SIZE;
   const avatarFontSize = truncateWidths ? 12 : 14;
@@ -95,10 +111,9 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   }, [results]);
 
   const effectivePointCategories = useMemo(() => {
-    // Only keep categories that actually appear in this session's result data
-    return pointCategories.filter((c) =>
-      presentCategoryIdsFromResults.has(c.id)
-    );
+    return pointCategories
+      .filter((c) => presentCategoryIdsFromResults.has(c.id))
+      .sort((a, b) => a.index - b.index);
   }, [pointCategories, presentCategoryIdsFromResults]);
 
   const userById = useMemo(
@@ -146,7 +161,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       };
 
       for (const result of entry.results ?? []) {
-        // Only count points for point categories that exist in the session
         if (!presentCategoryIds.has(result.pointCategoryId)) continue;
 
         const prev = existing.categories.get(result.pointCategoryId) ?? 0;
@@ -174,7 +188,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   }, [totalsByUserId]);
 
   const avatarUrlByName = useMemo(() => {
-    // Faster lookup for axis ticks (avoids orderedParticipants.find(...) per tick).
     const map = new Map<string, string>();
     for (const p of orderedParticipants) {
       if (p.name) map.set(p.name, p.avatar ?? '');
@@ -188,7 +201,6 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     orderedParticipants.length > 0;
 
   const categoryLeadersById = useMemo(() => {
-    // For each point category, find the leading user(s).
     const map = new Map<
       string,
       {
@@ -198,7 +210,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       }
     >();
 
-    for (const category of pointCategories) {
+    for (const category of effectivePointCategories) {
       let bestScore = 0;
       for (const p of orderedParticipants) {
         const score = p.categories.get(category.id) ?? 0;
@@ -222,20 +234,41 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     }
 
     return map;
-  }, [orderedParticipants, pointCategories]);
+  }, [orderedParticipants, effectivePointCategories]);
 
   const totalWinner = useMemo(() => {
-    // keep the winner calculation hidden until the flow is finished
     if (step !== 'finished') return null;
-
     if (orderedParticipants.length === 0) return null;
 
     const highestTotal = Math.max(...orderedParticipants.map((p) => p.total));
     if (highestTotal <= 0) return null;
 
-    const winners = orderedParticipants.filter((p) => p.total === highestTotal);
-    return { score: highestTotal, winners, isTie: winners.length > 1 };
-  }, [orderedParticipants, step]);
+    const topScorers = orderedParticipants.filter(
+      (p) => p.total === highestTotal
+    );
+
+    // A recorded tie breaker winner takes the win outright; otherwise the tie stands.
+    const tieBreakerWinner =
+      topScorers.length > 1 && tieWinnerUserId
+        ? topScorers.find((p) => p.userId === tieWinnerUserId)
+        : undefined;
+
+    if (tieBreakerWinner) {
+      return {
+        score: highestTotal,
+        winners: [tieBreakerWinner],
+        isTie: false,
+        wonByTieBreaker: true,
+      };
+    }
+
+    return {
+      score: highestTotal,
+      winners: topScorers,
+      isTie: topScorers.length > 1,
+      wonByTieBreaker: false,
+    };
+  }, [orderedParticipants, step, tieWinnerUserId]);
 
   const totalLeaderNames = useMemo(() => {
     if (!totalWinner) return new Set<string>();
@@ -272,6 +305,30 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
       return row;
     });
   }, [orderedParticipants, effectivePointCategories]);
+
+  // Before Start the same rows are fed to the chart with every score frozen at zero. The axis
+  // draws each participant in alphabetical order while the bars stay flat, so players can see
+  // where to look without any of the results leaking.
+  const idleChartData = useMemo<TotalChartRow[]>(() => {
+    return orderedParticipants.map((participant) => {
+      const row: TotalChartRow = {
+        name: participant.name,
+        avatar: participant.avatar,
+        __grandTotal: 0,
+      };
+
+      for (const category of effectivePointCategories) {
+        row[category.id] = 0;
+      }
+
+      return row;
+    });
+  }, [orderedParticipants, effectivePointCategories]);
+
+  // Everything up to the reveal keeps the frozen zero rows on screen.
+  const isBeforeReveal = step === 'idle' || step === 'starting';
+
+  const totalsChartData = isBeforeReveal ? idleChartData : totalChartData;
 
   // If we are in “category highlight” mode, we highlight category leaders only (after finished).
   const currentCategoryLeaderNames = useMemo(() => {
@@ -325,6 +382,12 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
   );
 
   const hasFinishedAllSegments = step === 'finished';
+
+  // The strip along the bottom of the plot holding the participant names and avatars, plus the
+  // gap the chart reserves beneath it. The idle overlay stays clear of both.
+  const axisStripHeight = isMobile ? 88 : 72;
+  const chartBottomMargin =
+    hasFinishedAllSegments && !isMobile ? 20 : isMobile ? 0 : 50;
 
   const renderAxisTick = useCallback(
     (props: { x: number; y: number; payload: { value: string | number } }) => {
@@ -387,14 +450,19 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     ]
   );
 
-  const startAnimation = useCallback(() => {
-    if (!hasData || step !== 'idle') return;
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((t) => window.clearTimeout(t));
+    timersRef.current = [];
+  }, []);
 
+  useEffect(() => clearTimers, [clearTimers]);
+
+  // The staggered segment reveal itself, kept separate from the pause that precedes it.
+  const runReveal = useCallback(() => {
     setStep('animating');
     setRevealedSegmentCount(0);
 
     const totalSegments = totalSeries.length;
-    const timers: number[] = [];
 
     // Reveal each segment at i * (segmentDurationMs + segmentRevealDelayMs)
     for (let i = 0; i < totalSegments; i++) {
@@ -404,7 +472,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         },
         i * (segmentDurationMs + segmentRevealDelayMs)
       );
-      timers.push(t);
+      timersRef.current.push(t);
     }
 
     const finishedTimeout = window.setTimeout(
@@ -416,19 +484,30 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
         segmentDurationMs +
         segmentRevealDelayMs
     );
-    timers.push(finishedTimeout);
+    timersRef.current.push(finishedTimeout);
+  }, [onFinished, segmentDurationMs, totalSeries.length]);
 
-    return () => {
-      timers.forEach((t) => window.clearTimeout(t));
-    };
-  }, [hasData, onFinished, segmentDurationMs, step, totalSeries.length]);
+  const startAnimation = useCallback(() => {
+    if (!hasData || step !== 'idle') return;
+
+    if (startDelayMs <= 0) {
+      runReveal();
+      return;
+    }
+
+    // Hold on the frozen chart for a beat so the reveal does not begin the instant Start is hit.
+    setStep('starting');
+    setRevealedSegmentCount(0);
+    timersRef.current.push(window.setTimeout(runReveal, startDelayMs));
+  }, [hasData, runReveal, startDelayMs, step]);
 
   const handleSkip = useCallback(() => {
     if (!hasData) return;
+    clearTimers();
     setRevealedSegmentCount(totalSeries.length);
     setStep('finished');
     onFinished?.();
-  }, [hasData, onFinished, totalSeries.length]);
+  }, [clearTimers, hasData, onFinished, totalSeries.length]);
 
   const currentCategoryDuringCalc = useMemo(() => {
     if (step !== 'animating') return null;
@@ -452,15 +531,12 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
     effectivePointCategories.length,
   ]);
 
-  const currentButtonLabel = useMemo(() => {
-    if (step === 'idle') return 'Start';
-    if (step === 'animating') return 'Revealing…';
-    return 'Completed';
-  }, [step]);
-
   const totalWinnerCardText = useMemo(() => {
     if (!totalWinner) return 'No winner';
     if (totalWinner.isTie) return `Tie at ${totalWinner.score} points.`;
+    if (totalWinner.wonByTieBreaker) {
+      return `${totalWinner.winners[0]?.name} won the tie breaker.`;
+    }
     return `${totalWinner.winners[0]?.name} won with ${totalWinner.score} points.`;
   }, [totalWinner]);
 
@@ -618,6 +694,7 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
 
         <Box
           sx={{
+            position: 'relative',
             height: hasFinishedAllSegments
               ? isMobile
                 ? '60vh'
@@ -628,209 +705,225 @@ export const ResultBarChart: React.FC<ResultBarChartProps> = ({
             px: { xs: 1.5, sm: 2.5 },
           }}
         >
-          {step === 'idle' ? (
+          <ResponsiveContainer width="100%" height="100%">
+            {/* 1) Stacked totals animation mode */}
+            {!selectedCategoryIdForLegend || !hasFinishedAllSegments ? (
+              <BarChart
+                // Remounting once on Start lets the staggered reveal animate up from zero.
+                key={isBeforeReveal ? 'totals-frozen' : 'totals-revealed'}
+                data={totalsChartData}
+                margin={{
+                  top: 24,
+                  right: 24,
+                  left: 8,
+                  bottom: chartBottomMargin,
+                }}
+                layout="horizontal"
+                barCategoryGap="35%"
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(0,0,0,0.08)"
+                />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  height={axisStripHeight}
+                  tick={renderAxisTick}
+                />
+
+                {totalSeries.map((series, idx) => {
+                  const isTopSegment = idx === totalSeries.length - 1;
+                  // The grand total would spell out every score before the reveal begins.
+                  const showTotalLabel = isTopSegment && !isBeforeReveal;
+
+                  return (
+                    <Bar
+                      key={series.key}
+                      dataKey={series.key}
+                      name={series.title}
+                      fill={series.color}
+                      stackId="total"
+                      maxBarSize={100}
+                      isAnimationActive={
+                        step === 'animating' || step === 'finished'
+                      }
+                      animationDuration={
+                        step === 'animating' ? segmentDurationMs : 0
+                      }
+                      animationEasing="ease-out"
+                      animationBegin={
+                        step === 'animating'
+                          ? idx * (segmentDurationMs + segmentRevealDelayMs)
+                          : 0
+                      }
+                    >
+                      {totalsChartData.map((row) => {
+                        const participantName = String(row.name ?? '');
+
+                        return (
+                          <Cell key={`${series.key}-${participantName}`} />
+                        );
+                      })}
+
+                      {showTotalLabel ? (
+                        <LabelList
+                          dataKey="__grandTotal"
+                          position="top"
+                          formatter={(v: unknown) => `${v}`}
+                          style={{
+                            fill: '#1b5e20',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            strokeWidth: 0,
+                          }}
+                        />
+                      ) : null}
+                    </Bar>
+                  );
+                })}
+              </BarChart>
+            ) : (
+              // 2) Category highlight mode (after finished)
+              <BarChart
+                data={selectedCategoryData}
+                margin={{ top: 24, right: 24, left: 8, bottom: 20 }}
+                layout="horizontal"
+                barCategoryGap="35%"
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(0,0,0,0.08)"
+                />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  height={axisStripHeight}
+                  tick={renderAxisTick}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}
+                  contentStyle={{
+                    borderRadius: 14,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
+                  }}
+                  formatter={(value: number | string) => [
+                    `${Number(value ?? 0)} points`,
+                    selectedCategory?.name ?? 'Points',
+                  ]}
+                  labelStyle={{ fontWeight: 700, marginBottom: 4 }}
+                />
+
+                <Bar
+                  dataKey="points"
+                  name={selectedCategory?.name ?? 'Points'}
+                  fill={selectedCategory?.color ?? '#38a14f'}
+                  maxBarSize={100}
+                  isAnimationActive={false}
+                >
+                  {selectedCategoryData.map((row) => {
+                    return <Cell key={row.name} />;
+                  })}
+                  <LabelList
+                    dataKey="points"
+                    position="top"
+                    formatter={(value: unknown) => `${value}`}
+                    style={{
+                      fill: '#1b5e20',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      strokeWidth: 0,
+                    }}
+                  />
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+
+          {/*
+            The prompt floats over the chart instead of replacing it, so pressing Start changes
+            nothing about the layout. A resize here would make ResponsiveContainer re-measure and
+            cut the reveal animation off as it begins.
+          */}
+          {step === 'idle' && (
             <Box
               sx={{
-                width: '100%',
-                height: '100%',
-                padding: 2,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                // Leave the axis strip uncovered so the participants stay readable.
+                bottom: axisStripHeight + chartBottomMargin,
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background:
-                  'linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(240,248,242,1) 100%)',
+                px: 2,
+                pointerEvents: 'none',
               }}
             >
-              <Typography
-                variant="body1"
+              <Stack
+                spacing={3}
+                alignItems="center"
                 sx={{
-                  color: '#546e5a',
-                  fontWeight: 600,
-                  textAlign: 'center',
+                  px: { xs: 2.5, sm: 4 },
+                  py: { xs: 2.5, sm: 3 },
+                  borderRadius: 4,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  background: 'rgba(255,255,255,0.92)',
+                  boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
+                  pointerEvents: 'auto',
                 }}
               >
-                Press start to watch results calculation. Press skip to view the
-                results.
-              </Typography>
-              <div style={{ display: 'flex', gap: '20px', marginTop: 24 }}>
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={startAnimation}
-                  disabled={step !== 'idle'}
+                <Typography
+                  variant="body1"
                   sx={{
-                    px: 3.5,
-                    py: 1.4,
-                    fontWeight: 800,
-                    textTransform: 'none',
-                    background:
-                      'linear-gradient(135deg, #38a14f 0%, #2e7d32 100%)',
-                    boxShadow: '0 10px 24px rgba(56, 161, 79, 0.26)',
+                    color: '#546e5a',
+                    fontWeight: 600,
+                    textAlign: 'center',
                   }}
                 >
-                  {currentButtonLabel}
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="large"
-                  onClick={handleSkip}
-                  disabled={step !== 'idle'}
-                  sx={{
-                    px: 3.5,
-                    py: 1.4,
-                    fontWeight: 800,
-                    textTransform: 'none',
-                    borderColor: 'rgba(56, 161, 79, 0.32)',
-                    color: '#2e7d32',
-                    backgroundColor: '#fff',
-                  }}
-                >
-                  Skip
-                </Button>
-              </div>
-            </Box>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              {/* ... existing BarChart rendering stays exactly as-is ... */}
-              {/* 1) Stacked totals animation mode */}
-              {!selectedCategoryIdForLegend || !hasFinishedAllSegments ? (
-                <BarChart
-                  data={totalChartData}
-                  margin={{
-                    top: 24,
-                    right: 24,
-                    left: 8,
-                    bottom:
-                      hasFinishedAllSegments && !isMobile
-                        ? 20
-                        : isMobile
-                          ? 0
-                          : 50,
-                  }}
-                  layout="horizontal"
-                  barCategoryGap="35%"
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(0,0,0,0.08)"
-                  />
-                  <XAxis
-                    dataKey="name"
-                    interval={0}
-                    height={isMobile ? 88 : 72}
-                    tick={renderAxisTick}
-                  />
+                  Press start to watch results calculation. Press skip to view
+                  the results.
+                </Typography>
 
-                  {totalSeries.map((series, idx) => {
-                    const isTopSegment = idx === totalSeries.length - 1;
-                    const showTotalLabel = isTopSegment;
-
-                    return (
-                      <Bar
-                        key={series.key}
-                        dataKey={series.key}
-                        name={series.title}
-                        fill={series.color}
-                        stackId="total"
-                        maxBarSize={100}
-                        radius={isTopSegment ? [7, 7, 0, 0] : [0, 0, 0, 0]}
-                        isAnimationActive={
-                          step === 'animating' || step === 'finished'
-                        }
-                        animationDuration={
-                          step === 'animating' ? segmentDurationMs : 0
-                        }
-                        animationEasing="ease-out"
-                        animationBegin={
-                          step === 'animating'
-                            ? idx * (segmentDurationMs + segmentRevealDelayMs)
-                            : 0
-                        }
-                      >
-                        {totalChartData.map((row) => {
-                          const participantName = String(row.name ?? '');
-
-                          return (
-                            <Cell key={`${series.key}-${participantName}`} />
-                          );
-                        })}
-
-                        {showTotalLabel ? (
-                          <LabelList
-                            dataKey="__grandTotal"
-                            position="top"
-                            formatter={(v: unknown) => `${v}`}
-                            style={{
-                              fill: '#1b5e20',
-                              fontWeight: 700,
-                              fontSize: 12,
-                              strokeWidth: 0,
-                            }}
-                          />
-                        ) : null}
-                      </Bar>
-                    );
-                  })}
-                </BarChart>
-              ) : (
-                // 2) Category highlight mode (after finished)
-                <BarChart
-                  data={selectedCategoryData}
-                  margin={{ top: 24, right: 24, left: 8, bottom: 20 }}
-                  layout="horizontal"
-                  barCategoryGap="35%"
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(0,0,0,0.08)"
-                  />
-                  <XAxis
-                    dataKey="name"
-                    interval={0}
-                    height={isMobile ? 88 : 72}
-                    tick={renderAxisTick}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}
-                    contentStyle={{
-                      borderRadius: 14,
-                      border: '1px solid rgba(0,0,0,0.08)',
-                      boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
+                <Stack direction="row" spacing={2.5}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={startAnimation}
+                    sx={{
+                      px: 3.5,
+                      py: 1.4,
+                      fontWeight: 800,
+                      textTransform: 'none',
+                      background:
+                        'linear-gradient(135deg, #38a14f 0%, #2e7d32 100%)',
+                      boxShadow: '0 10px 24px rgba(56, 161, 79, 0.26)',
                     }}
-                    formatter={(value: number | string) => [
-                      `${Number(value ?? 0)} points`,
-                      selectedCategory?.name ?? 'Points',
-                    ]}
-                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-                  />
-
-                  <Bar
-                    dataKey="points"
-                    name={selectedCategory?.name ?? 'Points'}
-                    fill={selectedCategory?.color ?? '#38a14f'}
-                    maxBarSize={100}
-                    radius={[8, 8, 0, 0]}
-                    isAnimationActive={false}
                   >
-                    {selectedCategoryData.map((row) => {
-                      return <Cell key={row.name} />;
-                    })}
-                    <LabelList
-                      dataKey="points"
-                      position="top"
-                      formatter={(value: unknown) => `${value}`}
-                      style={{
-                        fill: '#1b5e20',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        strokeWidth: 0,
-                      }}
-                    />
-                  </Bar>
-                </BarChart>
-              )}
-            </ResponsiveContainer>
+                    Start
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={handleSkip}
+                    sx={{
+                      px: 3.5,
+                      py: 1.4,
+                      fontWeight: 800,
+                      textTransform: 'none',
+                      borderColor: 'rgba(56, 161, 79, 0.32)',
+                      color: '#2e7d32',
+                      backgroundColor: '#fff',
+                    }}
+                  >
+                    Skip
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
           )}
         </Box>
 

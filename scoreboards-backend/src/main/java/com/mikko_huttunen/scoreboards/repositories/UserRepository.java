@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Repository interface for User entity.
@@ -34,5 +35,12 @@ public interface UserRepository extends MongoRepository<User, String> {
      * @return Optional containing the user if found and active
      */
     Optional<User> findByIdAndIsActiveTrue(String id);
+
+    /**
+     * Find users by IDs if active.
+     * @param ids The user IDs
+     * @return List of users if found and active
+     */
+    List<User> findByIdIn(Set<String> ids);
 }
 

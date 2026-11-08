@@ -84,6 +84,16 @@ public class AccessControlValidator {
             return;
         }
 
+        if (document instanceof HistoryEvent historyEvent) {
+            validateHistoryEventAccess(historyEvent);
+            return;
+        }
+
+        if (document instanceof Comment comment) {
+            validateCommentAccess(comment);
+            return;
+        }
+
         throw new IllegalArgumentException("Unsupported MongoDB document type: " + document.getClass().getSimpleName());
     }
 
@@ -188,6 +198,16 @@ public class AccessControlValidator {
         if (isReceiver) return;
 
         throw new AccessDeniedException("User is not authorized to access this invitation");
+    }
+
+    private void validateHistoryEventAccess(HistoryEvent historyEvent) {
+        if (hasMembership(historyEvent.getScoreboardId())) return;
+        throw new AccessDeniedException("User is not authorized to access this history event");
+    }
+
+    private void validateCommentAccess(Comment comment) {
+        if (hasMembership(comment.getScoreboardId())) return;
+        throw new AccessDeniedException("User is not authorized to access this comment");
     }
 
     private boolean hasMembership(String scoreboardId) {

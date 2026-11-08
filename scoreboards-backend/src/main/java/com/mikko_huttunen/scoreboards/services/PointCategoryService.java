@@ -5,6 +5,7 @@ import com.mikko_huttunen.scoreboards.models.PointCategory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,7 @@ public class PointCategoryService {
             PointCategory pointCategory = new PointCategory();
             pointCategory.setName(categoryData.getName().trim());
             pointCategory.setColor(categoryData.getColor().trim());
+            pointCategory.setIndex(categoryData.getIndex());
             pointCategory.setScoreboardId(scoreboardId);
 
             pointCategoriesToCreate.add(pointCategory);
@@ -68,7 +70,10 @@ public class PointCategoryService {
     public List<PointCategory> getPointCategoriesByScoreboardId(String scoreboardId) {
         logger.info("Fetching point categories for scoreboard: {}", scoreboardId);
 
-        Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId));
+        // index is the order the categories were given on the scoreboard, and the order they are
+        // displayed in everywhere.
+        Query query = Query.query(Criteria.where("scoreboardId").is(scoreboardId))
+                .with(Sort.by(Sort.Direction.ASC, "index"));
         List<PointCategory> pointCategories = queryService.find(query, PointCategory.class, false);
 
         logger.info("Found {} point categories for scoreboard: {}", pointCategories.size(), scoreboardId);
@@ -112,6 +117,7 @@ public class PointCategoryService {
                 if (pointCategoryDTO == null) return;
                 pc.setName(pointCategoryDTO.getName().trim());
                 pc.setColor(pointCategoryDTO.getColor().trim());
+                pc.setIndex(pointCategoryDTO.getIndex());
                 pc.setScoreboardId(scoreboardId);
         });
 

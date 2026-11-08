@@ -1,7 +1,7 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mikko_huttunen.scoreboards.Constants.Types;
+import com.mikko_huttunen.scoreboards.Constants;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.repositories.UserRepository;
 import com.mikko_huttunen.scoreboards.security.AuthProvider;
@@ -77,7 +77,7 @@ public class UserService {
         Date now = new Date();
 
         User user = new User();
-        user.setType(Types.USER);
+        user.setType(Constants.Types.USER);
         user.setId(UUID.randomUUID().toString());
         user.setAuth0Id(auth0UserId);
         user.setEmail(email.trim().toLowerCase());

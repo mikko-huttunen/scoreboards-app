@@ -1,7 +1,9 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
+import com.mikko_huttunen.scoreboards.enums.StatType;
 import com.mikko_huttunen.scoreboards.models.Scoreboard;
+import com.mikko_huttunen.scoreboards.models.ScoreboardSettings;
 import com.mikko_huttunen.scoreboards.services.ScoreboardService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,47 +36,82 @@ class ScoreboardControllerTest {
     void createScoreboard_returnsCreated() {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        ScoreboardSettings settings = new ScoreboardSettings();
+        settings.setStatTypes(List.of(StatType.TOTAL));
+        settings.setDefaultStatType(StatType.TOTAL);
+        sb.setSettings(settings);
+
+        ScoreboardDTO dto = new ScoreboardDTO();
+        dto.setSettings(new ScoreboardSettings());
+        dto.getSettings().setStatTypes(List.of(StatType.TOTAL));
+        dto.getSettings().setDefaultStatType(StatType.TOTAL);
+
         when(scoreboardService.createScoreboard(any(ScoreboardDTO.class))).thenReturn(sb);
 
-        ResponseEntity<Scoreboard> response = scoreboardController.createScoreboard(new ScoreboardDTO());
+        ResponseEntity<Scoreboard> response = scoreboardController.createScoreboard(dto);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals("sb-1", response.getBody().getId());
+        assertEquals(List.of(StatType.TOTAL), response.getBody().getSettings().getStatTypes());
     }
 
     @Test
     void getScoreboardsByCurrentUser_returnsOk() {
-        when(scoreboardService.getScoreboardsByUser()).thenReturn(List.of(new Scoreboard()));
+        Scoreboard sb = new Scoreboard();
+        ScoreboardSettings settings = new ScoreboardSettings();
+        settings.setStatTypes(List.of(StatType.TOTAL));
+        settings.setDefaultStatType(StatType.TOTAL);
+        sb.setSettings(settings);
+
+        when(scoreboardService.getScoreboardsByUser()).thenReturn(List.of(sb));
 
         ResponseEntity<List<Scoreboard>> response = scoreboardController.getScoreboardsByCurrentUser();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, response.getBody().size());
+        assertEquals(List.of(StatType.TOTAL), response.getBody().get(0).getSettings().getStatTypes());
     }
 
     @Test
     void getScoreboardWithData_returnsOk() {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        ScoreboardSettings settings = new ScoreboardSettings();
+        settings.setStatTypes(List.of(StatType.TOTAL, StatType.AVERAGE));
+        settings.setDefaultStatType(StatType.TOTAL);
+        sb.setSettings(settings);
+
         when(scoreboardService.getScoreboardWithData("sb-1")).thenReturn(sb);
 
         ResponseEntity<Scoreboard> response = scoreboardController.getScoreboardWithData("sb-1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("sb-1", response.getBody().getId());
+        assertEquals(List.of(StatType.TOTAL, StatType.AVERAGE), response.getBody().getSettings().getStatTypes());
     }
 
     @Test
     void updateScoreboard_returnsOk() {
         Scoreboard sb = new Scoreboard();
         sb.setId("sb-1");
+        ScoreboardSettings settings = new ScoreboardSettings();
+        settings.setStatTypes(List.of(StatType.AVERAGE));
+        settings.setDefaultStatType(StatType.AVERAGE);
+        sb.setSettings(settings);
+
+        ScoreboardDTO dto = new ScoreboardDTO();
+        dto.setSettings(new ScoreboardSettings());
+        dto.getSettings().setStatTypes(List.of(StatType.AVERAGE));
+        dto.getSettings().setDefaultStatType(StatType.AVERAGE);
+
         when(scoreboardService.updateScoreboard(eq("sb-1"), any(ScoreboardDTO.class))).thenReturn(sb);
 
         ResponseEntity<Scoreboard> response =
-                scoreboardController.updateScoreboard("sb-1", new ScoreboardDTO());
+                scoreboardController.updateScoreboard("sb-1", dto);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("sb-1", response.getBody().getId());
+        assertEquals(List.of(StatType.AVERAGE), response.getBody().getSettings().getStatTypes());
     }
 
     @Test

@@ -1,17 +1,20 @@
 import type { Scoreboard } from '../types/Scoreboard';
 import apiClient from '../api/Interceptor';
 import { getErrorMessage } from '../utils/Utils.ts';
+import type { ScoreboardSettings } from '../types/ScoreboardSettings.ts';
 const API_BASE_URL = '/api/scoreboards';
 
 export type ScoreboardData = {
   name: string;
   pointCategories: PointCategoriesData[];
+  settings: ScoreboardSettings;
 };
 
 export type PointCategoriesData = {
   id?: string;
   name: string;
   color: string;
+  index: number;
 };
 
 /**

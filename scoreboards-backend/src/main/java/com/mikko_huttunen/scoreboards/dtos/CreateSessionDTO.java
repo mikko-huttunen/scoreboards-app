@@ -17,7 +17,7 @@ public class CreateSessionDTO {
     @NotBlank(message = "Name cannot be blank")
     private String name;
 
-    private String comment;
+    private String description;
     
     @NotNull(message = "Participants cannot be null")
     private Set<String> participants = new HashSet<>();
@@ -37,9 +37,9 @@ public class CreateSessionDTO {
 
     public void setName(String name) { this.name = name; }
 
-    public String getComment() { return comment; }
+    public String getDescription() { return description; }
 
-    public void setComment(String comment) { this.comment = comment; }
+    public void setDescription(String description) { this.description = description; }
 
     public Set<String> getParticipants() {
         return participants;

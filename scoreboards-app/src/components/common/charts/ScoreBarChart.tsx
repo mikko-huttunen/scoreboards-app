@@ -55,6 +55,14 @@ type Props = {
   showAvatars?: boolean;
   pagination?: boolean;
   pageSize?: number;
+
+  /**
+   * Label values that get the crown and highlight instead of the rows with the highest total.
+   * Used when the winner is decided by something the chart cannot see, such as a session's tie
+   * breaker. Ignored while a single category is selected, which keeps highlighting that
+   * category's own leader.
+   */
+  leaderLabels?: string[];
 };
 
 const HIGHLIGHT_COLOR = '#ffb300';
@@ -75,6 +83,7 @@ export const ScoreBarChart: React.FC<Props> = ({
   showAvatars = false,
   pagination = true,
   pageSize = 10,
+  leaderLabels,
 }) => {
   const isHorizontal = direction === 'horizontal';
   const isMobile = useMediaQuery('(max-width:900px)');
@@ -172,6 +181,9 @@ export const ScoreBarChart: React.FC<Props> = ({
   }, [computedDataAll, pagination, safePageSize, startPage]);
 
   const leaderNames = useMemo(() => {
+    // The caller knows the winner (tie breaker, for instance), so the totals do not decide it.
+    if (leaderLabels && !selectedKey) return new Set(leaderLabels);
+
     let bestTotal = -Infinity;
 
     for (const row of computedDataAll) {
@@ -190,7 +202,7 @@ export const ScoreBarChart: React.FC<Props> = ({
     }
 
     return winners;
-  }, [computedDataAll, labelKey]);
+  }, [computedDataAll, labelKey, leaderLabels, selectedKey]);
 
   const avatarByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -558,7 +570,6 @@ export const ScoreBarChart: React.FC<Props> = ({
                     stackId="stack"
                     hide={isHidden}
                     maxBarSize={100}
-                    radius={isTopSegment ? [7, 7, 0, 0] : [0, 0, 0, 0]}
                     isAnimationActive={!animationComplete}
                     animationDuration={
                       animationComplete ? 0 : animationDurationMs

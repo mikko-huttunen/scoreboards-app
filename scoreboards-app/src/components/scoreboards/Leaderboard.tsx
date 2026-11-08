@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Stack,
   ToggleButton,
@@ -10,6 +10,9 @@ import type { Session } from '../../types/Session';
 import type { User } from '../../types/User';
 import type { PointCategory } from '../../types/PointCategory';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
+import type { ScoreboardSettings } from '../../types/ScoreboardSettings.ts';
+import { STAT_TYPES } from '../../constants.ts';
+import { InfoOutlined } from '@mui/icons-material';
 
 type LeaderboardRow = {
   name: string;
@@ -22,6 +25,8 @@ export type LeaderboardProps = {
   users: User[];
   pointCategories: PointCategory[];
   resultEntries: ResultEntry[];
+  statTypes?: ScoreboardSettings['statTypes'];
+  defaultStatType?: ScoreboardSettings['defaultStatType'];
   emptyText?: string;
   chartTitle?: string;
   isLoading?: boolean;
@@ -32,17 +37,48 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
   users,
   pointCategories,
   resultEntries,
+  statTypes = [STAT_TYPES.TOTAL, STAT_TYPES.AVERAGE],
+  defaultStatType = STAT_TYPES.TOTAL,
   emptyText = 'No scores recorded yet',
   chartTitle = 'Leaderboard',
   isLoading = false,
 }) => {
+  type StatType = ScoreboardSettings['statTypes'][number];
+
   const WIN_KEY = 'Total Wins';
   const SESSIONS_KEY = 'Total Sessions';
 
-  const [scoreMode, setScoreMode] = useState<'total' | 'average'>('total');
+  const sortedPointCategories = useMemo(
+    () => [...pointCategories].sort((a, b) => a.index - b.index),
+    [pointCategories]
+  );
+
+  const availableStatTypes = useMemo<StatType[]>(
+    () =>
+      (statTypes && statTypes.length > 0
+        ? statTypes
+        : [STAT_TYPES.TOTAL]
+      ).filter(
+        (t): t is StatType => t === STAT_TYPES.TOTAL || t === STAT_TYPES.AVERAGE
+      ),
+    [statTypes]
+  );
+
+  const pickInitialMode = (): StatType => {
+    if (defaultStatType && availableStatTypes.includes(defaultStatType)) {
+      return defaultStatType;
+    }
+    return availableStatTypes[0] ?? (STAT_TYPES.TOTAL as StatType);
+  };
+
+  const [scoreMode, setScoreMode] = useState<StatType>(() => pickInitialMode());
+
+  useEffect(() => {
+    setScoreMode(pickInitialMode());
+  }, [availableStatTypes, defaultStatType]);
 
   const leaderboardChartData = useMemo<LeaderboardRow[]>(() => {
-    if (!sessions?.length || !pointCategories?.length) return [];
+    if (!sessions?.length || !sortedPointCategories?.length) return [];
 
     const finishedSessionIds = new Set(sessions.map((s) => s.id));
     const userById = new Map<string, User>(users.map((u) => [u.id, u]));
@@ -98,7 +134,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       totalsByUserId.set(entry.userId, existing);
     }
 
-    for (const [_sessionId, entries] of entriesBySession.entries()) {
+    const sessionById = new Map(sessions.map((s) => [s.id, s]));
+
+    for (const [sessionId, entries] of entriesBySession.entries()) {
       let bestTotal = -Infinity;
       const totalsThisSession = new Map<string, number>();
 
@@ -112,10 +150,20 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         if (sum > bestTotal) bestTotal = sum;
       }
 
-      for (const [userId, total] of totalsThisSession.entries()) {
-        if (total === bestTotal) {
-          winsByUserId.set(userId, (winsByUserId.get(userId) ?? 0) + 1);
-        }
+      const topScorerIds = Array.from(totalsThisSession.entries())
+        .filter(([, total]) => total === bestTotal)
+        .map(([userId]) => userId);
+
+      // A tie breaker winner takes the whole win; an unresolved tie stays split between
+      // everyone who shares the top total.
+      const tieWinner = sessionById.get(sessionId)?.tieWinner;
+      const winnerIds =
+        topScorerIds.length > 1 && tieWinner && topScorerIds.includes(tieWinner)
+          ? [tieWinner]
+          : topScorerIds;
+
+      for (const userId of winnerIds) {
+        winsByUserId.set(userId, (winsByUserId.get(userId) ?? 0) + 1);
       }
     }
 
@@ -130,7 +178,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           [SESSIONS_KEY]: sessionsCount,
         };
 
-        for (const category of pointCategories) {
+        for (const category of sortedPointCategories) {
           const totalForCategory = value.categories.get(category.id) ?? 0;
 
           const avgForCategory =
@@ -138,7 +186,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           const roundedAvgForCategory = Math.round(avgForCategory);
 
           row[category.name] =
-            scoreMode === 'average' ? roundedAvgForCategory : totalForCategory;
+            scoreMode === STAT_TYPES.AVERAGE
+              ? roundedAvgForCategory
+              : totalForCategory;
         }
 
         return row;
@@ -146,12 +196,12 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
     );
 
     chartRows.sort((a, b) => {
-      const totalA = pointCategories.reduce((sum, category) => {
+      const totalA = sortedPointCategories.reduce((sum, category) => {
         const v = a[category.name];
         return sum + (typeof v === 'number' ? v : Number(v ?? 0));
       }, 0);
 
-      const totalB = pointCategories.reduce((sum, category) => {
+      const totalB = sortedPointCategories.reduce((sum, category) => {
         const v = b[category.name];
         return sum + (typeof v === 'number' ? v : Number(v ?? 0));
       }, 0);
@@ -162,10 +212,10 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
     });
 
     return chartRows;
-  }, [sessions, users, pointCategories, resultEntries, scoreMode]);
+  }, [sessions, users, sortedPointCategories, resultEntries, scoreMode]);
 
   const leaderboardSeries = useMemo(() => {
-    const pointSeries = pointCategories.map((category) => ({
+    const pointSeries = sortedPointCategories.map((category) => ({
       key: category.name,
       title: category.name,
       color: category.color,
@@ -184,7 +234,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       },
       ...pointSeries,
     ];
-  }, [pointCategories]);
+  }, [sortedPointCategories]);
 
   return (
     <Stack sx={{ width: '100%' }} spacing={2}>
@@ -194,27 +244,66 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         justifyContent="flex-start"
         spacing={2}
       >
-        <Typography variant="h6" sx={{ color: '#1b5e20' }}>
-          {chartTitle}
-        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Typography variant="h6" sx={{ color: '#1b5e20' }}>
+            {chartTitle}
+          </Typography>
 
-        <ToggleButtonGroup
-          value={scoreMode}
-          exclusive
-          onChange={(_e, v) => {
-            if (v) setScoreMode(v);
-          }}
-          size="small"
-          aria-label="Leaderboard score mode"
-          sx={{ borderRadius: '20px' }}
-        >
-          <ToggleButton value="total" aria-label="Total scores">
-            Total
-          </ToggleButton>
-          <ToggleButton value="average" aria-label="Average scores">
-            Average
-          </ToggleButton>
-        </ToggleButtonGroup>
+          {availableStatTypes.length === 1 && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="center"
+              spacing={0.5}
+            >
+              <InfoOutlined sx={{ fontSize: 14, color: '#666' }} />
+              <Typography
+                variant="caption"
+                sx={{
+                  fontStyle: 'italic',
+                  color: '#666',
+                  lineHeight: 1.2,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {availableStatTypes[0] === STAT_TYPES.TOTAL
+                  ? 'Displaying total scores'
+                  : 'Displaying average scores'}
+              </Typography>
+            </Stack>
+          )}
+        </Stack>
+
+        {availableStatTypes.length > 1 && (
+          <ToggleButtonGroup
+            value={scoreMode}
+            exclusive
+            onChange={(_e, v) => {
+              if (v) setScoreMode(v);
+            }}
+            size="small"
+            aria-label="Leaderboard score mode"
+            sx={{ borderRadius: '20px' }}
+          >
+            {availableStatTypes.includes(STAT_TYPES.TOTAL as StatType) && (
+              <ToggleButton
+                value={STAT_TYPES.TOTAL as StatType}
+                aria-label="Total scores"
+              >
+                Total
+              </ToggleButton>
+            )}
+
+            {availableStatTypes.includes(STAT_TYPES.AVERAGE as StatType) && (
+              <ToggleButton
+                value={STAT_TYPES.AVERAGE as StatType}
+                aria-label="Average scores"
+              >
+                Average
+              </ToggleButton>
+            )}
+          </ToggleButtonGroup>
+        )}
       </Stack>
 
       <ScoreBarChart

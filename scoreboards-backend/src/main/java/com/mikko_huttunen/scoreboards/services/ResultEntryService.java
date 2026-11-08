@@ -1,6 +1,8 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.Constants;
 import com.mikko_huttunen.scoreboards.dtos.UpdateResultEntryDTO;
+import com.mikko_huttunen.scoreboards.enums.HistoryAction;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.slf4j.Logger;
@@ -24,13 +26,16 @@ public class ResultEntryService {
 
     private final QueryService queryService;
     private final CurrentUserContext currentUserContext;
+    private final HistoryEventService historyEventService;
     
     @Autowired
     public ResultEntryService(
             QueryService queryService,
-            CurrentUserContext currentUserContext) {
+            CurrentUserContext currentUserContext,
+            HistoryEventService historyEventService) {
         this.queryService = queryService;
         this.currentUserContext = currentUserContext;
+        this.historyEventService = historyEventService;
     }
 
     /**
@@ -62,6 +67,15 @@ public class ResultEntryService {
         resultEntry.setTotalPoints(dto.getTotalPoints());
 
         ResultEntry createdResultEntry = queryService.create(resultEntry);
+
+        historyEventService.createResultEntryHistoryEvent(
+                HistoryAction.CREATE,
+                createdResultEntry,
+                historyEventService.buildResultEntryDetails(
+                        createdResultEntry.getResults(),
+                        createdResultEntry.getTotalPoints()
+                )
+        );
 
         logger.info("Successfully created result entry for session: {}, for user: {}",
                 dto.getSessionId(), currentUser.getId());
@@ -163,19 +177,47 @@ public class ResultEntryService {
     }
     
     /**
-     * Delete a result entry (soft delete).
-     * @param id The result entry ID
-     * @return Deleted result entry
+     * Delete result entries (soft delete).
+     * @param ids The result entry IDs to delete
+     * @return Deleted result entries
      */
     @Transactional
-    public ResultEntry deleteResultEntry(String id) {
-        User currentUser = currentUserContext.requireCurrentUser();
-        logger.info("Deleting result entry: {} by user: {}", id, currentUser.getId());
+    public List<ResultEntry> deleteResultEntries(Set<String> ids) {
+        logger.info("Deleting result entries: {}", ids);
 
-        ResultEntry deleted = queryService.deleteById(id, ResultEntry.class);
+        List<ResultEntry> deleted = queryService.deleteAll(ids, ResultEntry.class);
 
-        logger.info("Successfully deleted result entry: {}", id);
+        deleted.forEach(entry ->
+                historyEventService.createResultEntryHistoryEvent(
+                        HistoryAction.DELETE,
+                        entry,
+                        historyEventService.buildResultEntryDetails(
+                                entry.getResults(),
+                                entry.getTotalPoints()
+                        )
+                )
+        );
+
+        logger.info("Successfully deleted result entries: {}", ids);
         return deleted;
+    }
+
+    @Transactional
+    public List<ResultEntry> deleteResultEntriesBySessionId(String sessionId) {
+        logger.info("Deleting result entries by session ID: {}", sessionId);
+
+        Query query = new Query(Criteria.where("sessionId").is(sessionId));
+        List<ResultEntry> sessionResultEntries = queryService.find(query, ResultEntry.class, false);
+
+        if (sessionResultEntries.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> ids = sessionResultEntries.stream()
+                .map(ResultEntry::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        return deleteResultEntries(ids);
     }
 }
 

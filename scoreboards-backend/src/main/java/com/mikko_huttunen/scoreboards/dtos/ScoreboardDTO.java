@@ -1,5 +1,6 @@
 package com.mikko_huttunen.scoreboards.dtos;
 
+import com.mikko_huttunen.scoreboards.models.ScoreboardSettings;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -20,6 +21,10 @@ public class ScoreboardDTO {
     @Valid
     private List<PointCategoryDTO> pointCategories = new ArrayList<>();
 
+    @NotNull(message = "Scoreboard settings cannot be null")
+    @Valid
+    private ScoreboardSettings settings;
+
     public String getName() {
         return name;
     }
@@ -35,4 +40,8 @@ public class ScoreboardDTO {
     public void setPointCategories(List<PointCategoryDTO> pointCategories) {
         this.pointCategories = pointCategories;
     }
+
+    public ScoreboardSettings getSettings() { return settings; }
+
+    public void setSettings(ScoreboardSettings settings) { this.settings = settings; }
 }

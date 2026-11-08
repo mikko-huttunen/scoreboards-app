@@ -21,6 +21,24 @@ public class QueryBuilder {
     public QueryBuilder() {}
 
     /**
+     * Fetch multiple users with all memberships where userId matches.
+     * Includes memberships (filtered to isActive=true) so AccessControlValidator can validate access.
+     */
+    public Aggregation usersWithMembershipsByUserIdsQuery(Set<String> userIds) {
+        return Aggregation.newAggregation(
+                match(org.springframework.data.mongodb.core.query.Criteria.where("_id").in(userIds).and("isActive").is(true)),
+                lookup("Membership", "_id", "userId", "memberships"),
+                context -> new Document("$set", new Document("memberships",
+                        new Document("$filter", new Document()
+                                .append("input", "$memberships")
+                                .append("as", "m")
+                                .append("cond", new Document("$eq", java.util.List.of("$$m.isActive", true)))
+                        )
+                ))
+        );
+    }
+
+    /**
      * Fetch all users of a scoreboard with all the memberships where user ID matches.
      */
     public Aggregation usersWithMembershipsByScoreboardIdQuery(String scoreboardId) {
@@ -104,7 +122,7 @@ public class QueryBuilder {
                                                 .append("cond", new Document("$eq", List.of("$$s.isActive", true)))
                                         )
                                 )
-                                .append("sortBy", new Document("lastModified", -1))
+                                .append("sortBy", new Document("finishedAt", -1))
                         )
                 ))
         );
@@ -139,7 +157,9 @@ public class QueryBuilder {
                         new Document("$match", new Document("$expr", new Document("$and", List.of(
                                 new Document("$eq", List.of("$scoreboardId", "$$scoreboardId")),
                                 new Document("$eq", List.of("$isActive", true))
-                        ))))
+                        )))),
+                        // index is the order the categories were given on the scoreboard
+                        new Document("$sort", new Document("index", 1))
                 ))
                 .append("as", "pointCategories")
         );
@@ -152,7 +172,7 @@ public class QueryBuilder {
                                 new Document("$eq", List.of("$scoreboardId", "$$scoreboardId")),
                                 new Document("$eq", List.of("$isActive", true))
                         )))),
-                        new Document("$sort", new Document("lastModified", -1))
+                        new Document("$sort", new Document("finishedAt", -1))
                 ))
                 .append("as", "sessions")
         );
@@ -193,7 +213,7 @@ public class QueryBuilder {
         AggregationOperation setSessionsWithCreatedByName = context -> new Document("$set", new Document()
                 .append("sessions",
                         new Document("$map", new Document()
-                                .append("input", "$sessions") // ✅ already sorted by $sort above
+                                .append("input", "$sessions") //already sorted by $sort above
                                 .append("as", "s")
                                 .append("in", new Document("$mergeObjects", List.of(
                                         "$$s",
@@ -241,7 +261,11 @@ public class QueryBuilder {
         );
     }
 
-    public Aggregation sessionsByScoreboardIdWithResolvedCreatedByNamesQuery(String scoreboardId, Boolean isPending) {
+    /**
+     * Fetch a scoreboard's sessions with their point categories, result entries and comments.
+     * Also resolves createdByName by looking up the User document by createdBy.
+     */
+    public Aggregation sessionsByScoreboardId(String scoreboardId, Boolean isPending) {
         AggregationOperation matchSessions = match(
                 Criteria.where("scoreboardId").is(scoreboardId)
                         .and("isPending").is(isPending)
@@ -259,6 +283,20 @@ public class QueryBuilder {
                 .append("createdByName", new Document("$arrayElemAt",
                         List.of("$createdByUser.name", 0)
                 ))
+        );
+
+        AggregationOperation lookupPointCategories = context -> new Document("$lookup", new Document()
+                .append("from", "PointCategory")
+                .append("let", new Document("pointCategoryIds", "$pointCategories"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$and", List.of(
+                                new Document("$in", List.of("$_id", "$$pointCategoryIds")),
+                                new Document("$eq", List.of("$isActive", true))
+                        )))),
+                        // index is the order the categories were given on the scoreboard
+                        new Document("$sort", new Document("index", 1))
+                ))
+                .append("as", "pointCategoryDetails")
         );
 
         AggregationOperation lookupResultEntries = context -> new Document("$lookup", new Document()
@@ -281,17 +319,46 @@ public class QueryBuilder {
                                 .append("in", "$$re._id")
                         )
                 )
-                .append("resultEntryDetails", "$$REMOVE")
         );
 
-        AggregationOperation sort = context -> new Document("$sort", new Document("lastModified", -1));
+        // Comments of the session itself, oldest first, with the commenter's current name resolved
+        // the same way commentsWithUsernamesByScoreboardId does.
+        AggregationOperation lookupComments = context -> new Document("$lookup", new Document()
+                .append("from", "Comment")
+                .append("let", new Document("sessionId", "$_id"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$and", List.of(
+                                new Document("$eq", List.of("$sessionId", "$$sessionId")),
+                                new Document("$eq", List.of("$isActive", true))
+                        )))),
+                        new Document("$lookup", new Document()
+                                .append("from", "User")
+                                .append("localField", "userId")
+                                .append("foreignField", "_id")
+                                .append("as", "commentUser")
+                        ),
+                        new Document("$set", new Document()
+                                .append("username", new Document("$ifNull", List.of(
+                                        new Document("$arrayElemAt", List.of("$commentUser.name", 0)),
+                                        "$username"
+                                )))
+                                .append("commentUser", "$$REMOVE")
+                        ),
+                        new Document("$sort", new Document("created", 1))
+                ))
+                .append("as", "comments")
+        );
+
+        AggregationOperation sort = context -> new Document("$sort", new Document("finishedAt", -1));
 
         return Aggregation.newAggregation(
                 matchSessions,
                 lookupSessionCreatorUser,
                 setCreatedByName,
+                lookupPointCategories,
                 lookupResultEntries,
                 setResultEntries,
+                lookupComments,
                 sort
         );
     }
@@ -308,12 +375,14 @@ public class QueryBuilder {
 
         AggregationOperation lookupPointCategories = context -> new Document("$lookup", new Document()
                 .append("from", "PointCategory")
-                .append("let", new Document("scoreboardId", "$scoreboardId"))
+                .append("let", new Document("pointCategoryIds", "$pointCategories"))
                 .append("pipeline", List.of(
                         new Document("$match", new Document("$expr", new Document("$and", List.of(
-                                new Document("$eq", List.of("$scoreboardId", "$$scoreboardId")),
+                                new Document("$in", List.of("$_id", "$$pointCategoryIds")),
                                 new Document("$eq", List.of("$isActive", true))
-                        ))))
+                        )))),
+                        // index is the order the categories were given on the scoreboard
+                        new Document("$sort", new Document("index", 1))
                 ))
                 .append("as", "pointCategoryDetails")
         );
@@ -401,6 +470,42 @@ public class QueryBuilder {
         pipeline.addAll(addInvitationUsernameLookupsAndSetNames());
 
         return Aggregation.newAggregation(pipeline);
+    }
+
+    /**
+     * Fetch all comments of a scoreboard, oldest first, and refresh each comment's username from User.
+     * Uses userId to resolve the latest username and falls back to the stored username
+     * when the commenting user no longer exists.
+     */
+    public Aggregation commentsWithUsernamesByScoreboardId(String scoreboardId) {
+        AggregationOperation matchComments = match(
+                Criteria.where("scoreboardId").is(scoreboardId)
+                        .and("isActive").is(true)
+        );
+
+        AggregationOperation lookupCommentUser = lookup(
+                "User",
+                "userId",
+                "_id",
+                "commentUser"
+        );
+
+        AggregationOperation setUsername = context -> new Document("$set", new Document()
+                .append("username", new Document("$ifNull", List.of(
+                        new Document("$arrayElemAt", List.of("$commentUser.name", 0)),
+                        "$username"
+                )))
+                .append("commentUser", "$$REMOVE")
+        );
+
+        AggregationOperation sort = context -> new Document("$sort", new Document("created", 1));
+
+        return Aggregation.newAggregation(
+                matchComments,
+                lookupCommentUser,
+                setUsername,
+                sort
+        );
     }
 
     /**

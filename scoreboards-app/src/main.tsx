@@ -5,6 +5,8 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { BrowserRouter } from 'react-router-dom';
 import { CurrentUserProvider } from './contexts/CurrentUserContext.tsx';
 import { MessageSnackbarProvider } from './components/common/snackbar/MessageSnackbar.tsx';
+import { ThemeProvider } from '@mui/material/styles';
+import theme from './theme.ts';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -24,7 +26,9 @@ root.render(
     <MessageSnackbarProvider>
       <CurrentUserProvider>
         <BrowserRouter>
-          <App />
+          <ThemeProvider theme={theme}>
+            <App />
+          </ThemeProvider>
         </BrowserRouter>
       </CurrentUserProvider>
     </MessageSnackbarProvider>

@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.dtos;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.data.annotation.Id;
 
@@ -18,6 +19,9 @@ public class PointCategoryDTO {
     @NotBlank(message = "Color cannot be blank")
     @Pattern(regexp = "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", message = "Color must be a valid HEX color code")
     private String color;
+
+    @NotNull(message = "Index cannot be null")
+    private Integer index;
 
     public String getId() {
         return id;
@@ -42,4 +46,8 @@ public class PointCategoryDTO {
     public void setColor(String color) {
         this.color = color;
     }
+
+    public Integer getIndex() { return index; }
+
+    public void setIndex(Integer index) { this.index = index; }
 }

@@ -32,6 +32,8 @@ class ResultEntryServiceTest {
     private QueryService queryService;
     @Mock
     private CurrentUserContext currentUserContext;
+    @Mock
+    private HistoryEventService historyEventService;
 
     @InjectMocks
     private ResultEntryService resultEntryService;
@@ -228,19 +230,19 @@ class ResultEntryServiceTest {
     }
 
     // ---------------------------------------------------------------------
-    // deleteResultEntry
+    // deleteResultEntries
     // ---------------------------------------------------------------------
 
     @Test
-    void deleteResultEntry_delegatesToQueryService() {
-        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+    void deleteResultEntries_delegatesToQueryService() {
         ResultEntry deleted = new ResultEntry();
         deleted.setId("re-1");
-        when(queryService.deleteById("re-1", ResultEntry.class)).thenReturn(deleted);
+        when(queryService.deleteAll(Set.of("re-1"), ResultEntry.class)).thenReturn(List.of(deleted));
 
-        ResultEntry result = resultEntryService.deleteResultEntry("re-1");
+        List<ResultEntry> result = resultEntryService.deleteResultEntries(Set.of("re-1"));
 
-        assertEquals("re-1", result.getId());
-        verify(queryService).deleteById("re-1", ResultEntry.class);
+        assertEquals(1, result.size());
+        assertEquals("re-1", result.getFirst().getId());
+        verify(queryService).deleteAll(Set.of("re-1"), ResultEntry.class);
     }
 }

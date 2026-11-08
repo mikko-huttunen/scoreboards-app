@@ -1,6 +1,7 @@
 package com.mikko_huttunen.scoreboards.models;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -30,6 +31,10 @@ public class PointCategory extends Auditable {
     @NotBlank(message = "Color cannot be blank")
     @Pattern(regexp = "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", message = "Color must be a valid HEX color code")
     private String color;
+
+    @Field("index")
+    @NotNull(message = "Index cannot be null")
+    private Integer index;
 
     public String getId() {
         return id;
@@ -63,6 +68,14 @@ public class PointCategory extends Auditable {
         this.color = color;
     }
 
+    public Integer getIndex() {
+        return index;
+    }
+
+    public void setIndex(Integer index) {
+        this.index = index;
+    }
+
     @Override
     public String toString() {
         return "PointCategory{" +
@@ -71,6 +84,7 @@ public class PointCategory extends Auditable {
                 ", name='" + name + '\'' +
                 ", scoreboardId='" + scoreboardId + '\'' +
                 ", color='" + color + '\'' +
+                ", index=" + index + '\'' +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

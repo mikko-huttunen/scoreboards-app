@@ -11,3 +11,32 @@
   cursor: not-allowed;
 }
 
+.point-category-card {
+  transition:
+          box-shadow 0.2s ease,
+          transform 0.2s ease,
+          background-color 0.2s ease;
+  touch-action: none;
+}
+
+.point-category-card.dragging {
+  opacity: 0.7;
+  transform: scale(0.98);
+}
+
+.point-category-card.drag-over {
+  box-shadow: 0 0 0 2px #38a14f inset;
+  background-color: #eef8f0;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #5f6368;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}

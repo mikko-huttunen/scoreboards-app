@@ -2,6 +2,7 @@ package com.mikko_huttunen.scoreboards.models;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -32,6 +33,10 @@ public class Scoreboard extends Auditable {
     private List<Session> sessions = new ArrayList<>();
 
     private List<ResultEntry> resultEntries = new ArrayList<>();
+
+    @Field("settings")
+    @NotNull(message = "Scoreboard settings cannot be null")
+    private ScoreboardSettings settings;
 
     public String getId() {
         return id;
@@ -73,6 +78,10 @@ public class Scoreboard extends Auditable {
 
     public void setResultEntries(List<ResultEntry> resultEntries) { this.resultEntries = resultEntries; }
 
+    public ScoreboardSettings getSettings() { return settings; }
+
+    public void setSettings(ScoreboardSettings settings) { this.settings = settings; }
+
     @Override
     public String toString() {
         return "Scoreboard{" +
@@ -83,6 +92,7 @@ public class Scoreboard extends Auditable {
                 ", pointCategories=" + pointCategories +
                 ", sessions=" + sessions +
                 ", resultEntries=" + resultEntries +
+                ", settings=" + settings +
                 ", created=" + getCreated() +
                 ", lastModified=" + getLastModified() +
                 ", createdBy='" + getCreatedBy() + '\'' +

@@ -81,6 +81,7 @@ export const InviteUserModal = ({
       onClose={() => handleClose(null)}
       maxWidth="sm"
       fullWidth
+      fullScreen
     >
       <DialogTitle>Invite User to Scoreboard</DialogTitle>
       <DialogContent>

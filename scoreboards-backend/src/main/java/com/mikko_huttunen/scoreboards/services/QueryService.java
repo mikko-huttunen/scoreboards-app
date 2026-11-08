@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
@@ -102,6 +103,31 @@ public class QueryService {
     @Transactional
     public <T extends Auditable> List<T> find(Query query, Class<T> entityClass, boolean includeDeleted) {
         return find(query, entityClass, includeDeleted, true);
+    }
+
+    @Transactional
+    public <T extends Auditable> List<T> findPage(Query query, Class<T> entityClass, boolean includeDeleted, Pageable pageable) {
+        Query effectiveQuery = query == null ? new Query() : query;
+        if (!includeDeleted) {
+            addisActiveFilter(effectiveQuery, entityClass, false);
+        }
+
+        effectiveQuery.with(pageable);
+
+        List<T> documents = mongoTemplate.find(effectiveQuery, entityClass);
+        accessControlValidator.validateReadAccess(documents);
+
+        return documents;
+    }
+
+    @Transactional
+    public <T extends Auditable> long count(Query query, Class<T> entityClass, boolean includeDeleted) {
+        Query effectiveQuery = query == null ? new Query() : query;
+        if (!includeDeleted) {
+            addisActiveFilter(effectiveQuery, entityClass, false);
+        }
+
+        return mongoTemplate.count(effectiveQuery, entityClass);
     }
 
     @Transactional
@@ -241,6 +267,11 @@ public class QueryService {
     // Specialized lookup queries
     // -------------------------------------------------------------------------
 
+    public Optional<List<User>> fetchUsersWithMembershipsByUserIds(Set<String> userIds) {
+        Aggregation aggregation = queryBuilder.usersWithMembershipsByUserIdsQuery(userIds);
+        return aggregateList(aggregation, User.class, User.class);
+    }
+
     public Optional<List<User>> fetchUsersWithMembershipsByScoreboardId(String scoreboardId) {
         Aggregation aggregation = queryBuilder.usersWithMembershipsByScoreboardIdQuery(scoreboardId);
 
@@ -259,16 +290,22 @@ public class QueryService {
         return aggregate(scoreboardAggregation, Scoreboard.class, Scoreboard.class);
     }
 
-    public Optional<List<Session>> fetchScoreboardSessionsWithCreatedByNames(String scoreboardId, Boolean isPending) {
-        Aggregation aggregation = queryBuilder.sessionsByScoreboardIdWithResolvedCreatedByNamesQuery(scoreboardId, isPending);
+    public Optional<List<SessionDTO>> fetchScoreboardSessionsWithCreatedByNames(String scoreboardId, Boolean isPending) {
+        Aggregation aggregation = queryBuilder.sessionsByScoreboardId(scoreboardId, isPending);
 
-        return aggregateList(aggregation, Session.class, Session.class);
+        return aggregateList(aggregation, Session.class, SessionDTO.class);
     }
 
     public Optional<SessionDTO> fetchSessionWithPointCategoriesAndResultEntries(String sessionId) {
         Aggregation aggregation = queryBuilder.sessionWithPointCategoriesAndResultEntriesQuery(sessionId);
 
         return aggregate(aggregation, Session.class, SessionDTO.class);
+    }
+
+    public Optional<List<Comment>> fetchCommentsWithUsernamesByScoreboardId(String scoreboardId) {
+        Aggregation aggregation = queryBuilder.commentsWithUsernamesByScoreboardId(scoreboardId);
+
+        return aggregateList(aggregation, Comment.class, Comment.class);
     }
 
     public Optional<Invitation> fetchInvitationWithResolvedUsernamesByInvitationId(String invitationId) {

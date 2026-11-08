@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  TextField,
 } from '@mui/material';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
 
@@ -39,9 +40,32 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     onCancel();
   };
 
+  const [typedValue, setTypedValue] = useState('');
+
+  const requireTypingToConfirm = useMemo(() => {
+    return (
+      confirmLabel.trim().toLowerCase() === 'delete' ||
+      confirmLabel.trim().toLowerCase() === 'remove'
+    );
+  }, [confirmLabel]);
+
+  const isTypingCorrect =
+    typedValue.trim().toLowerCase() === confirmLabel.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!open) {
+      setTypedValue('');
+      return;
+    }
+    setTypedValue('');
+  }, [open]);
+
   const handleConfirm = async () => {
     await onConfirm();
   };
+
+  const confirmButtonDisabled =
+    loading || confirmDisabled || (requireTypingToConfirm && !isTypingCorrect);
 
   return (
     <Dialog
@@ -56,6 +80,19 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <DialogContentText component="div">
           <Box>{text}</Box>
         </DialogContentText>
+
+        {requireTypingToConfirm ? (
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              value={typedValue}
+              onChange={(e) => setTypedValue(e.target.value)}
+              label={`Type ${confirmLabel.trim().toLowerCase()} to confirm`}
+              disabled={loading}
+              autoFocus
+            />
+          </Box>
+        ) : null}
       </DialogContent>
 
       <DialogActions>
@@ -67,8 +104,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           onClick={handleConfirm}
           variant="contained"
           color={confirmColor}
-          autoFocus
-          disabled={confirmDisabled || loading}
+          autoFocus={!requireTypingToConfirm}
+          disabled={confirmButtonDisabled}
         >
           {loading ? <LoadingSpinner size={24} /> : confirmLabel}
         </Button>

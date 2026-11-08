@@ -1,8 +1,10 @@
 package com.mikko_huttunen.scoreboards.controllers;
 
 import com.mikko_huttunen.scoreboards.dtos.CreateSessionDTO;
+import com.mikko_huttunen.scoreboards.dtos.ResolveTieDTO;
 import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
 import com.mikko_huttunen.scoreboards.dtos.UpdateSessionDTO;
+import com.mikko_huttunen.scoreboards.models.Result;
 import com.mikko_huttunen.scoreboards.models.Session;
 import com.mikko_huttunen.scoreboards.services.SessionService;
 import org.junit.jupiter.api.Test;
@@ -36,7 +38,7 @@ class SessionControllerTest {
         CreateSessionDTO dto = new CreateSessionDTO();
         dto.setScoreboardId("sb-1");
         dto.setName("Night");
-        dto.setComment("c");
+        dto.setDescription("c");
         dto.setParticipants(Set.of("user-1"));
         dto.setPointCategories(Set.of("pc-1"));
 
@@ -53,9 +55,9 @@ class SessionControllerTest {
 
     @Test
     void getSessionsByScoreboardId_returnsOk() {
-        when(sessionService.getSessionsByScoreboardId("sb-1", true)).thenReturn(List.of(new Session()));
+        when(sessionService.getSessionsByScoreboardId("sb-1", true)).thenReturn(List.of(new SessionDTO()));
 
-        ResponseEntity<List<Session>> response = sessionController.getSessionsByScoreboardId("sb-1", true);
+        ResponseEntity<List<SessionDTO>> response = sessionController.getSessionsByScoreboardId("sb-1", true);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, response.getBody().size());
@@ -65,7 +67,7 @@ class SessionControllerTest {
     void getSessionsByScoreboardId_passesIsPendingThrough() {
         when(sessionService.getSessionsByScoreboardId("sb-1", false)).thenReturn(List.of());
 
-        ResponseEntity<List<Session>> response = sessionController.getSessionsByScoreboardId("sb-1", false);
+        ResponseEntity<List<SessionDTO>> response = sessionController.getSessionsByScoreboardId("sb-1", false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody().isEmpty());
@@ -87,20 +89,30 @@ class SessionControllerTest {
     @Test
     void updateSession_returnsOk() {
         UpdateSessionDTO dto = new UpdateSessionDTO();
-        dto.setPending(false);
-        dto.setParticipants(Set.of("user-1"));
-        dto.setPointCategories(Set.of("pc-1"));
-        dto.setResultEntries(Set.of("re-1"));
+        dto.setName("Session test");
+        dto.setComment("test comment");
 
-        Session session = new Session();
-        session.setId("s-1");
-        when(sessionService.updateSession("s-1", false, Set.of("user-1"), Set.of("pc-1"), Set.of("re-1")))
-                .thenReturn(session);
+        UpdateSessionDTO.ResultEntryUpdateDTO resultEntry = new UpdateSessionDTO.ResultEntryUpdateDTO();
+        resultEntry.setId("re-1");
+        resultEntry.setUserId("user-1");
 
-        ResponseEntity<Session> response = sessionController.updateSession("s-1", dto);
+        Result result = new Result();
+        result.setPointCategoryId("pc-1");
+        result.setPoints(12.0);
+        resultEntry.setResults(Set.of(result));
+
+        dto.setResultEntries(List.of(resultEntry));
+
+        SessionDTO updated = new SessionDTO();
+        updated.setId("s-1");
+
+        when(sessionService.updateSession(eq("s-1"), any(UpdateSessionDTO.class))).thenReturn(updated);
+
+        ResponseEntity<SessionDTO> response = sessionController.updateSession("s-1", dto);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("s-1", response.getBody().getId());
+        verify(sessionService).updateSession(eq("s-1"), any(UpdateSessionDTO.class));
     }
 
     @Test
@@ -125,5 +137,24 @@ class SessionControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("s-1", response.getBody().getId());
+    }
+
+    @Test
+    void resolveTieWinner_returnsOk() {
+        SessionDTO updated = new SessionDTO();
+        updated.setId("s-1");
+        updated.setTieWinner("user-2");
+        updated.setIsTieResolved(true);
+        when(sessionService.resolveTieWinner("s-1", "user-2")).thenReturn(updated);
+
+        ResolveTieDTO dto = new ResolveTieDTO();
+        dto.setTieWinner("user-2");
+
+        ResponseEntity<SessionDTO> response = sessionController.resolveTieWinner("s-1", dto);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("user-2", response.getBody().getTieWinner());
+        assertTrue(response.getBody().getIsTieResolved());
+        verify(sessionService).resolveTieWinner("s-1", "user-2");
     }
 }

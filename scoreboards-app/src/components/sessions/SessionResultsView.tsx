@@ -1,4 +1,10 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { User } from '../../types/User.ts';
@@ -14,6 +20,18 @@ import { UserService } from '../../services/UserService.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
+import { TieBreakerModal } from './TieBreakerModal.tsx';
+import {
+  getSessionTotalsByUserId,
+  getTiedUserIds,
+} from '../../utils/TieBreaker.ts';
+
+// How long the finished results stay on screen before the tie breaker interrupts them.
+const TIE_BREAKER_DELAY_MS = 1000;
+
+// How long the chart holds still after Start is pressed, before the bars begin animating.
+const RESULTS_START_DELAY_MS = 1500;
 
 export const SessionResultsView: React.FC = () => {
   const navigate = useNavigate();
@@ -37,7 +55,13 @@ export const SessionResultsView: React.FC = () => {
     resultEntries: [],
   });
 
-  const { showErrorMessage } = useMessageSnackbar();
+  const { showErrorMessage, showSuccessMessage } = useMessageSnackbar();
+  const { user } = useCurrentUser();
+
+  const [tieBreakerOpen, setTieBreakerOpen] = useState(false);
+  // The tie breaker is offered once per visit; dismissing it should not re-prompt.
+  const tieBreakerShownRef = useRef(false);
+  const tieBreakerTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!scoreboardId || !sessionId) return;
@@ -90,6 +114,87 @@ export const SessionResultsView: React.FC = () => {
       participantIds.has(re.userId)
     );
   }, [data.resultEntries, participants]);
+
+  const totalsByUserId = useMemo(() => {
+    if (!data.session) return new Map<string, number>();
+    return getSessionTotalsByUserId(filteredResults, data.session.id);
+  }, [filteredResults, data.session]);
+
+  const tiedPlayers = useMemo(() => {
+    const tiedUserIds = getTiedUserIds(totalsByUserId);
+    const participantById = new Map(participants.map((p) => [p.id, p]));
+
+    return tiedUserIds
+      .map((userId) => participantById.get(userId))
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((p) => ({
+        id: p.id,
+        name: p.name || p.email || '[Removed user]',
+        avatar: p.avatar,
+      }));
+  }, [totalsByUserId, participants]);
+
+  const tiePoints = useMemo(() => {
+    const first = tiedPlayers[0];
+    return first ? (totalsByUserId.get(first.id) ?? 0) : 0;
+  }, [tiedPlayers, totalsByUserId]);
+
+  const isParticipant = useMemo(
+    () => !!user?.id && participants.some((p) => p.id === user.id),
+    [participants, user?.id]
+  );
+
+  const canShowTieBreaker =
+    isParticipant && tiedPlayers.length > 1 && !data.session?.tieWinner;
+
+  // Results have finished calculating (either animated through or skipped).
+  const handleResultsFinished = useCallback(() => {
+    if (!canShowTieBreaker || tieBreakerShownRef.current) return;
+
+    tieBreakerShownRef.current = true;
+    tieBreakerTimerRef.current = window.setTimeout(
+      () => setTieBreakerOpen(true),
+      TIE_BREAKER_DELAY_MS
+    );
+  }, [canShowTieBreaker]);
+
+  useEffect(
+    () => () => {
+      if (tieBreakerTimerRef.current !== null) {
+        window.clearTimeout(tieBreakerTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const handleTieWinnerSelected = async (userId: string) => {
+    if (!data.session) return;
+
+    try {
+      const updatedSession = await SessionService.resolveTieWinner(
+        data.session.id,
+        userId
+      );
+
+      if (updatedSession) {
+        setData((prev) => ({ ...prev, session: updatedSession }));
+      }
+
+      setTieBreakerOpen(false);
+      showSuccessMessage('Tie breaker winner selected');
+    } catch (error) {
+      showErrorMessage(
+        error instanceof Error ? error.message : 'Failed to resolve the tie'
+      );
+    }
+  };
+
+  // Leaving the tie unresolved is what keeps the win split: every tied player stays a winner
+  // until someone records a tie breaker winner, so nothing has to be saved here.
+  const handleTieSplit = () => {
+    setTieBreakerOpen(false);
+    showSuccessMessage('The win stays split between the tied players');
+  };
 
   return (
     <Box
@@ -152,11 +257,23 @@ export const SessionResultsView: React.FC = () => {
                 participants={participants}
                 results={filteredResults}
                 pointCategories={data.pointCategories}
+                tieWinnerUserId={data.session?.tieWinner ?? null}
+                startDelayMs={RESULTS_START_DELAY_MS}
+                onFinished={handleResultsFinished}
               />
             </Stack>
           )}
         </Stack>
       </Box>
+
+      <TieBreakerModal
+        open={tieBreakerOpen}
+        players={tiedPlayers}
+        points={tiePoints}
+        onSelect={handleTieWinnerSelected}
+        onSplit={handleTieSplit}
+        onClose={() => setTieBreakerOpen(false)}
+      />
     </Box>
   );
 };

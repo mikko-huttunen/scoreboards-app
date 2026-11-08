@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Stack,
   Typography,
-  Button,
   IconButton,
   Tooltip,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Session } from '../../types/Session';
 import type { User } from '../../types/User';
@@ -29,7 +31,14 @@ import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
 import { UserService } from '../../services/UserService.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { PerformanceChart } from './PerformanceChart.tsx';
-import { SessionService } from '../../services/SessionService.ts';
+import {
+  type SessionData,
+  SessionService,
+} from '../../services/SessionService.ts';
+import { HistoryView } from './HistoryView.tsx';
+import { CommentService } from '../../services/CommentService.ts';
+import type { Comment } from '../../types/Comment.ts';
+import { CommentSection } from '../comments/CommentSection.tsx';
 
 export type ScoreboardsViewProps = {
   sessions?: Session[];
@@ -46,6 +55,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   const [scoreboard, setScoreboard] = useState<Scoreboard | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [sentInvitations, setSentInvitations] = useState<Invitation[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [pointCategories, setPointCategories] = useState<PointCategory[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [resultEntries, setResultEntries] = useState<ResultEntry[]>([]);
@@ -61,14 +71,36 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
   const { user } = useCurrentUser();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
 
+  const [actionsMenuAnchorEl, setActionsMenuAnchorEl] =
+    useState<null | HTMLElement>(null);
+
+  const scoreboardComments = useMemo(
+    () => comments.filter((item) => !item.sessionId),
+    [comments]
+  );
+
+  const sessionComments = useMemo(
+    () => comments.filter((item) => !!item.sessionId),
+    [comments]
+  );
+
+  const openActionsMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setActionsMenuAnchorEl(event.currentTarget);
+  };
+
+  const closeActionsMenu = () => {
+    setActionsMenuAnchorEl(null);
+  };
+
   useEffect(() => {
     if (!scoreboardId || !user) return;
 
     const loadAllData = async () => {
       try {
-        const [scoreboardData, usersData] = await Promise.all([
+        const [scoreboardData, usersData, commentsData] = await Promise.all([
           ScoreboardsService.getScoreboardById(scoreboardId),
           UserService.getScoreboardUsers(scoreboardId),
+          CommentService.getCommentsByScoreboardId(scoreboardId),
         ]);
 
         setScoreboard(scoreboardData);
@@ -91,6 +123,8 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
             invitations.filter((inv) => inv.scoreboardId === scoreboardId)
           );
         }
+
+        setComments(commentsData);
       } catch (err) {
         showErrorMessage('Failed to load scoreboard');
         navigate('/scoreboards');
@@ -136,7 +170,29 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
           Array.from(s.participants).includes(user.id) ||
           s.createdBy === user.id
       );
-      setPendingSessions(filtered);
+
+      const sessionsFromData: Session[] = filtered.map((s) => ({
+        id: s.id,
+        name: s.name,
+        comment: s.comment,
+        type: s.type,
+        scoreboardId: s.scoreboardId,
+        createdBy: s.createdBy,
+        createdByName: s.createdByName,
+        isPending: s.isPending,
+        finishedAt: s.finishedAt ?? null,
+        editedAt: s.editedAt ?? null,
+        participants: s.participants,
+        pointCategories: new Set(s.pointCategoryDetails.map((pc) => pc.id)),
+        resultEntries: new Set(s.resultEntryDetails.map((re) => re.id)),
+        isTieResolved: s.isTieResolved ?? true,
+        tieWinner: s.tieWinner ?? null,
+        created: s.created,
+        lastModified: s.lastModified,
+        isActive: s.isActive,
+      }));
+
+      setPendingSessions(sessionsFromData);
       showSuccessMessage('Pending sessions refreshed');
     } catch {
       showErrorMessage('Failed to load pending sessions');
@@ -147,15 +203,135 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     if (!scoreboardId) return;
 
     try {
-      const updated = await SessionService.getSessionsByScoreboardId(
+      const updatedSessionData = await SessionService.getSessionsByScoreboardId(
         scoreboardId,
         false
       );
 
-      setSessions(updated);
+      const sessionsFromData: Session[] = updatedSessionData.map((s) => ({
+        id: s.id,
+        name: s.name,
+        comment: s.comment,
+        type: s.type,
+        scoreboardId: s.scoreboardId,
+        createdBy: s.createdBy,
+        createdByName: s.createdByName,
+        isPending: s.isPending,
+        finishedAt: s.finishedAt ?? null,
+        editedAt: s.editedAt ?? null,
+        participants: s.participants,
+        pointCategories: new Set(s.pointCategoryDetails.map((pc) => pc.id)),
+        resultEntries: new Set(s.resultEntryDetails.map((re) => re.id)),
+        isTieResolved: s.isTieResolved ?? true,
+        tieWinner: s.tieWinner ?? null,
+        created: s.created,
+        lastModified: s.lastModified,
+        isActive: s.isActive,
+      }));
+
+      setSessions(sessionsFromData);
+
+      const nextPointCategoriesMap = new Map<string, PointCategory>();
+      const nextResultEntriesMap = new Map<string, ResultEntry>();
+
+      for (const s of updatedSessionData) {
+        for (const pc of s.pointCategoryDetails ?? []) {
+          nextPointCategoriesMap.set(pc.id, pc);
+        }
+        for (const re of s.resultEntryDetails ?? []) {
+          nextResultEntriesMap.set(re.id, re);
+        }
+      }
+
+      setPointCategories(Array.from(nextPointCategoriesMap.values()));
+      setResultEntries(Array.from(nextResultEntriesMap.values()));
+
+      // Sessions come back with their own comments, so the session side of the comment state is
+      // replaced wholesale. Scoreboard comments and comments of sessions outside this refresh
+      // (pending ones) are left untouched.
+      const refreshedSessionIds = new Set(updatedSessionData.map((s) => s.id));
+      const refreshedSessionComments = updatedSessionData.flatMap(
+        (s) => s.comments ?? []
+      );
+
+      setComments((prev) => [
+        ...prev.filter(
+          (item) => !item.sessionId || !refreshedSessionIds.has(item.sessionId)
+        ),
+        ...refreshedSessionComments,
+      ]);
+
       showSuccessMessage('Sessions refreshed');
     } catch {
       showErrorMessage('Failed to load sessions');
+    }
+  };
+
+  const handleUpdateSession = (updatedSession: SessionData) => {
+    const updatedAsUiSession: Session = {
+      id: updatedSession.id,
+      name: updatedSession.name,
+      comment: updatedSession.comment,
+      type: updatedSession.type,
+      scoreboardId: updatedSession.scoreboardId,
+      createdBy: updatedSession.createdBy,
+      createdByName: updatedSession.createdByName,
+      isPending: updatedSession.isPending,
+      finishedAt: updatedSession.finishedAt ?? null,
+      editedAt: updatedSession.editedAt ?? null,
+      participants: updatedSession.participants,
+      pointCategories: new Set(
+        updatedSession.pointCategoryDetails.map((pc) => pc.id)
+      ),
+      resultEntries: new Set(
+        updatedSession.resultEntryDetails.map((re) => re.id)
+      ),
+      isTieResolved: updatedSession.isTieResolved ?? true,
+      tieWinner: updatedSession.tieWinner ?? null,
+      created: updatedSession.created,
+      lastModified: updatedSession.lastModified,
+      isActive: updatedSession.isActive,
+    };
+
+    setSessions((prev) => {
+      const exists = prev.some((s) => s.id === updatedAsUiSession.id);
+      if (exists) {
+        return prev.map((s) =>
+          s.id === updatedAsUiSession.id ? updatedAsUiSession : s
+        );
+      }
+      return [updatedAsUiSession, ...prev];
+    });
+
+    setPointCategories((prev) => {
+      const map = new Map<string, PointCategory>(prev.map((pc) => [pc.id, pc]));
+      for (const pc of updatedSession.pointCategoryDetails ?? []) {
+        map.set(pc.id, pc);
+      }
+      return Array.from(map.values());
+    });
+
+    setResultEntries((prev) => {
+      const map = new Map<string, ResultEntry>(prev.map((re) => [re.id, re]));
+      for (const re of updatedSession.resultEntryDetails ?? []) {
+        map.set(re.id, re);
+      }
+      return Array.from(map.values());
+    });
+
+    showSuccessMessage('Session updated');
+  };
+
+  const handleRefreshComments = async () => {
+    if (!scoreboardId) return;
+
+    try {
+      const updatedComments =
+        await CommentService.getCommentsByScoreboardId(scoreboardId);
+      setComments(updatedComments);
+      showSuccessMessage('Comments refreshed');
+    } catch {
+      showErrorMessage('Failed to load comments');
     }
   };
 
@@ -218,6 +394,47 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     setSessions((prevSessions) =>
       prevSessions.filter((s) => s.id !== sessionId)
     );
+    setComments((prev) => prev.filter((item) => item.sessionId !== sessionId));
+  };
+
+  const createComment = async (comment: string, sessionId?: string) => {
+    if (!scoreboardId) return;
+
+    try {
+      const createdComment = await CommentService.createComment({
+        scoreboardId,
+        sessionId,
+        comment,
+      });
+
+      setComments((prev) => [...prev, createdComment]);
+      showSuccessMessage('Comment added');
+    } catch (error) {
+      showErrorMessage(
+        error instanceof Error ? error.message : 'Failed to add comment'
+      );
+    }
+  };
+
+  const handleCreateScoreboardComment = async (comment: string) =>
+    createComment(comment);
+
+  const handleCreateSessionComment = async (
+    sessionId: string,
+    comment: string
+  ) => createComment(comment, sessionId);
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await CommentService.deleteComment(commentId);
+
+      setComments((prev) => prev.filter((item) => item.id !== commentId));
+      showSuccessMessage('Comment deleted');
+    } catch (error) {
+      showErrorMessage(
+        error instanceof Error ? error.message : 'Failed to delete comment'
+      );
+    }
   };
 
   const handleScoreSubmitted = (resultEntry: ResultEntry) => {
@@ -375,62 +592,89 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1}>
-              {isOwner && (
-                <>
-                  <Tooltip
-                    title={
-                      pendingSessions.length > 0
-                        ? 'Cannot edit scoreboard while there are pending sessions'
-                        : ''
-                    }
-                  >
-                    <span>
-                      <Button
-                        variant="contained"
-                        onClick={handleEditClick}
-                        disabled={pendingSessions.length > 0}
-                        sx={{
-                          backgroundColor: '#ffffff',
-                          color: '#38a14f',
-                          ':hover': { backgroundColor: '#f7f7f7' },
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    </span>
-                  </Tooltip>
-                  <Tooltip
-                    title={
-                      pendingSessions.length > 0
-                        ? 'Cannot delete scoreboard while there are pending sessions'
-                        : ''
-                    }
-                  >
-                    <span>
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        onClick={() => setDeleteScoreboardDialogOpen(true)}
-                        disabled={pendingSessions.length > 0}
-                        sx={{ ':hover': { backgroundColor: '#d32f2f' } }}
-                      >
-                        Delete
-                      </Button>
-                    </span>
-                  </Tooltip>
-                </>
-              )}
-              {!isOwner && (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  onClick={openLeaveScoreboardModal}
-                  disabled={pendingSessions.length > 0}
-                  sx={{ ':hover': { backgroundColor: '#ed6c02' } }}
+              <>
+                <IconButton
+                  onClick={openActionsMenu}
+                  sx={{ color: '#1b5e20' }}
+                  aria-label="scoreboard actions"
                 >
-                  Leave
-                </Button>
-              )}
+                  <MoreVertIcon />
+                </IconButton>
+
+                <Menu
+                  anchorEl={actionsMenuAnchorEl}
+                  open={Boolean(actionsMenuAnchorEl)}
+                  onClose={closeActionsMenu}
+                >
+                  {isOwner && (
+                    <>
+                      <Tooltip
+                        title={
+                          pendingSessions.length > 0
+                            ? 'Cannot edit scoreboard while there are pending sessions'
+                            : ''
+                        }
+                      >
+                        <span>
+                          <MenuItem
+                            onClick={() => {
+                              closeActionsMenu();
+                              if (pendingSessions.length === 0)
+                                handleEditClick();
+                            }}
+                            disabled={pendingSessions.length > 0}
+                          >
+                            Edit Scoreboard
+                          </MenuItem>
+                        </span>
+                      </Tooltip>
+
+                      <Tooltip
+                        title={
+                          pendingSessions.length > 0
+                            ? 'Cannot delete scoreboard while there are pending sessions'
+                            : ''
+                        }
+                      >
+                        <span>
+                          <MenuItem
+                            onClick={() => {
+                              closeActionsMenu();
+                              if (pendingSessions.length === 0)
+                                setDeleteScoreboardDialogOpen(true);
+                            }}
+                            disabled={pendingSessions.length > 0}
+                          >
+                            Delete Scoreboard
+                          </MenuItem>
+                        </span>
+                      </Tooltip>
+                    </>
+                  )}
+                  {!isOwner && (
+                    <Tooltip
+                      title={
+                        pendingSessions.length > 0
+                          ? 'Cannot leave scoreboard while you have pending sessions'
+                          : ''
+                      }
+                    >
+                      <span>
+                        <MenuItem
+                          onClick={() => {
+                            closeActionsMenu();
+                            if (pendingSessions.length === 0)
+                              openLeaveScoreboardModal();
+                          }}
+                          disabled={pendingSessions.length > 0}
+                        >
+                          Leave Scoreboard
+                        </MenuItem>
+                      </span>
+                    </Tooltip>
+                  )}
+                </Menu>
+              </>
             </Stack>
           </Stack>
 
@@ -442,6 +686,8 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               users={users}
               pointCategories={pointCategories}
               resultEntries={resultEntries}
+              statTypes={scoreboard.settings?.statTypes}
+              defaultStatType={scoreboard.settings?.defaultStatType}
               emptyText="No data. Create sessions to generate data"
               chartTitle="Leaderboard"
             />
@@ -460,7 +706,9 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               isLoading={loadingScoreboard}
               pendingSessions={pendingSessions}
               scoreboard={scoreboard}
+              users={users}
               pointCategories={pointCategories}
+              onCreateSession={(session) => handleSessionCreated(session)}
               onCancelSession={(sessionId) =>
                 handleRemovePendingSession(sessionId)
               }
@@ -475,9 +723,15 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               users={users}
               pointCategories={pointCategories}
               resultEntries={resultEntries}
-              onCreateSession={(session) => handleSessionCreated(session)}
+              comments={sessionComments}
+              onCreateComment={handleCreateSessionComment}
+              onDeleteComment={handleDeleteComment}
+              onRefreshComments={handleRefreshComments}
               onDeleteSession={(sessionId) => handleDeleteSession(sessionId)}
               onRefresh={handleRefreshSessions}
+              onUpdateSession={(updatedSession) =>
+                handleUpdateSession(updatedSession)
+              }
             />
 
             <ScoreboardMembers
@@ -502,6 +756,19 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                 onRefresh={handleRefreshSentInvitations}
               />
             )}
+
+            <CommentSection
+              title="Comments"
+              comments={scoreboardComments}
+              isScoreboardOwner={user?.id === scoreboard.createdBy}
+              maxLength={100}
+              placeholder="Add a comment to this scoreboard..."
+              onCreateComment={handleCreateScoreboardComment}
+              onDeleteComment={handleDeleteComment}
+              refresh={handleRefreshComments}
+            />
+
+            <HistoryView scoreboardId={scoreboard.id} />
           </>
         </Stack>
       </Box>

@@ -1,12 +1,9 @@
 package com.mikko_huttunen.scoreboards.services;
 
 import com.mikko_huttunen.scoreboards.dtos.SessionDTO;
+import com.mikko_huttunen.scoreboards.dtos.UpdateSessionDTO;
 import com.mikko_huttunen.scoreboards.enums.Permission;
-import com.mikko_huttunen.scoreboards.models.Membership;
-import com.mikko_huttunen.scoreboards.models.Result;
-import com.mikko_huttunen.scoreboards.models.ResultEntry;
-import com.mikko_huttunen.scoreboards.models.Session;
-import com.mikko_huttunen.scoreboards.models.User;
+import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.mongodb.core.query.Query;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -34,6 +32,8 @@ class SessionServiceTest {
     private CurrentUserContext currentUserContext;
     @Mock
     private QueryService queryService;
+    @Mock
+    private HistoryEventService historyEventService;
 
     @InjectMocks
     private SessionService sessionService;
@@ -53,6 +53,43 @@ class SessionServiceTest {
         m.setUserId(userId);
         m.setPermissions(Set.of(Permission.SESSIONS, Permission.OWNER));
         return m;
+    }
+
+    private Membership membership(String userId, Set<Permission> permissions) {
+        Membership m = new Membership();
+        m.setScoreboardId("sb-1");
+        m.setUserId(userId);
+        m.setPermissions(permissions);
+        return m;
+    }
+
+    private Result result(double points) {
+        Result r = new Result();
+        r.setPointCategoryId("pc-1");
+        r.setPoints(points);
+        return r;
+    }
+
+    private UpdateSessionDTO.ResultEntryUpdateDTO updateResultEntry(String id, String userId, double... points) {
+        UpdateSessionDTO.ResultEntryUpdateDTO dto = new UpdateSessionDTO.ResultEntryUpdateDTO();
+        dto.setId(id);
+        dto.setUserId(userId);
+        Set<Result> results = new HashSet<>();
+        for (double point : points) {
+            results.add(result(point));
+        }
+        dto.setResults(results);
+        return dto;
+    }
+
+    private ResultEntry resultEntry(String id, String sessionId, String userId, boolean pending, Set<Result> results) {
+        ResultEntry re = new ResultEntry();
+        re.setId(id);
+        re.setSessionId(sessionId);
+        re.setUserId(userId);
+        re.setIsPending(pending);
+        re.setResults(results);
+        return re;
     }
 
     // ---------------------------------------------------------------------
@@ -96,15 +133,15 @@ class SessionServiceTest {
 
     @Test
     void getSessionsByScoreboardId_delegatesToQueryService() {
-        Session s = new Session();
+        SessionDTO s = new SessionDTO();
         s.setId("s-1");
         when(queryService.fetchScoreboardSessionsWithCreatedByNames("sb-1", true))
                 .thenReturn(Optional.of(List.of(s)));
 
-        List<Session> result = sessionService.getSessionsByScoreboardId("sb-1", true);
+        List<SessionDTO> result = sessionService.getSessionsByScoreboardId("sb-1", true);
 
         assertEquals(1, result.size());
-        assertEquals("s-1", result.get(0).getId());
+        assertEquals("s-1", result.getFirst().getId());
     }
 
     @Test
@@ -112,7 +149,7 @@ class SessionServiceTest {
         when(queryService.fetchScoreboardSessionsWithCreatedByNames("sb-1", false))
                 .thenReturn(Optional.empty());
 
-        List<Session> result = sessionService.getSessionsByScoreboardId("sb-1", false);
+        List<SessionDTO> result = sessionService.getSessionsByScoreboardId("sb-1", false);
 
         assertTrue(result.isEmpty());
     }
@@ -148,71 +185,174 @@ class SessionServiceTest {
     // ---------------------------------------------------------------------
 
     @Test
-    void updateSession_appliesNonNullFields() {
+    void updateSession_updatesSessionAndAllResultEntries_whenUserIsOwner() {
+        // Arrange
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
-        Session updated = new Session();
-        updated.setId("s-1");
+        user.setMemberships(Set.of(membership("user-1", Set.of(Permission.OWNER))));
+
+        SessionDTO sessionDto = new SessionDTO();
+        sessionDto.setId("s-1");
+        sessionDto.setScoreboardId("sb-1");
+        sessionDto.setName("Old name");
+        sessionDto.setComment("Old comment");
+        sessionDto.setCreatedBy("user-1");
+        sessionDto.setResultEntryDetails(List.of(
+                resultEntry("re-1", "s-1", "user-1", true, Set.of(result(0))),
+                resultEntry("re-2", "s-1", "user-2", true, Set.of(result(0)))
+        ));
+
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(sessionDto));
+
+        Session resultAfterSessionUpdate = new Session();
+        resultAfterSessionUpdate.setId("s-1");
+
         when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
                 .thenAnswer(inv -> {
                     QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
-                    updater.update(updated);
-                    return Optional.of(updated);
+                    updater.update(resultAfterSessionUpdate);
+                    // updateSession re-reads the session afterwards, so the persisted change has
+                    // to be visible on the DTO the fetch mock hands back
+                    sessionDto.setName(resultAfterSessionUpdate.getName());
+                    sessionDto.setComment(resultAfterSessionUpdate.getComment());
+                    return Optional.of(resultAfterSessionUpdate);
                 });
 
-        Session result = sessionService.updateSession(
-                "s-1", false, Set.of("user-2"), Set.of("pc-2"), Set.of("re-1"));
+        when(queryService.updateAll(anySet(), eq(ResultEntry.class), any()))
+                .thenAnswer(inv -> {
+                    // mimic the updater effect on the in-memory result entry objects from sessionDto
+                    Set<String> ids = inv.getArgument(0);
+                    QueryService.DocumentUpdater<ResultEntry> updater = inv.getArgument(2);
 
-        assertEquals("s-1", result.getId());
-        assertFalse(result.getIsPending());
-        assertEquals(Set.of("user-2"), result.getParticipants());
-        assertEquals(Set.of("pc-2"), result.getPointCategories());
-        assertEquals(Set.of("re-1"), result.getResultEntries());
+                    for (ResultEntry re : sessionDto.getResultEntryDetails()) {
+                        if (ids.contains(re.getId())) {
+                            // updater will be called with the object it replaces; tests just need totals/isPending updated
+                            updater.update(re);
+                        }
+                    }
+                    return List.of();
+                });
+
+        UpdateSessionDTO dto = new UpdateSessionDTO();
+        dto.setName("Session test");
+        dto.setComment("test comment");
+        dto.setResultEntries(List.of(
+                updateResultEntry("re-1", "user-1", 12),
+                updateResultEntry("re-2", "user-2", 14)
+        ));
+
+        // Act
+        SessionDTO updated = sessionService.updateSession("s-1", dto);
+
+        // Assert
+        assertEquals("Session test", updated.getName());
+        assertEquals("test comment", updated.getComment());
+
+        ResultEntry re1 = updated.getResultEntryDetails().stream().filter(re -> re.getId().equals("re-1")).findFirst().orElseThrow();
+        ResultEntry re2 = updated.getResultEntryDetails().stream().filter(re -> re.getId().equals("re-2")).findFirst().orElseThrow();
+
+        assertFalse(re1.getIsPending());
+        assertFalse(re2.getIsPending());
+        assertEquals(12.0, re1.getTotalPoints());
+        assertEquals(14.0, re2.getTotalPoints());
+
+        // updateSession re-reads the session to diff history and re-derive the tie state
+        verify(queryService, atLeastOnce()).fetchSessionWithPointCategoriesAndResultEntries("s-1");
+        verify(queryService).updateById(eq("s-1"), eq(Session.class), any());
+        verify(queryService).updateAll(anySet(), eq(ResultEntry.class), any());
     }
 
     @Test
-    void updateSession_ignoresNullFields() {
+    void updateSession_throwsWhenUserHasNoPermission() {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
-        Session existing = new Session();
-        existing.setId("s-1");
-        existing.setIsPending(true);
-        existing.setParticipants(Set.of("orig"));
+        user.setMemberships(Set.of()); // no membership for scoreboard
+
+        SessionDTO sessionDto = new SessionDTO();
+        sessionDto.setId("s-1");
+        sessionDto.setScoreboardId("sb-1");
+        sessionDto.setCreatedBy("user-2");
+        sessionDto.setName("Old name");
+        sessionDto.setComment("Old comment");
+        sessionDto.setResultEntryDetails(List.of());
+
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(sessionDto));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> sessionService.updateSession("s-1", new UpdateSessionDTO()));
+
+        assertEquals("User does not have permission to update this session", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), eq(Session.class), any());
+        verify(queryService, never()).updateAll(anySet(), eq(ResultEntry.class), any());
+    }
+
+    @Test
+    void updateSession_allowsSessionsPermissionWhenUpdatingCreatorScoreOnly() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1", Set.of(Permission.SESSIONS))));
+
+        SessionDTO sessionDto = new SessionDTO();
+        sessionDto.setId("s-1");
+        sessionDto.setScoreboardId("sb-1");
+        sessionDto.setCreatedBy("user-1"); // creator is the current user
+        sessionDto.setName("Old name");
+        sessionDto.setComment("Old comment");
+        sessionDto.setResultEntryDetails(List.of(
+                resultEntry("re-1", "s-1", "user-1", true, Set.of(result(0)))
+        ));
+
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(sessionDto));
+
+        Session resultAfterSessionUpdate = new Session();
+        resultAfterSessionUpdate.setId("s-1");
+        resultAfterSessionUpdate.setName("Old name");
+        resultAfterSessionUpdate.setComment("Old comment");
+
         when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
                 .thenAnswer(inv -> {
                     QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
-                    updater.update(existing);
-                    return Optional.of(existing);
+                    updater.update(resultAfterSessionUpdate);
+                    // updateSession re-reads the session afterwards, so the persisted change has
+                    // to be visible on the DTO the fetch mock hands back
+                    sessionDto.setName(resultAfterSessionUpdate.getName());
+                    sessionDto.setComment(resultAfterSessionUpdate.getComment());
+                    return Optional.of(resultAfterSessionUpdate);
                 });
 
-        Session result = sessionService.updateSession("s-1", null, null, null, null);
+        when(queryService.updateAll(anySet(), eq(ResultEntry.class), any()))
+                .thenAnswer(inv -> {
+                    Set<String> ids = inv.getArgument(0);
+                    QueryService.DocumentUpdater<ResultEntry> updater = inv.getArgument(2);
 
-        assertTrue(result.getIsPending());
-        assertEquals(Set.of("orig"), result.getParticipants());
-    }
+                    for (ResultEntry re : sessionDto.getResultEntryDetails()) {
+                        if (ids.contains(re.getId())) {
+                            updater.update(re);
+                        }
+                    }
+                    return List.of();
+                });
 
-    @Test
-    void updateSession_throwsWhenNotFound() {
-        when(currentUserContext.requireCurrentUser()).thenReturn(user);
-        when(queryService.updateById(eq("s-1"), eq(Session.class), any())).thenReturn(Optional.empty());
+        UpdateSessionDTO dto = new UpdateSessionDTO();
+        dto.setName("Session test");
+        dto.setComment("test comment");
+        dto.setResultEntries(List.of(
+                updateResultEntry("re-1", "user-1", 12)
+        ));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> sessionService.updateSession("s-1", true, null, null, null));
-    }
+        // Act
+        SessionDTO updated = sessionService.updateSession("s-1", dto);
 
-    // ---------------------------------------------------------------------
-    // deleteSessions
-    // ---------------------------------------------------------------------
+        // Assert
+        assertEquals("Session test", updated.getName());
+        assertEquals("test comment", updated.getComment());
 
-    @Test
-    void deleteSessions_deletesSessionsAndRelatedResultEntries() {
-        when(currentUserContext.requireCurrentUser()).thenReturn(user);
-        Session deleted = new Session();
-        deleted.setId("s-1");
-        when(queryService.deleteAll(Set.of("s-1"), Session.class)).thenReturn(List.of(deleted));
+        ResultEntry re1 = updated.getResultEntryDetails().getFirst();
+        assertEquals("re-1", re1.getId());
+        assertEquals(12.0, re1.getTotalPoints());
+        assertFalse(re1.getIsPending());
 
-        List<Session> result = sessionService.deleteSessions(Set.of("s-1"));
-
-        assertEquals(1, result.size());
-        verify(queryService).delete(any(Query.class), eq(ResultEntry.class));
+        verify(queryService).updateAll(anySet(), eq(ResultEntry.class), any());
     }
 
     // ---------------------------------------------------------------------
@@ -313,6 +453,205 @@ class SessionServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> sessionService.finishSession("s-1"));
         assertEquals("Session has already finished", ex.getMessage());
+    }
+
+    // ---------------------------------------------------------------------
+    // tie breaker
+    // ---------------------------------------------------------------------
+
+    private SessionDTO finishedTiedSession() {
+        SessionDTO dto = new SessionDTO();
+        dto.setId("s-1");
+        dto.setScoreboardId("sb-1");
+        dto.setName("Match Night");
+        dto.setCreatedBy("user-1");
+        dto.setIsPending(false);
+        dto.setParticipants(Set.of("user-1", "user-2"));
+        dto.setIsTieResolved(false);
+        dto.setResultEntryDetails(List.of(
+                scoredEntry("re-1", "user-1", 10),
+                scoredEntry("re-2", "user-2", 10)
+        ));
+        return dto;
+    }
+
+    private ResultEntry scoredEntry(String id, String userId, double points) {
+        ResultEntry re = resultEntry(id, "s-1", userId, false, Set.of(result(points)));
+        re.setIsActive(true);
+        re.setTotalPoints(points);
+        return re;
+    }
+
+    @Test
+    void finishSession_leavesTieUnresolvedWhenParticipantsShareTopTotal() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setIsPending(true);
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        Session finished = new Session();
+        finished.setId("s-1");
+        finished.setIsPending(true);
+        when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
+                .thenAnswer(inv -> {
+                    QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
+                    updater.update(finished);
+                    return Optional.of(finished);
+                });
+
+        sessionService.finishSession("s-1");
+
+        assertFalse(finished.getIsTieResolved());
+        assertNull(finished.getTieWinner());
+    }
+
+    @Test
+    void finishSession_marksTieResolvedWhenThereIsAClearWinner() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setIsPending(true);
+        dto.setResultEntryDetails(List.of(
+                scoredEntry("re-1", "user-1", 14),
+                scoredEntry("re-2", "user-2", 10)
+        ));
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        Session finished = new Session();
+        finished.setId("s-1");
+        finished.setIsPending(true);
+        when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
+                .thenAnswer(inv -> {
+                    QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
+                    updater.update(finished);
+                    return Optional.of(finished);
+                });
+
+        sessionService.finishSession("s-1");
+
+        assertTrue(finished.getIsTieResolved());
+    }
+
+    @Test
+    void resolveTieWinner_recordsWinnerAmongTiedParticipants() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
+
+        SessionDTO dto = finishedTiedSession();
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        Session persisted = new Session();
+        persisted.setId("s-1");
+        when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
+                .thenAnswer(inv -> {
+                    QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
+                    updater.update(persisted);
+                    return Optional.of(persisted);
+                });
+
+        sessionService.resolveTieWinner("s-1", "user-2");
+
+        assertEquals("user-2", persisted.getTieWinner());
+        assertTrue(persisted.getIsTieResolved());
+    }
+
+    @Test
+    void resolveTieWinner_throwsWhenWinnerIsNotTiedForTheLead() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setParticipants(Set.of("user-1", "user-2", "user-3"));
+        dto.setResultEntryDetails(List.of(
+                scoredEntry("re-1", "user-1", 10),
+                scoredEntry("re-2", "user-2", 10),
+                scoredEntry("re-3", "user-3", 4)
+        ));
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> sessionService.resolveTieWinner("s-1", "user-3"));
+
+        assertEquals("Tie winner must be one of the tied participants", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), eq(Session.class), any());
+    }
+
+    @Test
+    void resolveTieWinner_throwsWhenTieAlreadyResolved() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1")));
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setIsTieResolved(true);
+        dto.setTieWinner("user-1");
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> sessionService.resolveTieWinner("s-1", "user-2"));
+
+        assertEquals("Tie has already been resolved", ex.getMessage());
+        verify(queryService, never()).updateById(anyString(), eq(Session.class), any());
+    }
+
+    @Test
+    void resolveTieWinner_throwsWhenUserHasNoMembership() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of());
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setCreatedBy("user-9");
+        dto.setParticipants(Set.of("user-2", "user-3"));
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> sessionService.resolveTieWinner("s-1", "user-2"));
+
+        assertEquals("User does not have permission to resolve this tie", ex.getMessage());
+    }
+
+    @Test
+    void updateSession_dropsTieWinnerWhenEditedScoresBreakTheTie() {
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        user.setMemberships(Set.of(membership("user-1", Set.of(Permission.OWNER))));
+
+        SessionDTO dto = finishedTiedSession();
+        dto.setIsTieResolved(true);
+        dto.setTieWinner("user-1");
+        // user-1 pulls ahead, so there is no longer a tie to hold a winner for
+        dto.setResultEntryDetails(List.of(
+                scoredEntry("re-1", "user-1", 18),
+                scoredEntry("re-2", "user-2", 10)
+        ));
+        when(queryService.fetchSessionWithPointCategoriesAndResultEntries("s-1"))
+                .thenReturn(Optional.of(dto));
+
+        Session persisted = new Session();
+        persisted.setId("s-1");
+        persisted.setTieWinner("user-1");
+        persisted.setIsTieResolved(true);
+        when(queryService.updateById(eq("s-1"), eq(Session.class), any()))
+                .thenAnswer(inv -> {
+                    QueryService.DocumentUpdater<Session> updater = inv.getArgument(2);
+                    updater.update(persisted);
+                    return Optional.of(persisted);
+                });
+
+        UpdateSessionDTO update = new UpdateSessionDTO();
+        update.setResultEntries(List.of());
+
+        sessionService.updateSession("s-1", update);
+
+        assertNull(persisted.getTieWinner());
+        assertTrue(persisted.getIsTieResolved());
     }
 
     // ---------------------------------------------------------------------

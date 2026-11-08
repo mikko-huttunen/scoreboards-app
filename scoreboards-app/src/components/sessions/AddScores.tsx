@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import { ResultEntryService } from '../../services/ResultEntryService.ts';
 import type { Session } from '../../types/Session.ts';
-import type { PointCategory } from '../../types/PointCategory.ts';
+import { type PointCategory } from '../../types/PointCategory.ts';
 import type { ResultEntry } from '../../types/ResultEntry.ts';
 import type { Result } from '../../types/Result.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
@@ -191,12 +191,12 @@ export const AddScores: React.FC<AddScoresProps> = ({
     });
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen>
       <DialogTitle>
         {`Set Scores for ${session.name}`}
-        {session.comment ? (
+        {session.description ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-            {session?.comment}
+            {session?.description}
           </Typography>
         ) : null}
       </DialogTitle>

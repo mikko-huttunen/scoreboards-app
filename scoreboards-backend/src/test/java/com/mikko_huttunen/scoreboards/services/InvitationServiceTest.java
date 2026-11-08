@@ -37,6 +37,8 @@ class InvitationServiceTest {
     private CurrentUserContext currentUserContext;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private HistoryEventService historyEventService;
 
     @InjectMocks
     private InvitationService invitationService;

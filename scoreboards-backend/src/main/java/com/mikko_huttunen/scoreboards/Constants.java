@@ -13,5 +13,8 @@ public final class Constants {
         public static final String RESULT = "Result";
         public static final String POINT_CATEGORY = "PointCategory";
         public static final String MEMBERSHIP = "Membership";
+        public static final String INVITATION = "Invitation";
+        public static final String HISTORY_EVENT = "HistoryEvent";
+        public static final String COMMENT = "Comment";
     }
 }

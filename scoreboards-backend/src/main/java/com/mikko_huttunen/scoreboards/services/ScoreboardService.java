@@ -1,7 +1,9 @@
 package com.mikko_huttunen.scoreboards.services;
 
+import com.mikko_huttunen.scoreboards.Constants;
 import com.mikko_huttunen.scoreboards.dtos.PointCategoryDTO;
 import com.mikko_huttunen.scoreboards.dtos.ScoreboardDTO;
+import com.mikko_huttunen.scoreboards.enums.HistoryAction;
 import com.mikko_huttunen.scoreboards.enums.Permission;
 import com.mikko_huttunen.scoreboards.models.*;
 import com.mikko_huttunen.scoreboards.security.CurrentUserContext;
@@ -29,16 +31,20 @@ public class ScoreboardService {
     private final CurrentUserContext currentUserContext;
     private final PointCategoryService pointCategoryService;
     private final SessionService sessionService;
+    private final HistoryEventService historyEventService;
 
     @Autowired
     public ScoreboardService(
             QueryService queryService,
             CurrentUserContext currentUserContext,
-            PointCategoryService pointCategoryService, SessionService sessionService) {
+            PointCategoryService pointCategoryService,
+            SessionService sessionService,
+            HistoryEventService historyEventService) {
         this.queryService = queryService;
         this.currentUserContext = currentUserContext;
         this.pointCategoryService = pointCategoryService;
         this.sessionService = sessionService;
+        this.historyEventService = historyEventService;
     }
 
     /**
@@ -66,8 +72,18 @@ public class ScoreboardService {
         Scoreboard scoreboard = new Scoreboard();
         scoreboard.setId(scoreboardId.toString());
         scoreboard.setName(dto.getName().trim());
+        scoreboard.setSettings(dto.getSettings());
 
         Scoreboard createdScoreboard = queryService.create(scoreboard);
+
+        historyEventService.createHistoryEvent(
+                createdScoreboard.getId(),
+                HistoryAction.CREATE,
+                Constants.Types.SCOREBOARD,
+                createdScoreboard.getId(),
+                createdScoreboard.getName(),
+                Collections.emptyMap()
+        );
 
         logger.info("Successfully created scoreboard with ID: {}", createdScoreboard.getId());
         return createdScoreboard;
@@ -114,7 +130,7 @@ public class ScoreboardService {
         logger.info("Found scoreboard with ID: {} with data", scoreboard.getId());
         return scoreboard;
     }
-    
+
     /**
      * Fetch a scoreboard by ID.
      * @param scoreboardId The scoreboard ID
@@ -147,11 +163,18 @@ public class ScoreboardService {
             throw new IllegalArgumentException("Cannot update scoreboard with pending sessions");
         }
 
+        Scoreboard existingScoreboard = queryService
+                .find(new Query(Criteria.where("_id").is(scoreboardId)), Scoreboard.class, false)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Scoreboard not found"));
+
         List<PointCategory> existingPointCategories =
                 pointCategoryService.getPointCategoriesByScoreboardId(scoreboardId);
 
         List<PointCategoryDTO> pointCategoriesToUpdate = new ArrayList<>();
         List<PointCategoryDTO> pointCategoriesToCreate = new ArrayList<>();
+        List<PointCategory> createdPointCategories = new ArrayList<>();
 
         Set<String> existingPointCategoryIds = existingPointCategories.stream()
                 .map(PointCategory::getId).collect(Collectors.toSet());
@@ -171,7 +194,7 @@ public class ScoreboardService {
         });
 
         if (!pointCategoriesToCreate.isEmpty()) {
-            pointCategoryService.createPointCategories(pointCategoriesToCreate, scoreboardId);
+            createdPointCategories = pointCategoryService.createPointCategories(pointCategoriesToCreate, scoreboardId);
         }
 
         if (!pointCategoriesToUpdate.isEmpty()) {
@@ -184,10 +207,20 @@ public class ScoreboardService {
 
         Optional<Scoreboard> updatedScoreboardOpt = queryService.updateById(scoreboardId, Scoreboard.class, sb -> {
             sb.setName(updatedScoreboardData.getName().trim());
+            sb.setSettings(updatedScoreboardData.getSettings());
         });
 
         Scoreboard updatedScoreboard = updatedScoreboardOpt.orElseThrow(() ->
                 new IllegalArgumentException("Scoreboard not found"));
+
+        historyEventService.createScoreboardEditEvent(
+                scoreboardId,
+                null,
+                existingScoreboard,
+                updatedScoreboardData,
+                existingPointCategories,
+                createdPointCategories
+        );
 
         logger.info("Successfully updated scoreboard with ID: {}", updatedScoreboard.getId());
         return updatedScoreboard;
@@ -234,6 +267,13 @@ public class ScoreboardService {
             //Delete related memberships
             Query membershipQuery = new Query(Criteria.where("scoreboardId").is(id));
             queryService.delete(membershipQuery, Membership.class);
+
+            //Delete related comments
+            Query commentQuery = new Query(Criteria.where("scoreboardId").is(id));
+            queryService.delete(commentQuery, Comment.class);
+
+            //Delete related history events
+            historyEventService.deleteHistoryEventsByScoreboardId(id);
         });
 
         logger.info("Successfully deleted scoreboards with IDs: {}", ids);
@@ -259,6 +299,15 @@ public class ScoreboardService {
         Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
                 .and("userId").is(user.getId()));
         queryService.delete(query, Membership.class);
+
+        historyEventService.createHistoryEvent(
+                scoreboardId,
+                HistoryAction.LEAVE,
+                Constants.Types.USER,
+                user.getId(),
+                user.getName(),
+                Collections.emptyMap()
+        );
 
         logger.info("User: {} successfully left the scoreboard: {}", user.getId(), scoreboardId);
         return true;
@@ -296,6 +345,15 @@ public class ScoreboardService {
         Query query = new Query(Criteria.where("scoreboardId").is(scoreboardId)
                 .and("userId").is(userId));
         queryService.delete(query, Membership.class);
+
+        historyEventService.createHistoryEvent(
+                scoreboardId,
+                HistoryAction.KICK,
+                Constants.Types.USER,
+                userId,
+                userId,
+                Collections.emptyMap()
+        );
 
         logger.info("Successfully removed user {} from scoreboard {}", userId, scoreboardId);
         return true;
