@@ -1,15 +1,17 @@
-import React, { useLayoutEffect, useMemo, useState } from 'react';
-import { Box, Paper, Typography } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import { Box, Button, Paper, Typography } from '@mui/material';
 import {
   CartesianGrid,
   Line,
   LineChart as RechartsLineChart,
+  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
   type LegendProps,
 } from 'recharts';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
+import { KeyboardArrowLeft, KeyboardArrowRight } from '@mui/icons-material';
 
 export type LineChartSeries = {
   key: string;
@@ -57,27 +59,12 @@ type Props = {
     payload: LineChartRow
   ) => string;
   valueFormatter?: (value: number, seriesName: string) => [string, string];
-
-  /**
-   * How many data points fit in the visible area at once. When there are more points than
-   * this, the chart scrolls horizontally (mouse/trackpad on desktop, swipe on mobile) and
-   * opens on the most recent (last) points.
-   */
-  visiblePoints?: number;
-
-  /** @deprecated Pagination was replaced by horizontal scrolling. Ignored. */
   pagination?: boolean;
-  /** @deprecated Use `visiblePoints`. Ignored. */
   pageSize?: number;
-  /** @deprecated The chart always opens on the latest points. Ignored. */
   startFromLatest?: boolean;
 };
 
 const DEFAULT_TEXT_COLOR = '#555';
-const AXIS_LINE_COLOR = 'rgba(0,0,0,0.12)';
-const X_AXIS_HEIGHT = 30;
-const CHART_MARGIN_TOP = 24;
-const CHART_MARGIN_BOTTOM = 12;
 
 export const LineChart: React.FC<Props> = ({
   loading = false,
@@ -97,38 +84,38 @@ export const LineChart: React.FC<Props> = ({
   tooltipValueSuffix = '',
   tooltipLabelFormatter,
   valueFormatter,
-  visiblePoints = 10,
+  pagination = true,
+  pageSize = 10,
+  startFromLatest = true,
 }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null);
-  const [viewportWidth, setViewportWidth] = useState(0);
 
   const hasData = Array.isArray(data) && data.length > 0;
-  const pointCount = data?.length ?? 0;
 
-  // Track the width of the scrollable viewport.
-  useLayoutEffect(() => {
-    if (!scrollNode) return;
+  const safePageSize = Math.max(1, pageSize);
+  const maxPageStart = Math.max(0, (data?.length ?? 0) - safePageSize);
 
-    const update = () => setViewportWidth(scrollNode.clientWidth);
-    update();
+  const [startPage, setStartPage] = useState<number>(() => {
+    if (!pagination) return 0;
+    const latestStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+    return startFromLatest ? latestStart : 0;
+  });
 
-    const observer = new ResizeObserver(update);
-    observer.observe(scrollNode);
-    return () => observer.disconnect();
-  }, [scrollNode]);
+  React.useEffect(() => {
+    if (!pagination) return;
+    const latestStart = Math.max(0, (data?.length ?? 0) - safePageSize);
+    setStartPage(startFromLatest ? latestStart : 0);
+  }, [data]);
 
-  // Exactly `visiblePoints` points fit in the viewport; anything beyond that is scrolled to.
-  const contentWidth = useMemo(() => {
-    if (viewportWidth <= 0) return 0;
-    const perPoint = viewportWidth / Math.max(1, visiblePoints);
-    return Math.max(viewportWidth, Math.round(perPoint * pointCount));
-  }, [viewportWidth, visiblePoints, pointCount]);
+  const pageData = useMemo(() => {
+    if (!pagination) return data;
+    if (!Array.isArray(data) || data.length <= safePageSize) return data;
+    return data.slice(startPage, startPage + safePageSize);
+  }, [data, startPage, safePageSize]);
 
-  // Start at the right edge so the most recent points are shown first.
-  useLayoutEffect(() => {
-    if (scrollNode) scrollNode.scrollLeft = scrollNode.scrollWidth;
-  }, [scrollNode, contentWidth, pointCount]);
+  const canPrev = pagination && data.length > safePageSize && startPage > 0;
+  const canNext =
+    pagination && data.length > safePageSize && startPage < maxPageStart;
 
   const visibleSeries = useMemo(() => {
     if (selectedKey) {
@@ -240,158 +227,130 @@ export const LineChart: React.FC<Props> = ({
       ) : (
         <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 }, pt: 4 }}>
           <CustomLegend />
-          <Box sx={{ display: 'flex', alignItems: 'stretch' }}>
-            {/* Fixed Y axis. Same data and margins as the plot, so the scales match. */}
+
+          {pagination && data.length > safePageSize && (
             <Box
               sx={{
-                flex: '0 0 auto',
-                width: yAxisWidth,
-                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
               }}
             >
-              <RechartsLineChart
-                width={yAxisWidth}
-                height={height}
-                data={data}
-                margin={{
-                  top: CHART_MARGIN_TOP,
-                  right: 0,
-                  left: 0,
-                  bottom: CHART_MARGIN_BOTTOM,
-                }}
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.max(0, v - safePageSize))
+                }
+                disabled={!canPrev}
+                sx={{ color: '#1b5e20' }}
               >
-                <XAxis
-                  dataKey={xAxisDataKey}
-                  height={X_AXIS_HEIGHT}
-                  tick={false}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  width={yAxisWidth}
-                  allowDecimals={false}
-                  tick={{ fill: DEFAULT_TEXT_COLOR, fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={{ stroke: AXIS_LINE_COLOR }}
-                />
-                {visibleSeries.map((item) => (
-                  <Line
-                    key={item.key}
-                    dataKey={item.key}
-                    stroke="transparent"
-                    dot={false}
-                    activeDot={false}
-                    isAnimationActive={false}
-                    legendType="none"
-                  />
-                ))}
-              </RechartsLineChart>
-            </Box>
+                <KeyboardArrowLeft />
+              </Button>
 
-            <Box
-              ref={setScrollNode}
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                scrollbarWidth: 'thin',
-              }}
+              <Typography variant="caption" sx={{ color: '#666' }}>
+                Showing {startPage + 1}–
+                {Math.min(data.length, startPage + safePageSize)} of{' '}
+                {data.length}
+              </Typography>
+
+              <Button
+                onClick={() =>
+                  setStartPage((v) => Math.min(maxPageStart, v + safePageSize))
+                }
+                disabled={!canNext}
+                sx={{ color: '#1b5e20' }}
+              >
+                <KeyboardArrowRight />
+              </Button>
+            </Box>
+          )}
+
+          <ResponsiveContainer width="100%" height={height}>
+            <RechartsLineChart
+              data={pageData}
+              margin={{ top: 24, right: 24, left: 8, bottom: 12 }}
             >
-              {contentWidth > 0 && (
-                <RechartsLineChart
-                  width={contentWidth}
-                  height={height}
-                  data={data}
-                  margin={{
-                    top: CHART_MARGIN_TOP,
-                    right: 24,
-                    left: 8,
-                    bottom: CHART_MARGIN_BOTTOM,
-                  }}
-                >
-                  {showGrid && (
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="rgba(0,0,0,0.08)"
-                    />
-                  )}
-
-                  <XAxis
-                    dataKey={xAxisDataKey}
-                    interval={0}
-                    height={X_AXIS_HEIGHT}
-                    tick={{ fill: DEFAULT_TEXT_COLOR, fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={{ stroke: AXIS_LINE_COLOR }}
-                    tickMargin={xAxisTickMargin}
-                  />
-
-                  {/* Hidden: only keeps the scale identical to the fixed axis on the left */}
-                  <YAxis hide allowDecimals={false} />
-
-                  <Tooltip
-                    wrapperStyle={{ zIndex: 10 }}
-                    contentStyle={{
-                      borderRadius: 14,
-                      border: '1px solid rgba(0,0,0,0.08)',
-                      boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
-                    }}
-                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-                    labelFormatter={(label, payload) => {
-                      const row = payload?.[0]?.payload as
-                        | LineChartRow
-                        | undefined;
-
-                      if (!tooltipLabelFormatter || !row) {
-                        return String(label);
-                      }
-
-                      return tooltipLabelFormatter(label, row);
-                    }}
-                    formatter={(value, name) => {
-                      const numericValue =
-                        typeof value === 'number' ? value : Number(value ?? 0);
-
-                      if (valueFormatter) {
-                        return valueFormatter(numericValue, String(name));
-                      }
-
-                      return [
-                        `${numericValue}${tooltipValueSuffix}`,
-                        String(name),
-                      ];
-                    }}
-                  />
-
-                  {visibleSeries.map((item, index) => (
-                    <Line
-                      key={item.key}
-                      type={lineType}
-                      dataKey={item.key}
-                      name={item.title}
-                      stroke={item.color}
-                      strokeWidth={item.strokeWidth ?? 3}
-                      dot={
-                        showDots
-                          ? { r: 4, strokeWidth: 2, fill: '#fff' }
-                          : false
-                      }
-                      activeDot={{
-                        r: 6,
-                        strokeWidth: 2,
-                        fill: item.color,
-                      }}
-                      connectNulls={connectNulls}
-                      isAnimationActive
-                      animationDuration={animationDurationMs}
-                      animationBegin={index * 120}
-                    />
-                  ))}
-                </RechartsLineChart>
+              {showGrid && (
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(0,0,0,0.08)"
+                />
               )}
-            </Box>
-          </Box>
+
+              <XAxis
+                dataKey={xAxisDataKey}
+                tick={{ fill: DEFAULT_TEXT_COLOR, fontSize: 12 }}
+                tickLine={false}
+                axisLine={{ stroke: 'rgba(0,0,0,0.12)' }}
+                tickMargin={xAxisTickMargin}
+              />
+
+              <YAxis
+                width={yAxisWidth}
+                allowDecimals={false}
+                tick={{ fill: DEFAULT_TEXT_COLOR, fontSize: 12 }}
+                tickLine={false}
+                axisLine={{ stroke: 'rgba(0,0,0,0.12)' }}
+              />
+
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 14,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
+                }}
+                labelStyle={{ fontWeight: 700, marginBottom: 4 }}
+                labelFormatter={(label, payload) => {
+                  const row = payload?.[0]?.payload as LineChartRow | undefined;
+
+                  if (!tooltipLabelFormatter || !row) {
+                    return String(label);
+                  }
+
+                  return tooltipLabelFormatter(label, row);
+                }}
+                formatter={(value, name) => {
+                  const numericValue =
+                    typeof value === 'number' ? value : Number(value ?? 0);
+
+                  if (valueFormatter) {
+                    return valueFormatter(numericValue, String(name));
+                  }
+
+                  return [`${numericValue}${tooltipValueSuffix}`, String(name)];
+                }}
+              />
+
+              {visibleSeries.map((item, index) => (
+                <Line
+                  key={item.key}
+                  type={lineType}
+                  dataKey={item.key}
+                  name={item.title}
+                  stroke={item.color}
+                  strokeWidth={item.strokeWidth ?? 3}
+                  dot={
+                    showDots
+                      ? {
+                          r: 4,
+                          strokeWidth: 2,
+                          fill: '#fff',
+                        }
+                      : false
+                  }
+                  activeDot={{
+                    r: 6,
+                    strokeWidth: 2,
+                    fill: item.color,
+                  }}
+                  connectNulls={connectNulls}
+                  isAnimationActive
+                  animationDuration={animationDurationMs}
+                  animationBegin={index * 120}
+                />
+              ))}
+            </RechartsLineChart>
+          </ResponsiveContainer>
         </Box>
       )}
     </Paper>
