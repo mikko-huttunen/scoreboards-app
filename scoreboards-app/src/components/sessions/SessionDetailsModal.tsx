@@ -20,6 +20,7 @@ import {
 } from '../common/charts/ScoreBarChart.tsx';
 import { useDateFormat } from '../../utils/Utils.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 import { CommentSection } from '../comments/CommentSection.tsx';
 import type { Comment } from '../../types/Comment.ts';
 import {
@@ -56,6 +57,7 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   isScoreboardOwner,
 }) => {
   const { format_date } = useDateFormat();
+  const fullScreen = useFullScreenDialog();
 
   const avatarByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -196,7 +198,13 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
     open && !!session && !!users?.length && !!pointCategories?.length;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      fullScreen={fullScreen}
+    >
       <DialogTitle>
         {`${session?.name} - Session Results`}
         {session?.created && (

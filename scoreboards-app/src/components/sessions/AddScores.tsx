@@ -19,6 +19,7 @@ import type { Result } from '../../types/Result.ts';
 import { useCurrentUser } from '../../contexts/CurrentUserContext.tsx';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 
 export type AddScoresProps = {
   open: boolean;
@@ -43,6 +44,7 @@ export const AddScores: React.FC<AddScoresProps> = ({
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
   const [resultEntry, setResultEntry] = useState<ResultEntry | null>(null);
   const { user } = useCurrentUser();
+  const fullScreen = useFullScreenDialog();
 
   useEffect(() => {
     const loadData = async () => {
@@ -191,7 +193,13 @@ export const AddScores: React.FC<AddScoresProps> = ({
     });
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      fullScreen={fullScreen}
+    >
       <DialogTitle>
         {`Set Scores for ${session.name}`}
         {session.description ? (

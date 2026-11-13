@@ -8,10 +8,9 @@ import {
   DialogContent,
   DialogTitle,
   Typography,
-  useMediaQuery,
-  useTheme,
 } from '@mui/material';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 
 export type TieBreakerPlayer = {
   id: string;
@@ -38,8 +37,7 @@ export const TieBreakerModal: React.FC<TieBreakerModalProps> = ({
   onSplit,
   onClose,
 }) => {
-  const theme = useTheme();
-  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const fullScreen = useFullScreenDialog();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const isHeadToHead = players.length === 2;

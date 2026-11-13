@@ -31,7 +31,7 @@ import {
 const TIE_BREAKER_DELAY_MS = 1000;
 
 // How long the chart holds still after Start is pressed, before the bars begin animating.
-const RESULTS_START_DELAY_MS = 1500;
+const RESULTS_START_DELAY_MS = 2000;
 
 export const SessionResultsView: React.FC = () => {
   const navigate = useNavigate();

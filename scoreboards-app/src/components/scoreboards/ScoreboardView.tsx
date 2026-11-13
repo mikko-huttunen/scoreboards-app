@@ -174,7 +174,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       const sessionsFromData: Session[] = filtered.map((s) => ({
         id: s.id,
         name: s.name,
-        comment: s.comment,
+        description: s.description,
         type: s.type,
         scoreboardId: s.scoreboardId,
         createdBy: s.createdBy,
@@ -211,7 +211,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
       const sessionsFromData: Session[] = updatedSessionData.map((s) => ({
         id: s.id,
         name: s.name,
-        comment: s.comment,
+        description: s.description,
         type: s.type,
         scoreboardId: s.scoreboardId,
         createdBy: s.createdBy,
@@ -271,7 +271,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
     const updatedAsUiSession: Session = {
       id: updatedSession.id,
       name: updatedSession.name,
-      comment: updatedSession.comment,
+      description: updatedSession.description,
       type: updatedSession.type,
       scoreboardId: updatedSession.scoreboardId,
       createdBy: updatedSession.createdBy,
@@ -606,73 +606,79 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                   open={Boolean(actionsMenuAnchorEl)}
                   onClose={closeActionsMenu}
                 >
-                  {isOwner && (
-                    <>
-                      <Tooltip
-                        title={
-                          pendingSessions.length > 0
-                            ? 'Cannot edit scoreboard while there are pending sessions'
-                            : ''
-                        }
-                      >
-                        <span>
-                          <MenuItem
-                            onClick={() => {
-                              closeActionsMenu();
-                              if (pendingSessions.length === 0)
-                                handleEditClick();
-                            }}
-                            disabled={pendingSessions.length > 0}
-                          >
-                            Edit Scoreboard
-                          </MenuItem>
-                        </span>
-                      </Tooltip>
-
-                      <Tooltip
-                        title={
-                          pendingSessions.length > 0
-                            ? 'Cannot delete scoreboard while there are pending sessions'
-                            : ''
-                        }
-                      >
-                        <span>
-                          <MenuItem
-                            onClick={() => {
-                              closeActionsMenu();
-                              if (pendingSessions.length === 0)
-                                setDeleteScoreboardDialogOpen(true);
-                            }}
-                            disabled={pendingSessions.length > 0}
-                          >
-                            Delete Scoreboard
-                          </MenuItem>
-                        </span>
-                      </Tooltip>
-                    </>
-                  )}
-                  {!isOwner && (
-                    <Tooltip
-                      title={
-                        pendingSessions.length > 0
-                          ? 'Cannot leave scoreboard while you have pending sessions'
-                          : ''
-                      }
-                    >
-                      <span>
-                        <MenuItem
-                          onClick={() => {
-                            closeActionsMenu();
-                            if (pendingSessions.length === 0)
-                              openLeaveScoreboardModal();
-                          }}
-                          disabled={pendingSessions.length > 0}
+                  {isOwner
+                    ? [
+                        <Tooltip
+                          key="edit"
+                          title={
+                            pendingSessions.length > 0
+                              ? 'Cannot edit scoreboard while there are pending sessions'
+                              : ''
+                          }
                         >
-                          Leave Scoreboard
-                        </MenuItem>
-                      </span>
-                    </Tooltip>
-                  )}
+                          <span>
+                            <MenuItem
+                              onClick={() => {
+                                closeActionsMenu();
+                                if (pendingSessions.length === 0)
+                                  handleEditClick();
+                              }}
+                              disabled={pendingSessions.length > 0}
+                            >
+                              Edit Scoreboard
+                            </MenuItem>
+                          </span>
+                        </Tooltip>,
+
+                        <Tooltip
+                          key="delete"
+                          title={
+                            pendingSessions.length > 0
+                              ? 'Cannot delete scoreboard while there are pending sessions'
+                              : ''
+                          }
+                        >
+                          <span>
+                            <MenuItem
+                              onClick={() => {
+                                closeActionsMenu();
+                                if (pendingSessions.length === 0)
+                                  setDeleteScoreboardDialogOpen(true);
+                              }}
+                              disabled={pendingSessions.length > 0}
+                            >
+                              Delete Scoreboard
+                            </MenuItem>
+                          </span>
+                        </Tooltip>,
+                      ]
+                    : null}
+
+                  {!isOwner
+                    ? [
+                        <Tooltip
+                          key="leave"
+                          title={
+                            pendingSessions.length > 0
+                              ? 'Cannot leave scoreboard while you have pending sessions'
+                              : ''
+                          }
+                        >
+                          <span>
+                            <MenuItem
+                              onClick={() => {
+                                closeActionsMenu();
+                                if (pendingSessions.length === 0)
+                                  openLeaveScoreboardModal();
+                              }}
+                              disabled={pendingSessions.length > 0}
+                            >
+                              Leave Scoreboard
+                            </MenuItem>
+                          </span>
+                        </Tooltip>,
+                      ]
+                    : null}
                 </Menu>
               </>
             </Stack>
@@ -705,6 +711,7 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
             <PendingSessions
               isLoading={loadingScoreboard}
               pendingSessions={pendingSessions}
+              pastSessionCount={sessions.length}
               scoreboard={scoreboard}
               users={users}
               pointCategories={pointCategories}
@@ -734,6 +741,17 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
               }
             />
 
+            <CommentSection
+              title="Comments"
+              comments={scoreboardComments}
+              isScoreboardOwner={user?.id === scoreboard.createdBy}
+              maxLength={100}
+              placeholder="Add a comment to this scoreboard..."
+              onCreateComment={handleCreateScoreboardComment}
+              onDeleteComment={handleDeleteComment}
+              refresh={handleRefreshComments}
+            />
+
             <ScoreboardMembers
               isLoading={loadingScoreboard}
               scoreboard={scoreboard}
@@ -756,17 +774,6 @@ export const ScoreboardView: React.FC<ScoreboardsViewProps> = () => {
                 onRefresh={handleRefreshSentInvitations}
               />
             )}
-
-            <CommentSection
-              title="Comments"
-              comments={scoreboardComments}
-              isScoreboardOwner={user?.id === scoreboard.createdBy}
-              maxLength={100}
-              placeholder="Add a comment to this scoreboard..."
-              onCreateComment={handleCreateScoreboardComment}
-              onDeleteComment={handleDeleteComment}
-              refresh={handleRefreshComments}
-            />
 
             <HistoryView scoreboardId={scoreboard.id} />
           </>

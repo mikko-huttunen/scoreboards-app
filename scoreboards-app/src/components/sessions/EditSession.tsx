@@ -18,8 +18,6 @@ import {
   TextField,
   Tooltip,
   Typography,
-  useMediaQuery,
-  useTheme,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { Session } from '../../types/Session.ts';
@@ -42,6 +40,7 @@ import {
 } from '../../constants.ts';
 import { RestoreOutlined } from '@mui/icons-material';
 import { getTiedUserIds } from '../../utils/TieBreaker.ts';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 
 type EditSessionProps = {
   open: boolean;
@@ -66,8 +65,7 @@ export const EditSession: React.FC<EditSessionProps> = ({
   resultEntries,
   onSuccess,
 }) => {
-  const theme = useTheme();
-  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const fullScreen = useFullScreenDialog();
   const { user } = useCurrentUser();
   const { showSuccessMessage, showErrorMessage } = useMessageSnackbar();
 

@@ -23,6 +23,8 @@ export type PerformanceChartProps = {
   isLoading?: boolean;
 };
 
+const SESSIONS_VISIBLE_AT_ONCE = 10;
+
 const USER_LINE_COLORS = [
   '#38a14f',
   '#1976d2',
@@ -54,6 +56,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   chartTitle,
   isLoading = false,
 }) => {
+  // All finished sessions, oldest first. The chart shows the newest 10 and scrolls to the rest.
   const latestSessions = useMemo(() => {
     return [...(sessions ?? [])]
       .filter((session) => session.isActive && !session.isPending)
@@ -156,8 +159,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           `${payload.sessionTitle} (${label})`
         }
         valueFormatter={(value, seriesName) => [`${value} pts`, seriesName]}
-        pagination
-        pageSize={10}
+        visiblePoints={SESSIONS_VISIBLE_AT_ONCE}
       />
     </Stack>
   );

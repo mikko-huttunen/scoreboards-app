@@ -1,12 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Avatar,
-  Box,
-  Button,
-  Paper,
-  Typography,
-  useMediaQuery,
-} from '@mui/material';
+import { Avatar, Box, Paper, Typography, useMediaQuery } from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -19,7 +12,6 @@ import {
   type LegendProps,
 } from 'recharts';
 import { LoadingSpinner } from '../spinner/LoadingSpinner.tsx';
-import { KeyboardArrowLeft, KeyboardArrowRight } from '@mui/icons-material';
 
 export type ScoreBarSeries = {
   key: string;
@@ -53,8 +45,6 @@ type Props = {
   legendToggleEnabled?: boolean;
   emptyText?: string;
   showAvatars?: boolean;
-  pagination?: boolean;
-  pageSize?: number;
 
   /**
    * Label values that get the crown and highlight instead of the rows with the highest total.
@@ -70,6 +60,9 @@ const LEADER_TEXT_COLOR = '#1b5e20';
 const DEFAULT_TEXT_COLOR = '#555';
 const AVATAR_SIZE = 34;
 
+// These series are excluded from the chart's computed "total".
+const TOTAL_EXCLUDES = ['Total Wins', 'Total Sessions'];
+
 export const ScoreBarChart: React.FC<Props> = ({
   loading,
   data,
@@ -81,8 +74,6 @@ export const ScoreBarChart: React.FC<Props> = ({
   legendToggleEnabled = false,
   emptyText = 'No data to display',
   showAvatars = false,
-  pagination = true,
-  pageSize = 10,
   leaderLabels,
 }) => {
   const isHorizontal = direction === 'horizontal';
@@ -96,8 +87,10 @@ export const ScoreBarChart: React.FC<Props> = ({
   const avatarYSpacing =
     truncateWidths || isSmallMobile || rotateNames ? 40 : 22;
 
-  //These series are excluded from the chart's computed "total".
-  const totalExcludes = ['Total Wins', 'Total Sessions'];
+  // Minimum horizontal space per participant; the chart scrolls once the total is exceeded.
+  const columnWidth = truncateWidths || isSmallMobile ? 64 : 88;
+
+  const totalExcludes = TOTAL_EXCLUDES;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [animationComplete, setAnimationComplete] = useState(false);
 
@@ -110,28 +103,11 @@ export const ScoreBarChart: React.FC<Props> = ({
     if (selectedKey) return [selectedKey];
 
     return series.map((s) => s.key).filter((k) => !totalExcludes.includes(k));
-  }, [series, selectedKey]);
+  }, [series, selectedKey, totalExcludes]);
 
   const totalKey = '__totalPoints';
 
-  const safePageSize = Math.max(1, pageSize);
-  const maxPageStart = Math.max(0, (data?.length ?? 0) - safePageSize);
-
-  const [startPage, setStartPage] = useState<number>(() => {
-    if (!pagination) return 0;
-    return 0;
-  });
-
-  useEffect(() => {
-    if (!pagination) return;
-    setStartPage(0);
-  }, [data?.length, safePageSize, pagination]);
-
-  const canPrev = pagination && data.length > safePageSize && startPage > 0;
-  const canNext =
-    pagination && data.length > safePageSize && startPage < maxPageStart;
-
-  const computedDataAll = useMemo<ScoreBarChartRow[]>(() => {
+  const computedData = useMemo<ScoreBarChartRow[]>(() => {
     const withTotals = data.map((row) => {
       if (selectedKey && totalExcludes.includes(selectedKey)) {
         const v = row[selectedKey];
@@ -173,12 +149,10 @@ export const ScoreBarChart: React.FC<Props> = ({
     });
   }, [data, visibleKeys, totalExcludes, selectedKey, labelKey, totalKey]);
 
-  const computedData = useMemo<ScoreBarChartRow[]>(() => {
-    if (!pagination) return computedDataAll;
-    if (!computedDataAll.length || computedDataAll.length <= safePageSize)
-      return computedDataAll;
-    return computedDataAll.slice(startPage, startPage + safePageSize);
-  }, [computedDataAll, pagination, safePageSize, startPage]);
+  // Every participant is rendered; the scroll container handles the overflow.
+  const chartMinWidth = isHorizontal
+    ? undefined
+    : computedData.length * columnWidth + 32;
 
   const leaderNames = useMemo(() => {
     // The caller knows the winner (tie breaker, for instance), so the totals do not decide it.
@@ -186,7 +160,7 @@ export const ScoreBarChart: React.FC<Props> = ({
 
     let bestTotal = -Infinity;
 
-    for (const row of computedDataAll) {
+    for (const row of computedData) {
       const total = Number(row[totalKey] ?? 0);
       if (total > bestTotal) bestTotal = total;
     }
@@ -194,7 +168,7 @@ export const ScoreBarChart: React.FC<Props> = ({
     if (bestTotal <= 0) return new Set<string>();
 
     const winners = new Set<string>();
-    for (const row of computedDataAll) {
+    for (const row of computedData) {
       const total = Number(row[totalKey] ?? 0);
       if (total === bestTotal) {
         winners.add(String(row[labelKey] ?? ''));
@@ -202,7 +176,7 @@ export const ScoreBarChart: React.FC<Props> = ({
     }
 
     return winners;
-  }, [computedDataAll, labelKey, leaderLabels, selectedKey]);
+  }, [computedData, labelKey, leaderLabels, selectedKey]);
 
   const avatarByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -254,7 +228,7 @@ export const ScoreBarChart: React.FC<Props> = ({
           sx={{
             width: avatarSize,
             height: avatarSize,
-            fontSize: 14,
+            fontSize: avatarFontSize,
             bgcolor: '#38a14f',
             border: isLeader ? `2px solid ${HIGHLIGHT_COLOR}` : undefined,
             boxShadow: isLeader
@@ -430,25 +404,13 @@ export const ScoreBarChart: React.FC<Props> = ({
           }}
         >
           {fixedSeries.length > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 10,
-              }}
-            >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {fixedSeries.map(renderLegendButton)}
             </div>
           )}
 
           {otherSeries.length > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 10,
-              }}
-            >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {otherSeries.map(renderLegendButton)}
             </div>
           )}
@@ -492,125 +454,102 @@ export const ScoreBarChart: React.FC<Props> = ({
       ) : (
         <Box sx={{ px: { xs: 1.5, sm: 2.5 }, pb: 1, pt: 4 }}>
           {Legend}
-          {pagination && data.length > safePageSize && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
-                mb: 1,
-              }}
-            >
-              <Button
-                onClick={() =>
-                  setStartPage((v) => Math.max(0, v - safePageSize))
-                }
-                disabled={!canPrev}
-                sx={{ color: '#1b5e20' }}
-              >
-                <KeyboardArrowLeft />
-              </Button>
 
-              <Typography variant="caption" sx={{ color: '#666' }}>
-                Showing {startPage + 1}–
-                {Math.min(data.length, startPage + safePageSize)} of{' '}
-                {data.length}
-              </Typography>
+          <Box
+            sx={{
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              scrollbarWidth: 'thin',
+            }}
+          >
+            <Box sx={{ width: '100%', minWidth: chartMinWidth }}>
+              <ResponsiveContainer width="100%" height={430}>
+                <BarChart
+                  data={computedData}
+                  margin={{ top: 24, right: 24, left: 8, bottom: 20 }}
+                  layout={isHorizontal ? 'vertical' : 'horizontal'}
+                  barCategoryGap="35%"
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(0,0,0,0.08)"
+                  />
+                  {xAxis}
 
-              <Button
-                onClick={() =>
-                  setStartPage((v) => Math.min(maxPageStart, v + safePageSize))
-                }
-                disabled={!canNext}
-                sx={{ color: '#1b5e20' }}
-              >
-                <KeyboardArrowRight />
-              </Button>
+                  <Tooltip
+                    cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}
+                    contentStyle={{
+                      borderRadius: 14,
+                      border: '1px solid rgba(0,0,0,0.08)',
+                      boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
+                    }}
+                    formatter={(value, name) => {
+                      const v =
+                        typeof value === 'number' ? value : Number(value ?? 0);
+                      return [`${v} ${barTitle ?? ''}`.trim(), name];
+                    }}
+                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
+                  />
+
+                  {series.map((s, idx) => {
+                    const isHidden =
+                      (selectedKey !== null && selectedKey !== s.key) ||
+                      (selectedKey === null && totalExcludes.includes(s.key));
+
+                    const isTopSegment = s.key === topVisibleKey;
+
+                    return (
+                      <Bar
+                        key={s.key}
+                        dataKey={s.key}
+                        name={s.title}
+                        fill={s.color}
+                        stackId="stack"
+                        hide={isHidden}
+                        maxBarSize={100}
+                        isAnimationActive={!animationComplete}
+                        animationDuration={
+                          animationComplete ? 0 : animationDurationMs
+                        }
+                        animationEasing="ease-out"
+                        animationBegin={
+                          animationComplete ? 0 : idx * segmentStaggerMs
+                        }
+                      >
+                        {computedData.map((row) => {
+                          const rowLabel = String(row[labelKey] ?? '');
+                          const isLeader = leaderNames.has(rowLabel);
+                          const showGlow = isLeader && animationComplete;
+
+                          return (
+                            <Cell
+                              key={`${s.key}-${rowLabel}`}
+                              fill={s.color}
+                              strokeWidth={showGlow ? 2 : 0}
+                            />
+                          );
+                        })}
+
+                        {isTopSegment && !isHorizontal ? (
+                          <LabelList
+                            dataKey={totalKey}
+                            position="top"
+                            formatter={(v: unknown) => `${v}`}
+                            style={{
+                              fill: '#1b5e20',
+                              fontWeight: 700,
+                              fontSize: 12,
+                              strokeWidth: 0,
+                            }}
+                          />
+                        ) : null}
+                      </Bar>
+                    );
+                  })}
+                </BarChart>
+              </ResponsiveContainer>
             </Box>
-          )}
-          <ResponsiveContainer width="100%" height={430}>
-            <BarChart
-              data={computedData}
-              margin={{ top: 24, right: 24, left: 8, bottom: 20 }}
-              layout={isHorizontal ? 'vertical' : 'horizontal'}
-              barCategoryGap="35%"
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
-              {xAxis}
-
-              <Tooltip
-                cursor={{ fill: 'rgba(56, 161, 79, 0.06)' }}
-                contentStyle={{
-                  borderRadius: 14,
-                  border: '1px solid rgba(0,0,0,0.08)',
-                  boxShadow: '0 10px 28px rgba(0,0,0,0.10)',
-                }}
-                formatter={(value, name) => {
-                  const v =
-                    typeof value === 'number' ? value : Number(value ?? 0);
-                  return [`${v} ${barTitle ?? ''}`.trim(), name];
-                }}
-                labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-              />
-
-              {series.map((s, idx) => {
-                const isHidden =
-                  (selectedKey !== null && selectedKey !== s.key) ||
-                  (selectedKey === null && totalExcludes.includes(s.key));
-
-                const isTopSegment = s.key === topVisibleKey;
-
-                return (
-                  <Bar
-                    key={s.key}
-                    dataKey={s.key}
-                    name={s.title}
-                    fill={s.color}
-                    stackId="stack"
-                    hide={isHidden}
-                    maxBarSize={100}
-                    isAnimationActive={!animationComplete}
-                    animationDuration={
-                      animationComplete ? 0 : animationDurationMs
-                    }
-                    animationEasing="ease-out"
-                    animationBegin={
-                      animationComplete ? 0 : idx * segmentStaggerMs
-                    }
-                  >
-                    {computedData.map((row) => {
-                      const rowLabel = String(row[labelKey] ?? '');
-                      const isLeader = leaderNames.has(rowLabel);
-                      const showGlow = isLeader && animationComplete;
-
-                      return (
-                        <Cell
-                          key={`${s.key}-${rowLabel}`}
-                          fill={s.color}
-                          strokeWidth={showGlow ? 2 : 0}
-                        />
-                      );
-                    })}
-
-                    {isTopSegment && !isHorizontal ? (
-                      <LabelList
-                        dataKey={totalKey}
-                        position="top"
-                        formatter={(v: unknown) => `${v}`}
-                        style={{
-                          fill: '#1b5e20',
-                          fontWeight: 700,
-                          fontSize: 12,
-                          strokeWidth: 0,
-                        }}
-                      />
-                    ) : null}
-                  </Bar>
-                );
-              })}
-            </BarChart>
-          </ResponsiveContainer>
+          </Box>
         </Box>
       )}
     </Paper>

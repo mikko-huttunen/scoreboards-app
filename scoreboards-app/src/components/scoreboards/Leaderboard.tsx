@@ -316,8 +316,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         legendToggleEnabled
         showAvatars={true}
         emptyText={emptyText}
-        pagination
-        pageSize={10}
       />
     </Stack>
   );

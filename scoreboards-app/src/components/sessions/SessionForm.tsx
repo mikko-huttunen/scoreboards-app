@@ -37,6 +37,7 @@ import {
   MAX_SESSION_PARTICIPANTS,
   MIN_SESSION_PARTICIPANTS,
 } from '../../constants.ts';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 
 // Keeps the participant dropdown to roughly six rows instead of growing with the member count.
 // Phones get a share of the viewport so the list never runs past the bottom of the screen.
@@ -55,6 +56,7 @@ type SessionFormProps = {
   scoreboard: Scoreboard;
   users: User[];
   pointCategories?: PointCategory[];
+  sessionCount?: number;
   onSuccess?: (session: Session) => void;
 };
 
@@ -64,6 +66,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   scoreboard,
   users,
   pointCategories,
+  sessionCount,
   onSuccess,
 }) => {
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(
@@ -76,6 +79,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useCurrentUser();
+  const fullScreen = useFullScreenDialog();
   const { showSuccessMessage } = useMessageSnackbar();
 
   const [name, setName] = useState<string>('');
@@ -94,7 +98,7 @@ export const SessionForm: React.FC<SessionFormProps> = ({
 
           setSelectedParticipants(new Set());
 
-          const defaultName = `Session ${scoreboard.sessions.length + 1}`;
+          const defaultName = `Session ${(sessionCount ?? scoreboard.sessions.length) + 1}`;
           setName(defaultName.slice(0, MAX_SESSION_NAME_LENGTH));
 
           setDescription('');
@@ -244,7 +248,13 @@ export const SessionForm: React.FC<SessionFormProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      fullScreen={fullScreen}
+    >
       <DialogTitle>Create New Session</DialogTitle>
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>

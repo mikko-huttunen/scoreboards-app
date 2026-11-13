@@ -21,6 +21,7 @@ import { TaskAlt } from '@mui/icons-material';
 
 type PendingSessionsProps = {
   pendingSessions: Session[];
+  pastSessionCount: number;
   scoreboard: Scoreboard;
   users: User[];
   pointCategories: PointCategory[];
@@ -33,6 +34,7 @@ type PendingSessionsProps = {
 
 export const PendingSessions: React.FC<PendingSessionsProps> = ({
   pendingSessions,
+  pastSessionCount,
   scoreboard,
   users,
   pointCategories,
@@ -156,6 +158,7 @@ export const PendingSessions: React.FC<PendingSessionsProps> = ({
           scoreboard={scoreboard}
           users={users}
           pointCategories={pointCategories}
+          sessionCount={pastSessionCount + pendingSessions.length}
           onSuccess={(session) => handleSessionCreated(session)}
         />
       )}

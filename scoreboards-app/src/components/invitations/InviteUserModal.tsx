@@ -17,6 +17,7 @@ import type { Invitation } from '../../types/Invitation.ts';
 import { PERMISSIONS } from '../../constants.ts';
 import { LoadingSpinner } from '../common/spinner/LoadingSpinner.tsx';
 import { useMessageSnackbar } from '../common/snackbar/MessageSnackbar.tsx';
+import { useFullScreenDialog } from '../common/dialog/useFullScreenDialog.ts';
 type InviteUserModalProps = {
   open: boolean;
   onClose: (invitation: Invitation | null) => void;
@@ -34,6 +35,7 @@ export const InviteUserModal = ({
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [sessionsPermission, setSessionsPermission] = useState(false);
   const { showSuccessMessage } = useMessageSnackbar();
+  const fullScreen = useFullScreenDialog();
 
   const handleSendInvitation = async () => {
     if (!scoreboardId || !inviteEmail.trim()) {
@@ -81,7 +83,7 @@ export const InviteUserModal = ({
       onClose={() => handleClose(null)}
       maxWidth="sm"
       fullWidth
-      fullScreen
+      fullScreen={fullScreen}
     >
       <DialogTitle>Invite User to Scoreboard</DialogTitle>
       <DialogContent>
